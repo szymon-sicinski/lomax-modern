@@ -2,6 +2,11 @@
 
 Helper scripts for contributors. Nothing here is shipped in the package.
 
+- `new_game_folder.sh <repository-name> [variant ...]` — creates a local-only
+  game-data slot next to the repository (`$HOME/projects/game-files/<repo>/`),
+  outside every git working tree, and refuses to run if the target would sit
+  inside one. See [`docs/development.md`](../docs/development.md#game-files-local-only).
+
 Planned:
 
 - `check_no_game_data.sh` — fail if a staged file looks like game data

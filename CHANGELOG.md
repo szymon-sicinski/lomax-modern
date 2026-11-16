@@ -20,6 +20,9 @@ Versioning: [Semantic Versioning](https://semver.org/).
 - Synthetic chunk-container fixtures and 16 unit tests, including negative cases
   (unaligned sizes, truncation, garbage, unknown tags).
 - Opt-in integration tests behind `LOMAX_GAME_DIR`.
+- Local-only game-data layout: `scripts/new_game_folder.sh` creates one slot per
+  repository outside every git working tree, and `.gitignore` covers
+  `game-files/`, `gamedata/`, `GAMES/` as a second line of defence.
 - CI workflow: Python 3.10–3.13, byte-compile, unit tests, CLI smoke test.
 - Project scaffolding: `AGENTS.md`, `CONTRIBUTING.md`, `docs/architecture.md`,
   `docs/development.md`, `docs/file-formats.md`, `.gitignore` covering game data.
