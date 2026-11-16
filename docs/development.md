@@ -9,7 +9,7 @@
 ## Setup
 
 ```bash
-git clone https://github.com/<owner>/lomax-modern
+git clone https://github.com/szymon-sicinski/lomax-modern
 cd lomax-modern
 python3 -m venv .venv
 . .venv/bin/activate
