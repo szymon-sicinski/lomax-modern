@@ -8,6 +8,7 @@ from pathlib import Path
 
 from . import __version__
 from .doctor import find_world_files, format_report, inventory
+from .measure import measure_install, summarise, to_json
 from .wldscan import format_report as format_wld_report
 from .wldscan import scan_file
 
@@ -33,6 +34,18 @@ def _cmd_wldscan(args: argparse.Namespace) -> int:
     return 0 if result.chunks else 1
 
 
+def _cmd_measure(args: argparse.Namespace) -> int:
+    try:
+        report = measure_install(args.game_dir)
+    except NotADirectoryError as exc:
+        print(f"error: {exc}", file=sys.stderr)
+        return 2
+    if args.json:
+        Path(args.json).write_text(to_json(report), encoding="utf-8")
+    print(to_json(report) if args.quiet else summarise(report))
+    return 0
+
+
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
         prog="lomax-modern",
@@ -51,6 +64,15 @@ def build_parser() -> argparse.ArgumentParser:
     p_scan = sub.add_parser("wldscan", help="list chunk tags and offsets of a .WLD file")
     p_scan.add_argument("wld_file", help="path to a WORLDS/*.WLD file")
     p_scan.set_defaults(func=_cmd_wldscan)
+
+    p_meas = sub.add_parser(
+        "measure",
+        help="measure an install: chunk sequence, plane widths, audio formats (read-only)",
+    )
+    p_meas.add_argument("game_dir", help="folder containing LOMAX.EXE")
+    p_meas.add_argument("--json", metavar="PATH", help="also write the raw report here")
+    p_meas.add_argument("--quiet", action="store_true", help="print JSON instead of the digest")
+    p_meas.set_defaults(func=_cmd_measure)
 
     return parser
 

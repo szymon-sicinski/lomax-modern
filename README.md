@@ -48,6 +48,9 @@ lomax-modern doctor "/path/to/Lomax"
 
 # Walk the chunk chain of a world file
 lomax-modern wldscan "/path/to/Lomax/WORLDS/MAIN.WLD"
+
+# Measure the install: chunk sequence, plane widths per section, audio formats
+lomax-modern measure "/path/to/Lomax" --json /tmp/lomax-report.json
 ```
 
 Run the tests with `python -m pytest tests -m "not realgame"`. The integration

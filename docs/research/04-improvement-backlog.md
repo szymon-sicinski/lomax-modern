@@ -18,6 +18,10 @@ Effort is in relative units (S = days, M = weeks, L = months of part-time work).
 - **Done when:** `wldscan` reports `confidence: confirmed-chain` on all world
   files and the observed tag order matches `WRLD, NMY, HEAD, TTAB, MAP, GNMY,
   ANIM, CELL, END`.
+- **Tool:** `lomax-modern measure <game_dir>` (or `scripts/measure_worlds.py`)
+  reports the sequence, chunk counts and the HEAD endianness vote in one run.
+  It encodes the documented layout as a *hypothesis* and labels it as such
+  until real files confirm it.
 
 ### LMX-2 — Map-width histogram and the widescreen ceiling
 - **Why:** decides whether anything beyond 512x240 is worth pursuing (see
@@ -28,6 +32,8 @@ Effort is in relative units (S = days, M = weeks, L = months of part-time work).
 - **Effort:** S (after LMX-1) · **Risk:** low · **Licence-safe:** yes.
 - **Done when:** a table of all 104 maps with widths is in
   `docs/research/measurements.md`.
+- **Tool:** the same `measure` run prints the plane-width histogram (px and
+  tiles) across every section of every world, which is that table.
 
 ### LMX-3 — Linux/Wine feasibility report
 - **Why:** the existing loader is Windows-only `[S3]` `[S5]`; nobody has

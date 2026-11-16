@@ -19,6 +19,12 @@ Versioning: [Semantic Versioning](https://semver.org/).
     offsets without decoding payloads.
 - Synthetic chunk-container fixtures and 16 unit tests, including negative cases
   (unaligned sizes, truncation, garbage, unknown tags).
+- Measurement probe: `lomax-modern measure` / `scripts/measure_worlds.py` reports
+  the chunk sequence and counts per world file, the plane-width histogram per
+  section (the number that decides the widescreen ceiling), the HEAD endianness
+  vote, RIFF/WAVE formats in `SFX`/`AMBIENT`/`JINGLES`, `GAME.TXT` structure and
+  `DEMOS` framing — read-only, sizes and header fields only, with the documented
+  HEAD layout labelled as a hypothesis until real files confirm it.
 - Opt-in integration tests behind `LOMAX_GAME_DIR`.
 - Local-only game-data layout: `scripts/new_game_folder.sh` creates one slot per
   repository outside every git working tree, and `.gitignore` covers
