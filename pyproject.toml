@@ -28,7 +28,8 @@ dev = ["pytest>=8"]
 lomax-modern = "lomax_modern.cli:main"
 
 [project.urls]
-Homepage = "https://github.com/PLACEHOLDER/lomax-modern"
+Homepage = "https://github.com/szymon-sicinski/lomax-modern"
+Issues = "https://github.com/szymon-sicinski/lomax-modern/issues"
 
 [tool.setuptools.packages.find]
 where = ["src"]
