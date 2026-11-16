@@ -27,15 +27,21 @@ from pathlib import Path
 #: Three of them are shorter than the four-byte header field, so the field is
 #: assumed to be space-padded ("NMY ", "MAP ", "END ") -- an unverified
 #: assumption, see docs/file-formats.md.
+#: ``PARA``, ``MACR`` and ``PAGE`` are not in the loader's documented list but
+#: occur in every retail world file (PARA once per file, MACR/PAGE per level
+#: group); they are accepted here so a real file does not look "unexpected".
 KNOWN_TAGS: tuple[str, ...] = (
     "WRLD",
     "NMY",
+    "PARA",
     "HEAD",
     "TTAB",
     "MAP",
     "GNMY",
     "ANIM",
     "CELL",
+    "MACR",
+    "PAGE",
     "END",
 )
 

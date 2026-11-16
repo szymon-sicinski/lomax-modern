@@ -1,19 +1,21 @@
 """Read-only measurement probes for a Lomax installation.
 
 Every number this module reports is either read straight from a file header or
-explicitly labelled as a hypothesis. It never writes to the game folder and
-never copies asset bytes: sizes, counts, offsets and header fields only.
+explicitly labelled as unverified. It never writes to the game folder and never
+copies asset bytes: sizes, counts, offsets and header fields only.
 
-The goal is the Phase 0 measurement set from
-``docs/research/04-improvement-backlog.md`` (LMX-1, LMX-2) and the format
-questions in ``docs/research/05-open-questions.md``:
+Measured facts this module now relies on (all re-checked on the retail PC
+install, 2026-11-16, and reproducible with ``lomax-modern measure``):
 
-* which chunk sequence the world files actually use,
-* how many level sections (HEAD blocks) each world holds,
-* the distribution of plane widths — the number that decides whether anything
-  wider than 512x240 is worth pursuing,
-* the audio formats inside ``SFX``/``AMBIENT``/``JINGLES``,
-* the shape of ``DEMOS/*.DAT`` and ``GAME.TXT``.
+* chunk header is a 4-byte tag plus a big-endian ``u32`` payload size; the
+  chain reaches EOF in all 9 world files;
+* ``HEAD`` carries plane width and height as big-endian ``u32`` in 8-pixel
+  units, and the following ``MAP`` holds 3 bytes per 16x16 cell, padded up to a
+  4-byte boundary;
+* ``CELL`` payloads are a whole number of 64-byte 8x8 cells.
+
+Anything beyond that — ``ANIM`` record layout, ``GNMY`` type names, palette
+indexing — is reported as an observation, never as a format.
 """
 
 from __future__ import annotations
@@ -25,15 +27,23 @@ from dataclasses import dataclass, field
 from pathlib import Path
 
 from .doctor import EXPECTED_DIRS, EXPECTED_FILES, find_world_files, inventory
-from .wldscan import KNOWN_TAGS, ScanResult, scan_bytes
+from .wldscan import KNOWN_TAGS, Chunk, ScanResult, scan_bytes
 
-#: Tags seen in real files but absent from the documented set. Kept here so the
-#: scanner can be widened without losing the "is this documented?" distinction.
+#: Tags that occur in retail files but are not in the loader's documented list.
 OBSERVED_EXTRA_TAGS: tuple[str, ...] = ("PARA", "MACR", "PAGE")
 
-#: Plausible plane geometries, in pixels, for validating a HEAD hypothesis.
-_PLAUSIBLE_HEIGHTS = (192, 224, 240, 256, 480, 512)
-_MIN_WIDTH, _MAX_WIDTH = 160, 4096
+#: Bytes a MAP chunk needs per 16x16 cell: a 16-bit tile word plus one
+#: collision byte (documented, and verified against all 104 sections).
+MAP_BYTES_PER_CELL = 3
+
+#: A CELL payload is a whole number of 64-byte 8x8 palettised cells.
+CELL_BYTES = 8 * 8
+
+
+def _read_u32(data: bytes, offset: int, endian: str) -> int | None:
+    if offset + 4 > len(data):
+        return None
+    return struct.unpack(endian + "I", data[offset : offset + 4])[0]
 
 
 @dataclass
@@ -45,7 +55,15 @@ class HeadRecord:
     width_px: int | None
     height_px: int | None
     endian: str
-    plausible: bool
+    map_bytes: int | None = None
+    expected_map_bytes: int | None = None
+    map_ok: bool = False
+
+    @property
+    def tiles(self) -> tuple[int, int] | None:
+        if not self.width_px or not self.height_px:
+            return None
+        return self.width_px // 16, self.height_px // 16
 
 
 @dataclass
@@ -58,43 +76,59 @@ class WorldMeasurement:
     chunk_counts: dict[str, int]
     heads: list[HeadRecord]
     endian_votes: Counter = field(default_factory=Counter)
+    gnmy: dict = field(default_factory=dict)
+    cell: dict = field(default_factory=dict)
+
+    @property
+    def verified_heads(self) -> list[HeadRecord]:
+        return [h for h in self.heads if h.map_ok]
 
     @property
     def width_histogram(self) -> Counter:
-        return Counter(h.width_px for h in self.heads if h.width_px)
+        return Counter(h.width_px for h in self.verified_heads if h.width_px)
 
 
-def _read_u32(data: bytes, offset: int, endian: str) -> int | None:
-    if offset + 4 > len(data):
-        return None
-    return struct.unpack(endian + "I", data[offset : offset + 4])[0]
+def _following_map(chunks: list[Chunk], index: int) -> Chunk | None:
+    """The MAP chunk that belongs to the HEAD at ``index`` (same quadruple)."""
+    for follower in chunks[index + 1 : index + 5]:
+        if follower.tag == "MAP":
+            return follower
+        if follower.tag == "HEAD":
+            break
+    return None
 
 
 def read_heads(data: bytes, scan: ScanResult) -> list[HeadRecord]:
-    """Interpret every HEAD chunk under the documented layout.
+    """Interpret every HEAD chunk, validated against its MAP chunk.
 
-    Documented (not yet verified): two ``u32`` values at the start of the
-    payload, plane width and height, in 8-pixel units, big-endian. We evaluate
-    both endiannesses and mark a record plausible only when the decoded geometry
-    lands in a sane range and the height matches a known screen height.
+    Documented: two ``u32`` values at the start of the payload, plane width and
+    height in 8-pixel units, big-endian. Instead of guessing from the geometry,
+    the decoded size is checked against the sibling MAP chunk: a 16x16 cell
+    costs 3 bytes, and the payload is padded to a multiple of 4. A record whose
+    MAP does not agree is reported with ``map_ok=False`` and excluded from
+    histograms.
     """
     heads: list[HeadRecord] = []
-    for chunk in scan.chunks:
+    chunks = scan.chunks
+    for index, chunk in enumerate(chunks):
         if chunk.tag != "HEAD":
             continue
         payload = data[chunk.payload_offset : chunk.payload_offset + chunk.payload_size]
+        sibling = _following_map(chunks, index)
+        map_bytes = sibling.payload_size if sibling else None
         for endian in (">", "<"):
             raw_w = _read_u32(payload, 0, endian)
             raw_h = _read_u32(payload, 4, endian)
-            if raw_w is None or raw_h is None:
-                heads.append(HeadRecord(chunk.payload_offset, chunk.payload_size, None, None, endian, False))
+            if not raw_w or not raw_h:
+                heads.append(HeadRecord(chunk.payload_offset, chunk.payload_size, None, None, endian))
                 continue
             width_px, height_px = raw_w * 8, raw_h * 8
-            plausible = (
-                _MIN_WIDTH <= width_px <= _MAX_WIDTH
-                and height_px in _PLAUSIBLE_HEIGHTS
-                and raw_w % 2 == 0
-                and width_px % 16 == 0
+            cells = (width_px // 16) * (height_px // 16)
+            expected = cells * MAP_BYTES_PER_CELL
+            ok = (
+                map_bytes is not None
+                and expected <= map_bytes <= expected + 3
+                and map_bytes % 4 == 0
             )
             heads.append(
                 HeadRecord(
@@ -103,10 +137,40 @@ def read_heads(data: bytes, scan: ScanResult) -> list[HeadRecord]:
                     width_px=width_px,
                     height_px=height_px,
                     endian=endian,
-                    plausible=plausible,
+                    map_bytes=map_bytes,
+                    expected_map_bytes=expected,
+                    map_ok=ok,
                 )
             )
     return heads
+
+
+def probe_gnmy(payload: bytes) -> dict:
+    """Walk GNMY entries: ``u16`` size (LE) then a ``u16`` type, per entry.
+
+    Observed layout, not yet confirmed against the engine: each entry is
+    ``size`` bytes long, of which the first four are size and type, and the
+    chunk ends with a few bytes that are not an entry. Type *names* live in NMY
+    and the index-to-name mapping is **unverified**, so only indices are
+    reported.
+    """
+    types: Counter = Counter()
+    pos = 0
+    entries = 0
+    while pos + 2 <= len(payload):
+        size = struct.unpack("<H", payload[pos : pos + 2])[0]
+        if size < 4 or pos + size > len(payload):
+            break
+        types[struct.unpack("<H", payload[pos + 2 : pos + 4])[0]] += 1
+        entries += 1
+        pos += size
+    return {
+        "bytes": len(payload),
+        "entries": entries,
+        "trailing_bytes": len(payload) - pos,
+        "distinct_types": len(types),
+        "top_types": dict(types.most_common(10)),
+    }
 
 
 def measure_world(path: Path) -> WorldMeasurement:
@@ -115,8 +179,20 @@ def measure_world(path: Path) -> WorldMeasurement:
     heads = read_heads(data, scan)
     votes: Counter = Counter()
     for head in heads:
-        if head.plausible:
+        if head.map_ok:
             votes[head.endian] += 1
+
+    gnmy_chunks = [c for c in scan.chunks if c.tag == "GNMY"]
+    gnmy_totals: Counter = Counter()
+    gnmy_entries = 0
+    for c in gnmy_chunks:
+        info = probe_gnmy(data[c.payload_offset : c.payload_offset + c.payload_size])
+        gnmy_entries += info["entries"]
+        gnmy_totals.update(info["top_types"])
+
+    cell_sizes = [c.payload_size for c in scan.chunks if c.tag == "CELL"]
+    anim_sizes = [c.payload_size for c in scan.chunks if c.tag == "ANIM"]
+
     return WorldMeasurement(
         name=path.name,
         size=len(data),
@@ -126,6 +202,17 @@ def measure_world(path: Path) -> WorldMeasurement:
         chunk_counts=dict(Counter(scan.tags)),
         heads=heads,
         endian_votes=votes,
+        gnmy={
+            "chunks": len(gnmy_chunks),
+            "entries": gnmy_entries,
+            "top_types": dict(gnmy_totals.most_common(10)),
+        },
+        cell={
+            "chunks": len(cell_sizes),
+            "bytes": sum(cell_sizes),
+            "cells": sum(cell_sizes) // CELL_BYTES,
+            "multiple_of_64": all(s % CELL_BYTES == 0 for s in cell_sizes),
+        },
     )
 
 
@@ -226,15 +313,16 @@ def measure_install(game_dir: str | Path) -> dict:
     """Collect every probe into one JSON-serialisable report."""
     root = Path(game_dir)
     entries = inventory(root)
-    worlds = find_world_files(root)
-    world_results = [measure_world(p) for p in worlds]
+    worlds = [measure_world(p) for p in find_world_files(root)]
 
     width_hist: Counter = Counter()
+    height_hist: Counter = Counter()
     endian_votes: Counter = Counter()
-    for w in world_results:
+    for w in worlds:
         for head in w.heads:
-            if head.plausible and head.width_px:
+            if head.map_ok and head.width_px and head.height_px:
                 width_hist[head.width_px] += 1
+                height_hist[head.height_px] += 1
         endian_votes.update(w.endian_votes)
 
     audio: dict[str, list[WavInfo]] = {}
@@ -242,7 +330,7 @@ def measure_install(game_dir: str | Path) -> dict:
         audio[folder] = probe_audit_folder(root / folder)
 
     chunk_tags: Counter = Counter()
-    for w in world_results:
+    for w in worlds:
         chunk_tags.update(w.tags)
 
     return {
@@ -259,22 +347,27 @@ def measure_install(game_dir: str | Path) -> dict:
                 "confidence": w.confidence,
                 "chunks": len(w.tags),
                 "chunk_counts": w.chunk_counts,
-                "heads": len(w.heads) // 2,  # two endianness interpretations each
-                "widths_px": sorted({h.width_px for h in w.heads if h.plausible and h.width_px}),
-                "heights_px": sorted({h.height_px for h in w.heads if h.plausible and h.height_px}),
+                "planes": sum(1 for h in w.heads if h.endian == ">"),
+                "planes_verified": len(w.verified_heads),
+                "widths_px": sorted({h.width_px for h in w.verified_heads if h.width_px}),
+                "heights_px": sorted({h.height_px for h in w.verified_heads if h.height_px}),
+                "gnmy": w.gnmy,
+                "cell": w.cell,
             }
-            for w in world_results
+            for w in worlds
         ],
         "world_totals": {
-            "files": len(world_results),
-            "bytes": sum(w.size for w in world_results),
+            "files": len(worlds),
+            "bytes": sum(w.size for w in worlds),
+            "planes": sum(1 for w in worlds for h in w.heads if h.endian == ">"),
+            "planes_verified": sum(len(w.verified_heads) for w in worlds),
             "chunk_tags": dict(chunk_tags.most_common()),
             "undocumented_tags": sorted({t for t in chunk_tags if t not in KNOWN_TAGS}),
             "head_endian_votes": dict(endian_votes),
             "width_histogram_px": {str(k): v for k, v in sorted(width_hist.items())},
-            "width_histogram_tiles": {
-                str(k // 16): v for k, v in sorted(width_hist.items())
-            },
+            "height_histogram_px": {str(k): v for k, v in sorted(height_hist.items())},
+            "cells": sum(w.cell["cells"] for w in worlds),
+            "cells_multiple_of_64": all(w.cell["multiple_of_64"] for w in worlds),
         },
         "audio": {
             folder: [
@@ -306,22 +399,36 @@ def summarise(report: dict) -> str:
     lines.append(f"worlds:  {totals['files']} files, {totals['bytes']} bytes")
     lines.append(f"chunk tags seen: {', '.join(totals['chunk_tags'])}")
     if totals["undocumented_tags"]:
-        lines.append(f"undocumented tags: {', '.join(totals['undocumented_tags'])}")
-    lines.append(f"HEAD endian votes: {totals['head_endian_votes'] or 'none plausible'}")
+        lines.append(f"undocumented tags (not in the loader's list): {', '.join(totals['undocumented_tags'])}")
+    lines.append(
+        f"planes: {totals['planes']} ({totals['planes_verified']} verified against MAP size)"
+    )
+    lines.append(f"HEAD endian votes: {totals['head_endian_votes'] or 'none verified'}")
+    lines.append(
+        f"cells: {totals['cells']} x 64 B "
+        f"({'all CELL payloads are whole cells' if totals['cells_multiple_of_64'] else 'MIXED sizes'})"
+    )
     lines.append("")
-    lines.append(f"{'world':<14}{'bytes':>9}{'chunks':>8}{'heads':>7}  widths (px)")
+    lines.append(f"{'world':<14}{'bytes':>9}{'chunks':>8}{'planes':>8}{'verif':>7}  widths (px)")
     for w in report["worlds"]:
         widths = ",".join(str(x) for x in w["widths_px"]) or "-"
-        lines.append(f"{w['name']:<14}{w['size']:>9}{w['chunks']:>8}{w['heads']:>7}  {widths}")
+        lines.append(
+            f"{w['name']:<14}{w['size']:>9}{w['chunks']:>8}{w['planes']:>8}"
+            f"{w['planes_verified']:>7}  {widths}"
+        )
 
     hist = totals["width_histogram_px"]
     if hist:
         lines.append("")
-        lines.append("plane-width histogram (sections):")
+        lines.append("plane-width histogram (planes, verified):")
         for width, count in hist.items():
             tiles = int(width) // 16
             bar = "#" * min(count, 60)
             lines.append(f"  {width:>5} px ({tiles:>3} tiles): {count:>3} {bar}")
+    hh = totals["height_histogram_px"]
+    if hh:
+        lines.append("")
+        lines.append("plane-height histogram: " + ", ".join(f"{k}px x{v}" for k, v in hh.items()))
 
     lines.append("")
     for folder, items in report["audio"].items():
