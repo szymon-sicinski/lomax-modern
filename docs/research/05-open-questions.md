@@ -5,20 +5,20 @@ these can be answered from public documentation alone.
 
 | # | Question | Why it matters | How to resolve |
 |---|---|---|---|
-| Q1 | What is the exact chunk header layout of a `.WLD` — `tag+size` or `size+tag`, which endianness, and does the size include the header? Are 3-letter tags space-padded to 4 bytes? | Every parser depends on it; the current scanner only ranks hypotheses | `lomax-modern wldscan` on all `WORLDS/*.WLD`; a real file yields a clean chain to EOF (LMX-1) |
-| Q2 | Why does the widescreen ceiling sit at 512 px? | Decides whether ultra-widescreen (>2.13:1) is a small patch or a rewrite | Inspect the fade loop and surface allocation; try widths 528/560 and observe which stage breaks (LMX-2) |
-| Q3 | What is the map-width distribution across all 104 maps? | A 640-px view is only useful if most maps are ≥40 tiles wide | Parse `HEAD`/`MAP` per world and histogram (LMX-2) |
-| Q4 | Does the PC build use DirectInput for joysticks, or only the PS1 build? | Input work may already be covered by prior art on Windows and impossible to test on Linux | Check imports/strings of `LOMAX.EXE`; test with a pad |
-| Q5 | Is there any vertical camera logic? | A taller framebuffer is only viable if the engine can scroll vertically | Search the binary for a `camera_y` equivalent; observe the engine during a vertical drop |
-| Q6 | What is the `DEMOS/*.DAT` format? | Needed for regression-testing any render change (demos must replay identically) | Compare demo files; the loader notes say they replay input `[S3]`, not what the bytes mean |
-| Q7 | Are `SFX/*.WAV` plain PCM 22.05 kHz mono files, and are `AMBIENT`/`JINGLES` the same? | Determines whether audio tooling is a 20-line wave reader or needs a custom mixer | `file`/format probe on a real install; the loader documents replacement constraints `[S2]` |
-| Q8 | Do all shipped tiles really use palette 0 only? | If true, tile upscaling is much simpler (one palette per world) | Measure palette indices per `CELL`/`TTAB` payload (LMX-6) |
-| Q9 | How many unique cells, tiles and sprite frames exist in total? | Sizes the art upscaling job and predicts whether 2x can be hand-fixed | Inventory tool (LMX-6) |
-| Q10 | Does the stock game run under Wine at all, and which blocker fails first? | Sets the target for an open-source presenter (DLL shim vs app-level) | LMX-3 matrix |
-| Q11 | Can a 16-bit offscreen surface be presented without the game's own DirectDraw mode set? | The existing loader says yes on Windows; unverified on Wine/DXVK | Same as Q10 |
-| Q12 | Will `Lomax+` ever get a licence, and does its author want collaborators? | The cheapest path to a licensed widescreen implementation is upstream cooperation | Ask the author; watch the repository |
-| Q13 | Is the `HEAD` height field ever != 240/8 = 30 for shipped worlds? | A taller plane in data would make a vertical camera patch conceivable | Dump `HEAD` heads for all worlds (LMX-1) |
-| Q14 | What is the full SHA-256 of the retail `LOMAX.EXE`? | Pins the baseline locally for patch verification | `lomax-modern doctor` — record locally, never commit |
+| Q1 | What is the exact chunk header layout of a `.WLD`? | Every parser depends on it | ✅ **answered** — tag[4] space-padded + `u32` **BE** payload size, payload-only; 9/9 files reach EOF (`06-measurements-and-improvements.md`) |
+| Q2 | Why does the widescreen ceiling sit at 512 px? | Decides whether ultra-widescreen is a small patch or a rewrite | ⚠️ **blocked** — not visible in the data (plane widths reach 7,200 px, are 8-px aligned); needs experimentation on a patched engine |
+| Q3 | What is the map-width distribution across all 104 planes? | Decides how much of a wider view any level can fill | ⚠️ **partial** — 104 plane widths measured (< 432 px: 16; < 512: 18; < 640: 24); playfield→plane mapping needs `g_LevelDefs` from the EXE |
+| Q4 | Does the PC build use DirectInput for joysticks? | Input work may be covered by prior art | ✅ **answered** — `DINPUT.dll` is in the import table |
+| Q5 | Is there any vertical camera logic? | A taller framebuffer is only viable with vertical scroll | ⚠️ **partial** — playfield planes are 240/256 tall while backgrounds reach 2,928, so height is per-plane; no vertical scrolling observed in data |
+| Q6 | What is the `DEMOS/*.DAT` format? | Needed for regression-testing any render change | ⚠️ **partial** — 14 files, fixed sizes 2,048 B (×8) and 8,192 B (×6); record layout unknown |
+| Q7 | Are the audio files plain PCM? | Determines whether audio tooling is trivial | ✅ **answered** — 82/82 RIFF/WAVE mono 22,050 Hz 16-bit, 44-byte header |
+| Q8 | Do all shipped tiles use palette 0 only? | If true, tile upscaling is much simpler | ⚠️ **blocked** — needs `TTAB`/`CELL` decoding; the container alone does not say which palette a tile uses |
+| Q9 | How many unique cells, tiles and sprite frames exist? | Sizes the art upscaling job | ⚠️ **partial** — 14,974 cells total (uniqueness unknown), 104 `TTAB`, 566 `ANIM` chunks |
+| Q10 | Does the stock game run under Wine at all? | Sets the target for an open-source presenter | ⚠️ **blocked** — no display/Wine in the measurement environment |
+| Q11 | Can a 16-bit offscreen surface be presented outside the game's mode set? | Same target question | ⚠️ **blocked** — as Q10 |
+| Q12 | Will `Lomax+` ever get a licence? | Cheapest path to licensed widescreen | ⚠️ **blocked** — needs the author's answer |
+| Q13 | Is the `HEAD` height field ever != 240/8 = 30? | A taller plane makes a vertical-camera patch conceivable | ✅ **answered** — yes: 240 (×5) and 256 (×10) plus 272–2,928 (×89); 256 is the PS1 PAL leftover |
+| Q14 | What is the full SHA-256 of the retail `LOMAX.EXE`? | Pins the baseline locally | ✅ **answered** — prefix `04cc4dfd260037ba…` matches the VOGONS retail hash; the full value stays out of the repo |
 
 ## Deliberately unanswered for now
 
