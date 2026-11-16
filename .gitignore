@@ -1,0 +1,43 @@
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+.venv/
+venv/
+.pytest_cache/
+build/
+dist/
+
+# Game data must never be committed. The tools ship no game bytes.
+*.exe
+*.dll
+*.WLD
+*.wld
+*.bin
+*.cue
+*.iso
+*.img
+*.mdf
+*.mds
+*.ccd
+*.DAT
+*.dat
+*.WAV
+*.wav
+*.mid
+*.MID
+GAME.TXT
+LOMAX.HLP
+LOMAX.CNT
+LOMAX.GID
+WORLDS/
+SFX/
+DEMOS/
+JINGLES/
+AMBIENT/
+MUSIC/
+
+# Local notes / captures
+*.log
+LOADER.LOG
+.scratch/
