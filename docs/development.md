@@ -53,6 +53,45 @@ Use this order, and stop at the first step that fails:
    of trusting them.
 5. Add a byte-exact rebuild test.
 
+## Game files (local only)
+
+Game data must never enter this repository, so it lives in a sibling tree that
+is not a git repository at all:
+
+```
+$HOME/projects/
+├── lomax-modern/            the repository (this)
+└── game-files/              not a repo, not publishable
+    └── lomax-modern/        one folder per repository
+        ├── pc-retail/       LOMAX.EXE, WORLDS/, SFX/, DEMOS/, ...
+        └── pc-disc/         optional .bin/.cue image
+```
+
+Create a slot for a new project (never inside a checkout):
+
+```bash
+scripts/new_game_folder.sh lomax-modern pc-retail
+```
+
+Point the tools at the variant folder, not at the slot root:
+
+```bash
+export LOMAX_GAME_DIR="$HOME/projects/game-files/lomax-modern/pc-retail"
+lomax-modern doctor "$LOMAX_GAME_DIR"
+python -m pytest tests -m realgame -s
+```
+
+Verify the guarantee before adding data:
+
+```bash
+git -C "$HOME/projects" rev-parse --show-toplevel   # must fail: not a repo
+```
+
+Three independent layers keep it unpublished: the tree is outside every
+working copy, every slot has a `.gitignore` containing `*`, and this
+repository's own `.gitignore` covers `game-files/`, `gamedata/`, `GAMES/` plus
+the data extensions.
+
 ## Style
 
 - Standard library first; `pathlib` over `os.path`; type hints on public

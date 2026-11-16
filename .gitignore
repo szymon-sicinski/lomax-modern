@@ -41,3 +41,9 @@ MUSIC/
 *.log
 LOADER.LOG
 .scratch/
+
+# Local game-data slots (docs/development.md). Kept outside the repository in
+# practice; ignored anyway so a copy can never be committed by accident.
+game-files/
+gamedata/
+GAMES/
