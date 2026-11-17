@@ -40,6 +40,18 @@ these can be answered from public documentation alone.
 | Q27 | Which `TTAB` counting units are authoritative? | The flag counts disagree between WP-3 (`0x2000` 15,787 / `0x4000` 1,783) and WP-5 (16,503 / 2,499), and distinct indices differ by 1 (14,861 vs 14,862) | agree a single unit (per-word vs per-record, `BONUS.WLD` included or not) before these numbers enter `file-formats.md` |
 | Q28 | Does M2 serve **disc owners only** (ddraw proxy over the retail exe), or also **disc-less users** (own engine + presenter over the MIT data layer)? | A scope and budget fork, not a mechanism change | human decision — see [`../roadmap/30-risks.md`](../roadmap/30-risks.md#open-decisions-for-the-human) |
 
+**Opened by the LMX-7 reports (2026-11-17).** `TTAB` is now framed — 8 bytes per
+16×16 tile, four big-endian `u16`, 13-bit index plus `0x2000`/`0x4000` flags —
+but its *meaning* is not: the order of the four cells in an entry, the
+`0x2000`/`0x4000` flag semantics, and the `MAP` tile-word saturation (0
+violations at `b[0] & 0x7F`, yet a 7-bit field against `TTAB` banks of up to
+2,952 entries) all stay open, as do the `ANIM` layout, palette-per-`CELL` (Q8,
+narrowed to "no palette field exists in the tile word") and the `BONUS.WLD`
+index-256 anomaly. Each has its test named in
+[`07-wp3-asset-pipeline.md`](07-wp3-asset-pipeline.md) §2 and §6; the
+runtime-only questions Q15–Q19 are in
+[`07-wp4-runtime-distribution.md`](07-wp4-runtime-distribution.md) §10.
+
 ## Deliberately unanswered for now
 
 - **Copy protection strength.** Research may describe the CD check `[S3]`; we

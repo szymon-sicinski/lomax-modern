@@ -1,8 +1,8 @@
 # Research index
 
-Read in this order. Everything here is desk research unless a document says
-otherwise; measurements against real files land in `measurements.md` once they
-exist (LMX-1, LMX-2).
+Read in this order. Everything here is a research record; from `06` onward it is
+measurement against the retail install rather than desk research, and each
+document says which of its claims were measured in the session that produced it.
 
 | Document | Question it answers |
 |---|---|
@@ -12,6 +12,9 @@ exist (LMX-1, LMX-2).
 | [`04-improvement-backlog.md`](04-improvement-backlog.md) | Ranked work items with effort, risk and done criteria |
 | [`05-open-questions.md`](05-open-questions.md) | What needs real files or a hex editor to answer |
 | [`06-measurements-and-improvements.md`](06-measurements-and-improvements.md) | **Measurements from the retail install** and the resulting top-5 plan |
+| [`07-wp1-patching-surface.md`](07-wp1-patching-surface.md) | **How do we reach the finished frame without touching `LOMAX.EXE`?** — PE32 identity, the full 13-DLL import table, and why a `ddraw.dll` proxy is the mechanism to build |
+| [`07-wp3-asset-pipeline.md`](07-wp3-asset-pipeline.md) | **What does 2× `WLD`/`SPR` re-authoring need?** — a 15-item gap list with a test each, the `TTAB` framing measured, and the two documented claims that measurement falsified |
+| [`07-wp4-runtime-distribution.md`](07-wp4-runtime-distribution.md) | **Wine/Proton, a shim, or a native port?** — the GDI colour gate at `0x40799c`, what dgVoodoo 2, DxWnd and DXVK can and cannot clear, and a package set verified for Fedora 44 |
 | [`sources.md`](sources.md) | Provenance for every `[S#]` citation |
 | [`../roadmap/00-research-plan.md`](../roadmap/00-research-plan.md) | The staged roadmap (research plan, milestones, releases, risks, budget) |
 
