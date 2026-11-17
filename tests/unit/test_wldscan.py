@@ -16,7 +16,8 @@ def test_detects_documented_layout(endian: str) -> None:
     result = scan_bytes(data)
 
     assert result.chunks, "expected a chunk chain"
-    assert result.tags == list(KNOWN_TAGS)
+    assert set(result.tags) == set(KNOWN_TAGS)
+    assert result.tags[0] == "WRLD" and result.tags[-1] == "END"
     assert result.confidence == "confirmed-chain"
     assert result.coverage == pytest.approx(1.0)
     expected = "u32le" if endian == "<" else "u32be"

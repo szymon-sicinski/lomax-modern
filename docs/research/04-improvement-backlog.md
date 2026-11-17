@@ -6,28 +6,29 @@ Effort is in relative units (S = days, M = weeks, L = months of part-time work).
 
 ## P0 — measurement and research (this repository, no game code)
 
-### LMX-1 — Confirm the `.WLD` chunk layout on real files
-- **Why:** every format claim in `docs/file-formats.md` is currently a
-  hypothesis. The scanner in `src/lomax_modern/wldscan.py` deliberately refuses
-  to decode payloads until the chain is confirmed.
-- **Deliverable:** a one-page report with the layout of every shipped `WORLDS`
-  file, including whether sizes are payload-only or header-inclusive, and the
-  endianness of each field.
-- **Evidence:** `[S2]` chunk order; `[S2]` "every size must be a multiple of 4".
-- **Effort:** S · **Risk:** low · **Licence-safe:** yes (offsets only).
-- **Done when:** `wldscan` reports `confidence: confirmed-chain` on all world
-  files and the observed tag order matches `WRLD, NMY, HEAD, TTAB, MAP, GNMY,
-  ANIM, CELL, END`.
+### LMX-1 — Confirm the `.WLD` chunk layout on real files ✅ **done**
+- **Why:** every format claim in `docs/file-formats.md` was a hypothesis.
+- **Result:** verified on the retail install — tag[4] (space-padded) + big-endian
+  `u32` payload size, payload-only, 9/9 files reach EOF; order
+  `WRLD, NMY, PARA, (HEAD, TTAB, MAP, GNMY)*, MACR, PAGE, CELL, ANIM*, END`;
+  `HEAD` width/height cross-checked against `MAP` on 104/104 planes. See
+  [`06-measurements-and-improvements.md`](06-measurements-and-improvements.md).
+- **Tool:** `lomax-modern measure <game_dir>` (or `scripts/measure_worlds.py`).
+- **Still open inside this item:** `TTAB` tile→cell encoding, `ANIM` record
+  layout (payload sizes are not multiples of 0x38), `GNMY` type names.
 
-### LMX-2 — Map-width histogram and the widescreen ceiling
-- **Why:** decides whether anything beyond 512x240 is worth pursuing (see
-  [02-resolution.md §2.4](02-resolution.md#24-layer-2--wider-framebuffer-how-wide-can-it-get)).
-  The only public number is "16 of 104 maps are narrower than 27 tiles" `[S3]`.
-- **Deliverable:** histogram of map widths in tiles, count of maps wider than
-  32 tiles, list of the single-screen areas.
-- **Effort:** S (after LMX-1) · **Risk:** low · **Licence-safe:** yes.
-- **Done when:** a table of all 104 maps with widths is in
-  `docs/research/measurements.md`.
+### LMX-2 — Map-width histogram and the widescreen ceiling ⚠️ **partly done**
+- **Result:** 104 planes measured. Narrower than 432 px: **16**; narrower than
+  512: **18**; narrower than 640: **24**; narrower than 800: **30**. Median
+  width 1,280 px. The 16 reproduces the prior art's "16 of 104 maps" exactly,
+  which validates both measurements.
+- **Correction:** a plane is not the camera plane. Which plane a level scrolls
+  is chosen by `g_LevelDefs` inside `LOMAX.EXE`, so the histogram is a *plane*
+  histogram, not a per-level map list — Q3 is `partial`.
+- **Consolation:** the data does not justify the 512 px ceiling. The ceiling is
+  engine-side (fade surfaces, 199 patched width sites), so ultra-widescreen is
+  blocked by code, not by content.
+- **Tool:** the same `measure` run prints the histogram in px and tiles.
 
 ### LMX-3 — Linux/Wine feasibility report
 - **Why:** the existing loader is Windows-only `[S3]` `[S5]`; nobody has

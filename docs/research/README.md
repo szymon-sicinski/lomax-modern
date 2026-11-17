@@ -11,6 +11,7 @@ exist (LMX-1, LMX-2).
 | [`03-prior-art.md`](03-prior-art.md) | What already exists, what may be reused, what may not |
 | [`04-improvement-backlog.md`](04-improvement-backlog.md) | Ranked work items with effort, risk and done criteria |
 | [`05-open-questions.md`](05-open-questions.md) | What needs real files or a hex editor to answer |
+| [`06-measurements-and-improvements.md`](06-measurements-and-improvements.md) | **Measurements from the retail install** and the resulting top-5 plan |
 | [`sources.md`](sources.md) | Provenance for every `[S#]` citation |
 
 ## Executive summary
@@ -29,6 +30,12 @@ exist (LMX-1, LMX-2).
   mostly solved) and pixel density (expensive, unsolved, legally constrained).
   The recommendation is to stop assuming "resolution = widescreen" and treat
   pixel density as the real frontier.
+- **Measured on the retail install (2026-11-16):** the `.WLD` container layout is
+  confirmed (9/9 files), `HEAD` dimensions are verified on 104/104 planes
+  against their `MAP` sizes, all 82 audio files are plain mono 22.05 kHz PCM,
+  and 16 of 104 planes are narrower than 432 px — which reproduces the prior
+  art's "16 of 104 maps" exactly. The 512 px ceiling is therefore a code limit,
+  not a data limit.
 
 ## Conventions used in these documents
 
