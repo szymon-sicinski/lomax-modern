@@ -1,20 +1,32 @@
 """Chunk/tag scanner for Lomax ``.WLD`` world files.
 
-This is deliberately a *scanner*, not a parser.  The chunk header layout used
-by the game is a hypothesis taken from public reverse-engineering notes; it has
-not been confirmed against a real ``.WLD`` file inside this repository, because
-no game data is distributed here (see ``docs/file-formats.md``, "Confidence").
+This is deliberately a *scanner*, not a parser: it walks chunk boundaries and
+reports header fields, but decodes no payload bytes at all.
 
-So the scanner:
+The chunk header layout is no longer a hypothesis. It is a 4-byte tag field
+(space-padded for the three-letter tags) followed by a **big-endian** ``u32``
+payload size, payload-only. That layout is verified against the retail PC
+install in all 9 world files, which parse as a chain that reaches EOF
+(``confidence="confirmed-chain"``, ``layout="tag+size u32be (payload)"``); the
+measurement is recorded in ``docs/file-formats.md`` §2.2 and
+``docs/research/06-measurements-and-improvements.md`` §6.2. No game data is
+distributed here, so the evidence is a description of the format, never a copy
+of it (see ``docs/file-formats.md``, "Confidence").
+
+The scanner still holds no assumption about which file it is given, so it:
 
 * tries every plausible header convention (tag+size vs size+tag, little vs big
   endian, size = payload-only vs size = header+payload),
 * scores each convention by how cleanly the chunk chain terminates at EOF,
 * reports tag names, header offsets and payload offsets only,
-* decodes no payload bytes at all.
+* decodes no payload bytes -- ``HEAD`` dimensions, ``MAP`` cells, ``CELL``
+  pixels, ``ANIM`` frames and ``GNMY``/``NMY`` type names are all opaque here
+  and stay documented as unverified where those layouts are unknown.
 
 If two conventions explain the same file equally well, the result is marked
-``ambiguous`` and nothing should be trusted from it beyond the tag list.
+``ambiguous`` and nothing should be trusted from it beyond the tag list; on a
+real world file an ``ambiguous`` verdict would contradict the measurement
+above and is worth reporting as a bug.
 """
 
 from __future__ import annotations
