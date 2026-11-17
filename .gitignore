@@ -47,3 +47,7 @@ LOADER.LOG
 game-files/
 gamedata/
 GAMES/
+
+# Git worktrees the kanban dispatcher creates inside the checkout
+# (<repo>/.worktrees/<task-id>) for worktree-kind cards.
+.worktrees/
