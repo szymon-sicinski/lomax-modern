@@ -51,8 +51,10 @@ Versioning: [Semantic Versioning](https://semver.org/).
 
 ### Notes
 
-- No format layout has been verified against a real game file yet; every
-  documented chunk claim is graded H/D in `docs/file-formats.md`.
+- Format claims are graded V/D/H in `docs/file-formats.md`: the chunk container,
+  `HEAD` dimensions, `MAP` cell math, `CELL` sizing and the audio formats are
+  verified against the retail install; `TTAB`, `ANIM` and `GNMY` internals remain
+  documented or hypothetical.
 - No engine work, no loader, no patcher in this release.
 
 ## [0.1.0] - 2026-11-16
