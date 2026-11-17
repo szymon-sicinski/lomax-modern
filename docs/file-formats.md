@@ -2,11 +2,17 @@
 
 **Confidence legend**
 
-- **V** — verified in this repository against the retail PC install
-  (2026-11-16): a measurement, with the command recorded in
-  [`research/06-measurements-and-improvements.md`](research/06-measurements-and-improvements.md).
+- **V** — verified against the retail PC install: a measurement, with the
+  command recorded in
+  [`research/06-measurements-and-improvements.md`](research/06-measurements-and-improvements.md)
+  (2026-11-16) or in the LMX-7 reports of 2026-11-17
+  ([`research/07-wp3-asset-pipeline.md`](research/07-wp3-asset-pipeline.md),
+  [`research/07-wp1-patching-surface.md`](research/07-wp1-patching-surface.md),
+  [`research/07-wp4-runtime-distribution.md`](research/07-wp4-runtime-distribution.md)).
 - **D** — documented by a third party `[S2]` `[S3]`, not verified here.
 - **H** — hypothesis in this repository, untested against a real file.
+- **retracted** — stated here previously and contradicted by measurement. The
+  sentence says what was measured instead and links the measurement.
 
 No game data is stored in this repository. Everything below is a description of
 a format, not a copy of it.
@@ -62,7 +68,12 @@ executable but not shipped `[S2]`).
   observed verbatim, `WRLD` is unpadded.
 - A **big-endian** `u32` payload size; the size is payload-only.
 - Sizes are multiples of 4, consistent with `File_ReadChunk` advancing by
-  `size & ~3` `[S2]`; `MAP` is the one chunk that needs padding to reach it.
+  `size & ~3` `[S2]`. The pad sits **inside** the declared size, so the rule
+  never fires on retail data: 1,041/1,041 chunks are already 4-aligned, and the
+  `MAP` payloads that need padding are padded within their declared size
+  **[V]** (`research/07-wp3-asset-pipeline.md` G14). A writer must therefore pad
+  to 4 and include the pad in the size; a reader must not assume the pad is
+  absent.
 
 All 9 files parse as a chain that reaches EOF (`wldscan`: `confirmed-chain`,
 `layout=tag+size u32be (payload)`).
@@ -91,32 +102,72 @@ palette 0 `[D]` (unverified — Q8).
 
 ### 2.4 `TTAB`, `MAP`, `CELL`
 
-- **`MAP` [V]**: 3 bytes per 16x16 cell — a 16-bit tile word plus one collision
-  byte — padded with 0–3 zero bytes so the payload size is a multiple of 4.
-  Verified on all 104 sections: `size − 3·cells ∈ {0,1,2,3}` and every size is
-  4-aligned.
+- **`MAP` [V size, H word]**: 3 bytes per 16x16 cell — a 16-bit tile word plus
+  one collision byte — padded with 0–3 zero bytes so the payload size is a
+  multiple of 4. Verified on all 104 sections: `size − 3·cells ∈ {0,1,2,3}` and
+  every size is 4-aligned. The *word* is not verified as a plain index: read as
+  a tile field, the first of the three bytes masked to 7 bits (`b[0] & 0x7F`)
+  scores **0 violations** over all 523,229 cells, against 189 for unmasked `b[0]`
+  and 187 for `b[1]` **[V]**
+  ([`research/07-wp3-asset-pipeline.md`](research/07-wp3-asset-pipeline.md) G5).
+  **Open anomaly:** that 7-bit field saturates at 127 in every section that uses
+  tiles, while sibling `TTAB` banks hold up to 2,952 entries — so a map cell is
+  not a plain `TTAB` index and the map-cell → tile-record link stays unresolved
+  ([`research/05-open-questions.md`](research/05-open-questions.md)).
 - **`CELL` [V]**: whole 64-byte 8x8 palettised cells. 14,974 cells across the 9
   files, every payload a multiple of 64.
 - **Collision byte [D]**: `(b & 0xC0) == 0xC0` is a one-way floor (bits 4–5
   shape, bit 3 mirror, bits 0–2 material); `0x80` is solid with
   `0x08`/`0x10`/`0x20` blocking from below, left and right.
-- **`TTAB` [D]**: 16x16 tiles assembled from four 8x8 cells, big-endian tile
-  words, tile 0 and cell 0 empty. The tile→cell encoding and the exact entry
-  size are **not** verified; only that payloads are 4-aligned.
+- **`TTAB` [V structure, H meaning]**: 8 bytes per 16x16 tile — four big-endian
+  `u16` cell indices, each a 13-bit index plus flags in `0x2000`/`0x4000`
+  (`0x8000` never set). All 104 payloads are divisible by 8 and by 16, giving
+  **75,122 records = 300,488 words**; decoding under the 13-bit mask leaves
+  1,644 of the 300,488 indices outside the file's `CELL` count (0.55 %, all in
+  `BONUS.WLD`, index 256 against 251 cells), against 18,147 under the 14-bit
+  mask and 19,930 unmasked **[V]**
+  ([`research/07-wp3-asset-pipeline.md`](research/07-wp3-asset-pipeline.md)
+  G1–G3). Still **[D]**: 16x16 tiles assembled from four 8x8 cells, tile 0 and
+  cell 0 empty. The order of the four cells inside an entry, the flag semantics
+  and the map-cell link are **not** known. Flag counts come from two independent
+  runs that used different counting units — `0x2000` on 15,787–16,503 and
+  `0x4000` on 1,783–2,499 of the 300,488 words (G2 of the same report; WP-5,
+  card `t_50f8aa85`, §7) — so they are quoted as a range, not a number.
 
-### 2.5 `GNMY` placements **[V structure, D meaning]**
+### 2.5 `GNMY` placements, and the `NMY` type table **[V structure, H names]**
 
 Entries walk cleanly as `u16` size (little-endian) + `u16` type (little-endian):
-104 chunks, 3,593 entries, each chunk ending in a 4-byte remainder. The type
-*index* is measured; what each index means is not, because the NMY type table
-(index → name) is still unconfirmed.
+104 chunks, 3,593 entries. The bytes left over after the last entry are **4 in 63
+chunks and 2 in the other 41**, not 4 in all 104 — re-measured on 2026-11-17, and
+the earlier figure is annotated where it was recorded
+([`research/06-measurements-and-improvements.md`](research/06-measurements-and-improvements.md)
+§6.2). The type *index* is measured; what each index means is not, because the
+`NMY` type table (index → name) is not parseable yet:
 
-### 2.6 `ANIM` / sprites **[D]**
+- The documented framing — a list of `u16` size + NUL-terminated name — is
+  **retracted**: it walks exactly **one record** per file (8–16 B of
+  2,352–19,292 B) in 9/9 worlds, and none of four conventional framings
+  (`u16`/`u32` size, name-only, 4-aligned) consumes a whole chunk (0/104; best
+  case one name recovered). What the payload does contain is 58–212 printable
+  runs of 4–14 characters at even offsets, pitch 12–18 with jumps of 36/38, each
+  run followed by `00 00` in 70–85 % of cases — a variable-length record table
+  carrying a name *plus* a binary tail. Framing graded **H**
+  ([`research/07-wp3-asset-pipeline.md`](research/07-wp3-asset-pipeline.md) G9;
+  WP-5, card `t_50f8aa85`, §1).
 
-`SpriteFrame` records are 0x38 bytes `[S2]`, but measured `ANIM` payload sizes
-are **not** multiples of 0x38 (566 chunks, e.g. 2,700 and 27,176 bytes), so a
-chunk carries more than a bare array of frames — a header, a bank table, or
-pixel data appended. Treat the record size as unverified.
+### 2.6 `ANIM` / sprites **[H]**
+
+`SpriteFrame` records being 0x38 bytes `[S2]` is **retracted as a chunk-level
+unit**: of 566 measured `ANIM` chunks every payload size is a multiple of 4 and
+**none** is a multiple of 0x38 (e.g. 2,700 and 27,176 bytes; remainders 0–52,
+spread uniformly), so a chunk is not an array of 0x38-byte records. A
+"width, height, then w·h pixels" header tested at eight offsets under both
+endiannesses matches **0 of 566**, and `u16`-token walkers reach at best 339/566
+exact consumption, which is not proof. The chunk layout is therefore **H**:
+treat `ANIM` as an opaque blob until the reader in `LOMAX.EXE` is read
+([`research/07-wp3-asset-pipeline.md`](research/07-wp3-asset-pipeline.md) G7).
+Whether a 0x38-byte *in-memory* descriptor exists inside that stream is a
+separate claim that nothing here has tested.
 
 ### 2.7 Palette rules that bite any art pipeline
 

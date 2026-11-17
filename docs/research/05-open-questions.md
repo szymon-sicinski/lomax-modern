@@ -20,6 +20,18 @@ these can be answered from public documentation alone.
 | Q13 | Is the `HEAD` height field ever != 240/8 = 30? | A taller plane makes a vertical-camera patch conceivable | ✅ **answered** — yes: 240 (×5) and 256 (×10) plus 272–2,928 (×89); 256 is the PS1 PAL leftover |
 | Q14 | What is the full SHA-256 of the retail `LOMAX.EXE`? | Pins the baseline locally | ✅ **answered** — prefix `04cc4dfd260037ba…` matches the VOGONS retail hash; the full value stays out of the repo |
 
+**Opened by the LMX-7 reports (2026-11-17).** `TTAB` is now framed — 8 bytes per
+16×16 tile, four big-endian `u16`, 13-bit index plus `0x2000`/`0x4000` flags —
+but its *meaning* is not: the order of the four cells in an entry, the
+`0x2000`/`0x4000` flag semantics, and the `MAP` tile-word saturation (0
+violations at `b[0] & 0x7F`, yet a 7-bit field against `TTAB` banks of up to
+2,952 entries) all stay open, as do the `ANIM` layout, palette-per-`CELL` (Q8,
+narrowed to "no palette field exists in the tile word") and the `BONUS.WLD`
+index-256 anomaly. Each has its test named in
+[`07-wp3-asset-pipeline.md`](07-wp3-asset-pipeline.md) §2 and §6; the
+runtime-only questions Q15–Q19 are in
+[`07-wp4-runtime-distribution.md`](07-wp4-runtime-distribution.md) §10.
+
 ## Deliberately unanswered for now
 
 - **Copy protection strength.** Research may describe the CD check `[S3]`; we
