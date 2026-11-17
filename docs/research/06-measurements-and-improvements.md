@@ -11,10 +11,11 @@ with the reason.*
 ```bash
 # environment: Linux container, Python 3.14.10, game folder mounted read-only
 python3 -m venv .venv && . .venv/bin/pip install -e ".[dev]"
-lomax-modern doctor   "/game-files/LOMAX (1)/LOMAX"
-lomax-modern measure  "/game-files/LOMAX (1)/LOMAX" --json /tmp/lomax-report.json
+LOMAX_GAME_DIR="/path/to/Lomax"
+lomax-modern doctor   "$LOMAX_GAME_DIR"
+lomax-modern measure  "$LOMAX_GAME_DIR" --json /tmp/lomax-report.json
 python -m pytest tests -m "not realgame" -q      # 28 passed
-LOMAX_GAME_DIR="/game-files/LOMAX (1)/LOMAX" python -m pytest tests -m realgame -q
+python -m pytest tests -m realgame -q
 ```
 
 The install is the retail build: `LOMAX.EXE` hashes to `04cc4dfd260037ba…`,
