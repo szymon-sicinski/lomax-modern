@@ -14,6 +14,10 @@ exist (LMX-1, LMX-2).
 | [`06-measurements-and-improvements.md`](06-measurements-and-improvements.md) | **Measurements from the retail install** and the resulting top-5 plan |
 | [`sources.md`](sources.md) | Provenance for every `[S#]` citation |
 
+A staged roadmap — research plan, milestones, releases and a risk register —
+lives in [`../roadmap/00-research-plan.md`](../roadmap/00-research-plan.md)
+(start there; the other three documents are linked from it).
+
 ## Executive summary
 
 - The PC build is a 32-bit Windows 9x application (MFC 4.2, DirectDraw 7,
