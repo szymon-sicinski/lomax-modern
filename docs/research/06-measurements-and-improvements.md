@@ -52,6 +52,15 @@ full digest is deliberately not recorded in this repository.
 | `GAME.TXT` is single-byte, marker-delimited | 19,532 B, 1,321 lines, 0 non-ASCII bytes, longest line 53; markers `#` 420, `@` 4, `&` 1 | **verified shape only** |
 | The PC build imports DirectInput | `LOMAX.EXE` import strings: `DDRAW.dll`, `DINPUT.dll`, `DSOUND.dll`, `WINMM.dll`, `COMCTL32.dll` | **verified** |
 
+**Corrections (2026-11-17).** Two rows above were re-measured during LMX-7 and are
+superseded, without rewriting what this run observed: the `GNMY` trailing
+remainder is 4 B in 63 chunks and **2 B in the other 41** (not 4 B in all 104),
+and `TTAB` is now framed as 8-byte records of four big-endian `u16`
+(`07-wp3-asset-pipeline.md` G1, independently reproduced by WP-5, card
+`t_50f8aa85`), so the "`TTAB` semantics unverified" reason behind Q8 above is
+narrower: no palette field exists in the tile word at all. The current grades
+are in [`../file-formats.md`](../file-formats.md) §2.4–2.5.
+
 ### 6.3 The cross-check that pins the HEAD layout
 
 Decoding `HEAD` as big-endian width/height in 8-px units is not taken on faith:
