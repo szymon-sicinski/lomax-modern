@@ -13,6 +13,7 @@ exist (LMX-1, LMX-2).
 | [`05-open-questions.md`](05-open-questions.md) | What needs real files or a hex editor to answer |
 | [`06-measurements-and-improvements.md`](06-measurements-and-improvements.md) | **Measurements from the retail install** and the resulting top-5 plan |
 | [`sources.md`](sources.md) | Provenance for every `[S#]` citation |
+| [`../roadmap/00-research-plan.md`](../roadmap/00-research-plan.md) | The staged roadmap (research plan, milestones, releases, risks, budget) |
 
 ## Executive summary
 
