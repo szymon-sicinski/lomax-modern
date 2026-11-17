@@ -42,6 +42,13 @@ Versioning: [Semantic Versioning](https://semver.org/).
   - `measure.py`'s first geometry heuristic was replaced by the `MAP`
     cross-check after it discarded 69 of 104 real planes.
 - Opt-in integration tests behind `LOMAX_GAME_DIR`.
+- `lomax_modern.wld` — a `.WLD` parser/writer that reads a world file into
+  `Chunk`/`World` records and re-emits it byte-for-byte. Only the verified
+  layout is interpreted (chunk header `tag[4]` + big-endian `u32` payload size,
+  `HEAD` width/height, whole 64-byte `CELL` count, `MAP` cell/padding math);
+  every other tag (`TTAB`, `ANIM`, `NMY`, `MACR`, `PAGE`, ...) round-trips as
+  opaque bytes. Round-trip is proven against all 9 retail world files
+  (SHA-256 in == out).
 - Local-only game-data layout: `scripts/new_game_folder.sh` creates one slot per
   repository outside every git working tree, and `.gitignore` covers
   `game-files/`, `gamedata/`, `GAMES/` as a second line of defence.
