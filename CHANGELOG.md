@@ -19,6 +19,28 @@ Versioning: [Semantic Versioning](https://semver.org/).
     offsets without decoding payloads.
 - Synthetic chunk-container fixtures and 16 unit tests, including negative cases
   (unaligned sizes, truncation, garbage, unknown tags).
+- Measurement probe: `lomax-modern measure` / `scripts/measure_worlds.py` reports
+  the chunk sequence and counts per world file, the plane-width histogram per
+  section (the number that decides the widescreen ceiling), the HEAD endianness
+  vote, RIFF/WAVE formats in `SFX`/`AMBIENT`/`JINGLES`, `GAME.TXT` structure and
+  `DEMOS` framing — read-only, sizes and header fields only, with the documented
+  HEAD layout labelled as a hypothesis until real files confirm it.
+- **First measurements against the retail PC install** (`06-measurements-and-improvements.md`):
+  - `.WLD` container confirmed on 9/9 files: tag[4] space-padded + big-endian
+    `u32` payload size; order includes the previously undocumented `PARA`,
+    `MACR`, `PAGE`.
+  - `HEAD` width/height verified on **104/104 planes** by cross-checking the
+    sibling `MAP` (3 bytes per 16x16 cell, padded to 4). `CELL` payloads are
+    whole 64-byte cells (14,974 cells).
+  - 104 plane widths measured: 16 are narrower than 432 px, 18 narrower than
+    512, 24 narrower than 640 — so the 512 px widescreen ceiling is a code
+    limit, not a level-data limit.
+  - All 82 audio files are RIFF/WAVE mono 22,050 Hz 16-bit with a 44-byte
+    header; `DEMOS` are fixed 2,048/8,192-byte recordings; `GAME.TXT` is
+    19,532 bytes / 1,321 lines with no non-ASCII bytes.
+  - `LOMAX.EXE` imports `DINPUT.dll`, so DirectInput is used by the PC build.
+  - `measure.py`'s first geometry heuristic was replaced by the `MAP`
+    cross-check after it discarded 69 of 104 real planes.
 - Opt-in integration tests behind `LOMAX_GAME_DIR`.
 - Local-only game-data layout: `scripts/new_game_folder.sh` creates one slot per
   repository outside every git working tree, and `.gitignore` covers

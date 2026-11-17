@@ -6,6 +6,10 @@ Helper scripts for contributors. Nothing here is shipped in the package.
   game-data slot next to the repository (`$HOME/projects/game-files/<repo>/`),
   outside every git working tree, and refuses to run if the target would sit
   inside one. See [`docs/development.md`](../docs/development.md#game-files-local-only).
+- `measure_worlds.py <game_dir> [--json PATH] [--quiet]` — the Phase 0 probe:
+  chunk sequence and counts, plane-width histogram per section, audio formats,
+  `GAME.TXT` and `DEMOS` structure. Thin wrapper over
+  `lomax_modern.measure`; read-only and prints no asset bytes.
 
 Planned:
 
