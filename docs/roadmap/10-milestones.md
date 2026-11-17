@@ -1,10 +1,11 @@
 # 10. Milestones
 
-Staged plan, M0…M7. Each milestone states its goal, observable exit criteria
+Staged plan, M0…M8. Each milestone states its goal, observable exit criteria
 (things a reviewer can *run* or *open*, not promises), dependencies, what is
 explicitly out of scope, and an effort estimate in agent-days with a confidence
 level. Companion documents: [`00-research-plan.md`](00-research-plan.md),
-[`20-releases.md`](20-releases.md), [`30-risks.md`](30-risks.md).
+[`20-releases.md`](20-releases.md), [`30-risks.md`](30-risks.md),
+[`40-budget.md`](40-budget.md).
 
 Confidence legend: **high** (the work is data/prose and the path is known),
 **medium** (real build work with a known fallback), **low** (spike; may be
@@ -15,11 +16,12 @@ abandoned).
 - [M0 — Roadmap published and research dispatched](#m0--roadmap-published-and-research-dispatched)
 - [M1 — Platform & patching strategy settled](#m1--platform--patching-strategy-settled)
 - [M2 — Open-source presenter (L1)](#m2--open-source-presenter-l1)
-- [M3 — `.WLD` toolkit + exporter](#m3--wld-toolkit--exporter)
-- [M4 — Password tool](#m4--password-tool)
-- [M5 — Asset pipeline: upscaler + pack writer](#m5--asset-pipeline-upscaler--pack-writer)
-- [M6 — 2× internal-render spike (go/no-go)](#m6--2x-internal-render-spike-gono-go)
-- [M7 — Long tail: level editor + translation](#m7--long-tail-level-editor--translation)
+- [M3 — Controller & input](#m3--controller--input)
+- [M4 — `.WLD` toolkit + exporter](#m4--wld-toolkit--exporter)
+- [M5 — Password tool](#m5--password-tool)
+- [M6 — Asset pipeline: upscaler + pack writer](#m6--asset-pipeline-upscaler--pack-writer)
+- [M7 — 2× internal-render spike (go/no-go)](#m7--2-internal-render-spike-gono-go)
+- [M8 — Long tail: level editor + translation](#m8--long-tail-level-editor--translation)
 - [Dependency graph](#dependency-graph)
 
 ---
@@ -30,7 +32,8 @@ abandoned).
   and dispatch the research packages to the board.
 - **Exit criteria (observable).**
   - `docs/roadmap/00-research-plan.md`, `10-milestones.md`, `20-releases.md`,
-    `30-risks.md` exist and their relative links resolve (link-check loop exits 0).
+    `30-risks.md`, `40-budget.md` exist and their relative links resolve
+    (link-check loop exits 0).
   - `git diff --stat main...HEAD` shows only `docs/roadmap/**` and (at most) one
     line in `docs/research/README.md`.
   - `python -m pytest tests -m "not realgame" -q` reports the unchanged pass
@@ -79,13 +82,53 @@ abandoned).
   - Unit tests: the scaling/filter code is pure and covered; the DLL proxy is
     built in CI only (per [`architecture.md` §5](../architecture.md#5-future-components-and-where-they-sit)).
 - **Dependencies.** M1.
-- **Out of scope.** Widescreen (L2), true-HD art (L3/M6), controller remapping,
-  CD-music replacement, anything that writes into the game folder.
+- **Out of scope.** Widescreen (L2), true-HD art (L3/M7), controller remapping
+  (that is M3), CD-music replacement, anything that writes into the game folder.
 - **Effort.** 12–20 agent-days. **Confidence:** medium (the technique is known;
   the fragile part is DLL-shim behaviour under Wine, which is exactly what M1
   de-risks).
 
-## M3 — `.WLD` toolkit + exporter
+## M3 — Controller & input
+
+- **Goal.** Let a modern gamepad drive the stock game, via a clean-room
+  `dinput.dll` proxy that translates XInput (Windows) / evdev (Linux) into the
+  DirectInput calls the game already makes. No `LOMAX.EXE` patch.
+- **Why here, not earlier or later.** Earlier is impossible: a working pad is
+  worthless while the display path still fights the user (fullscreen/colour-depth
+  handling), so M3 is hard-gated on M2. Later is wrong: this is a platformer, so
+  a pad is the single most user-visible "pleasant to play" change after the
+  picture stops misbehaving, and the route is cheap because it reuses the exact
+  DLL-proxy mechanism WP-1/M2 establish for display — `DirectInputCreateA` is
+  intercepted the same way `DirectDrawCreate` is. It slots immediately after M2,
+  ahead of the asset/tooling work (M4+) which a player does not feel directly.
+- **Scope — what "controller support" means.**
+  - Analogue movement + buttons mapped to the documented input sites.
+  - D-pad navigation of the in-game menus.
+  - Hot-plug (pad connected mid-session).
+  - Per-controller mapping presets (Xbox, DualSense, generic).
+  - **Rumble is out of scope** — the PC build has no force-feedback API in its
+    documented surface; it is deferred, not forgotten.
+- **Route.** The measured fact that `LOMAX.EXE` imports `DINPUT.dll`
+  ([`06-measurements-and-improvements.md`](../research/06-measurements-and-improvements.md#64-q1q14))
+  means the cheapest path is a `dinput.dll` proxy — the same import-table-hook
+  shape as the display proxy, so the distribution form (a dropped-in DLL next to
+  the user's own files) and the legal posture are identical. A binary patch at
+  the input sites loses (edits the exe, version-fragile); Steam Input / an
+  external wrapper loses as *our* product (it outsources the feature to a
+  proprietary runtime) — it remains valid user-side advice in the README.
+  Prior art: `Lomax+` advertises controller support `[S3]` `[S5]`; we cite that
+  as a fact, never as code.
+- **Exit criteria (observable).**
+  - A DualSense **and** an Xbox pad both move Lomax, navigate the menus, and
+    survive hot-plug, verified by playtest on the target distro.
+  - The mapping layer has unit tests (XInput/evdev → DirectInput translation)
+    that run without a pad attached.
+- **Dependencies.** M2 (display stable) and M1 (mechanism).
+- **Out of scope.** Rumble, an in-game rebinding UI (presets only), PS1 parity.
+- **Effort.** 5–8 agent-days. **Confidence:** medium (same proxy technique as M2,
+  already de-risked; the new surface is the input-event translation).
+
+## M4 — `.WLD` toolkit + exporter
 
 - **Goal.** A byte-exact `.WLD` reader/writer (LMX-5) plus a tile/sprite PNG
   exporter (LMX-6), fully distributable.
@@ -101,13 +144,13 @@ abandoned).
   - `file-formats.md` grades flip **H → V** for the layouts that get confirmed,
     each with its evidence line.
 - **Dependencies.** M0 (and WP-3/WP-5 findings).
-- **Out of scope.** Writing 2× art (M5), engine hooks (M6), redistributing
+- **Out of scope.** Writing 2× art (M6), engine hooks (M7), redistributing
   exported art (never).
 - **Effort.** 6–10 agent-days. **Confidence:** high (the chunk container is
   confirmed; the open risk is `TTAB`/`ANIM`, priced in via the round-trip
   falsifier).
 
-## M4 — Password tool
+## M5 — Password tool
 
 - **Goal.** A correct password encoder/decoder (LMX-7) from the documented
   layout, so the game's password-only progress is usable with tooling.
@@ -120,7 +163,7 @@ abandoned).
 - **Effort.** 1–2 agent-days. **Confidence:** high (algorithm is documented
   behaviour reimplemented from facts `[S2]`).
 
-## M5 — Asset pipeline: upscaler + pack writer
+## M6 — Asset pipeline: upscaler + pack writer
 
 - **Goal.** A matte-aware 2× upscaler (LMX-8) and a 2× pack writer (LMX-9) that
   transform the user's own files, with backup and refuse-if-no-round-trip.
@@ -131,14 +174,14 @@ abandoned).
     without visual artefacts.
   - The writer refuses to touch a file it cannot round-trip, and a backup path
     is exercised in a test.
-- **Dependencies.** M3.
+- **Dependencies.** M4.
 - **Out of scope.** Shipping any upscaled art (derivative of copyrighted assets
   — the generator ships, the output stays on the user's disk); the 2× render
-  hook (M6).
+  hook (M7).
 - **Effort.** 8–14 agent-days. **Confidence:** medium (the matte-aware scaler is
   pure data work; the pack writer's risk is the unverified `ANIM` layout).
 
-## M6 — 2× internal-render spike (go/no-go)
+## M7 — 2× internal-render spike (go/no-go)
 
 - **Goal.** Prove or disprove that a 2× internal framebuffer with 2× art is
   achievable by patching only viewport + tile + sprite + fade (LMX-10).
@@ -147,13 +190,13 @@ abandoned).
   - The 8 attract demos still replay identically (tick-for-tick) at the original
     camera width.
   - The failure modes and the "what would have to change" list are written down.
-- **Dependencies.** M5 (art) and M1 (hook mechanism).
+- **Dependencies.** M6 (art) and M1 (hook mechanism).
 - **Out of scope.** Shipping it; turning it into a full reimplementation.
 - **Effort.** 15–25 agent-days. **Confidence:** low (it is a spike; the kill
   criterion is "if it needs more than viewport + tile + sprite + fade patching,
   stop and publish the findings").
 
-## M7 — Long tail: level editor + translation
+## M8 — Long tail: level editor + translation
 
 - **Goal.** A level editor (LMX-11) and translation support (LMX-12) on top of
   the toolkit.
@@ -161,19 +204,19 @@ abandoned).
   - The editor round-trips a level (map + collision + placements) and re-emits a
     file the game loads.
   - A translation of `GAME.TXT` loads and renders in-game with correct encoding.
-- **Dependencies.** M3.
+- **Dependencies.** M4.
 - **Out of scope.** A full game remake; PS1 parity.
 - **Effort.** 20–40 agent-days. **Confidence:** medium.
 
 ## Dependency graph
 
 ```
-M0 ──► M1 ──► M2
+M0 ──► M1 ──► M2 ──► M3
   │
-  ├──► M3 ──► M5 ──► M6
-  │        └─► M7
-  └──► M4
+  ├──► M4 ──► M6 ──► M7
+  │        └─► M8
+  └──► M5
 ```
 
-M3, M4 and M1 are parallelisable once M0 lands. M6 depends on both M1 and M5;
-M7 depends only on M3.
+M1, M4 and M5 are parallelisable once M0 lands. M3 depends on M2; M7 depends on
+both M1 and M6; M8 depends only on M4.

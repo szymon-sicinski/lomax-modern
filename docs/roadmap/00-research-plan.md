@@ -47,16 +47,18 @@ value-per-risk:
 
 1. **M1** — settle the platform strategy (Wine/Proton vs shim vs native) and the
    hook mechanism (see [§4](#4-the-strategy-decision-three-mechanisms-one-winner)).
-2. **M2** — ship the open-source presenter (L1). Lomax is pleasant on Linux.
-3. **M3** — ship the `.WLD` read/write toolkit with byte-exact round trip plus a
+2. **M2** — ship the open-source presenter (L1). Lomax renders nicely on Linux.
+3. **M3** — controller & input: a clean-room `dinput.dll` proxy, so the game is
+   actually *pleasant* to play. Worthless until M2 lands; cheap once it has.
+4. **M4** — ship the `.WLD` read/write toolkit with byte-exact round trip plus a
    tile/sprite exporter. This unlocks every content project.
-4. **M4** — password tool (small, self-contained, immediately useful).
-5. **M5** — matte-aware 2× upscaler + 2× pack writer. The art pipeline.
-6. **M6** — 2× internal-render spike (true HD) with an explicit go/no-go.
-7. **M7** — long tail: level editor, translation support.
+5. **M5** — password tool (small, self-contained, immediately useful).
+6. **M6** — matte-aware 2× upscaler + 2× pack writer. The art pipeline.
+7. **M7** — 2× internal-render spike (true HD) with an explicit go/no-go.
+8. **M8** — long tail: level editor, translation support.
 
-Every step before M6 is distributable as code without shipping a single game
-byte; M6/M7 are only pursued if their falsifiers stay green (see
+Every step before M7 is distributable as code without shipping a single game
+byte; M7/M8 are only pursued if their falsifiers stay green (see
 [`10-milestones.md`](10-milestones.md) and [`30-risks.md`](30-risks.md)).
 
 ## 2. What the earlier research already answered
@@ -216,6 +218,14 @@ v1, resolves contradictions between packages, and records what is still unknown
 in [`../research/05-open-questions.md`](../research/05-open-questions.md). It
 does **not** start new research.
 
+A seventh package, **WP-7 — Controller & input** (the `dinput.dll` proxy
+translation layer: XInput/evdev → DirectInput), is deliberately deferred: it
+depends on M1/M2's mechanism and on M2's display stability, so it is spun up as
+a card when M3 is reached rather than dispatched now. Its scope — analogue
+movement + buttons, d-pad menu navigation, hot-plug, per-controller mapping
+presets, rumble out — is fixed in
+[`10-milestones.md`](10-milestones.md#m3--controller--input).
+
 ## 4. The strategy decision: three mechanisms, one winner
 
 Where two strategies compete for how to reach the game's frame, we name the
@@ -230,6 +240,13 @@ winner now and re-open it only if M1's evidence contradicts it.
 The provisional decision is therefore: **M2 is a clean-room `ddraw.dll` proxy /
 app-level presenter.** M1 confirms or refutes it; the refutation criterion is
 written into the WP-1 and WP-2 acceptance below.
+
+The same logic carries to input: because `LOMAX.EXE` imports `DINPUT.dll`
+([`06-measurements-and-improvements.md`](../research/06-measurements-and-improvements.md#64-q1q14)),
+a clean-room **`dinput.dll` proxy** intercepting `DirectInputCreateA` is the
+controller route (M3) — a second dropped-in DLL, identical in shape and legal
+posture to the display proxy, not a binary patch and not a Steam-Input
+dependency. It is decided here so it is not re-litigated at M3.
 
 ## 5. How the packages map to board cards
 
