@@ -8,6 +8,12 @@ Versioning: [Semantic Versioning](https://semver.org/).
 
 ### Added
 
+- `gnmy` command: decodes the recovered `GNMY` entry layout (`u16 size/type/x/y/
+  flags` + `K` params + optional extra) and reports the placement correlation —
+  3,593 entries, `size == structural length` on 3,593/3,593, `x`/`y` as pixel
+  coordinates (3,584/3,593 on-map) — recovered from the reader at VA `0x414D16`
+  (file offset `0x14116`) in `LOMAX.EXE` and validated on all 104 retail chunks
+  (`docs/file-formats.md` §2.5). Read-only; accepts `$LOMAX_GAME_DIR`.
 - `docs/roadmap/44-presenter-options.md` scopes the window presenter for demo
   option C: the minimum window, a ranked option table (default **ctypes + SDL2**,
   ≈$0.50 for 3 cards / ≈$0.66 for 4 with `epx-aa` parity), and the blit spike
@@ -47,6 +53,16 @@ Versioning: [Semantic Versioning](https://semver.org/).
   read its own frame sequence back — non-interlaced 8-bit RGBA or RGB, all five
   scanline filters, every chunk CRC verified, with the unsupported shapes
   (palettised, 16-bit, interlaced) refused by name.
+
+### Changed
+
+- README rewritten as an alpha install/launch/configure guide: what works and what
+  does not, three install paths, the config file and its five keys, a command
+  reference with exit codes, and a troubleshooting table keyed on the strings the
+  CLI prints. Documents the per-command leniency: `present` ignores name case and
+  resolves one level of nesting, `doctor` matches retail names exactly,
+  `measure` globs worlds recursively but probes folders at the root, `slice`
+  expects `WORLDS/VILLAGE.WLD` literally.
 
 ### Fixed
 

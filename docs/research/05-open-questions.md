@@ -33,6 +33,13 @@ these can be answered from public documentation alone.
 > image-mounting probe was removed from
 > [`07-wp4-runtime-distribution.md`](07-wp4-runtime-distribution.md).
 
+> **Revision v5** (C-blocker 2, 2026-11-18). The `GNMY` entry *layout* is
+> recovered from the reader in `LOMAX.EXE` (VA `0x414D16`) and validated on all
+> 104 retail chunks (3,593 entries, `size == structural length` on 3,593/3,593,
+> `x`/`y` as pixel coordinates) — see [`../file-formats.md`](../file-formats.md)
+> §2.5. What a `GNMY` entry *means* (which entry is the player start, the level
+> exit, or a collectable) remains open and is recorded as **Q32** below.
+
 | # | Question | Why it matters | How to resolve |
 |---|---|---|---|
 | Q1 | What is the exact chunk header layout of a `.WLD`? | Every parser depends on it | ✅ **answered** — tag[4] space-padded + `u32` **BE** payload size, payload-only; 9/9 files reach EOF (`06-measurements-and-improvements.md`) |
@@ -66,6 +73,7 @@ these can be answered from public documentation alone.
 | Q29 | What is the input a disc-less user supplies, and is anything the engine references absent from a plain data-only copy? | "Disc-less" still means the user supplies data; the engine must name its inputs and the repo must never contain them | ✅ **answered** — an unpacked game directory in the retail layout (`WORLDS/`, `SFX/`, `AMBIENT/`, `JINGLES/`, `DEMOS/`, `LOMAX.EXE` present but unused); the engine takes a path. **No ISO handling, no ripping instructions** (2026-11-18) |
 | Q30 | What is the licence-clean source for the soundtrack once the CD is out of the picture? | The PC build's music is CD-DA only (MCI `cdaudio`), so the own engine has no music | ✅ **answered** — measured: 82 WAVs (67 SFX, 12 ambient loops = 6 worlds × stereo `_L`/`_R`, 3 jingles); no CD-DA/MP3/OGG/MOD in the data. Plan: ambient L/R pair as the per-world bed, jingles on transitions, SFX as-is; no ripping, no bundled audio. An optional user-supplied music folder is a later possibility, not v0.1 (2026-11-18) |
 | Q31 | What do the individual `MAP` collision-byte values mean? | The engine's collision (solid vs passable, one-way, hazards) needs per-value semantics, not a flat "non-zero = solid" guess | the documented `[D]` bit-field (`0x80` solid, `0xC0` one-way, `0x08`/`0x10`/`0x20` directional) is **retracted** — the byte is near-uniform over all 256 values (measured 2026-11-18, `file-formats.md` §2.4). Read the collision lookup in the EXE, or correlate each byte value with observed solidity in a playtest. Until then the engine ships 0-vs-non-zero `[H]` and preserves the byte verbatim |
+| Q32 | What do a `GNMY` entry's `flags` bits 8–9 and the optional extra word mean — and which entries are the player start, the level exit, and the collectables? | Finishes the M3 `spawn → … → next-level` loop: the engine must know which placement to spawn as the player and which to treat as the exit/collectable | ⚠️ **partial** — the entry *layout* is recovered (VA `0x414D16`, §2.5: `u16 size/type/x/y/flags` + `K` params + optional extra; 3,593/3,593 `size == structural length`, `x`/`y` pixel coords). The *semantics* are not: the reader turns every entry into an identical sprite instance and **0/74 types appear once-per-world**, so spawn/exit/collectable is not a unique `NMY` type. Resolve by static analysis of the game-loop code that consumes the sprite list (find where the player instance and the exit trigger are selected), or by a runtime experiment on a copy — flip a candidate field (flags bits 8–9, or the extra word) and observe, never on the operator's install |
 
 **Opened by the LMX-7 reports (2026-11-17).** `TTAB` is now framed — 8 bytes per
 16×16 tile, four big-endian `u16`, 13-bit index plus `0x2000`/`0x4000` flags —
