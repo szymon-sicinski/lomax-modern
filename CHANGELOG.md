@@ -59,6 +59,13 @@ Versioning: [Semantic Versioning](https://semver.org/).
 - `examples/scale_demo.py` — side-by-side demonstration of both filters on a
   generated 16x16 sprite: ASCII in indexed mode (diffable) plus an optional
   truecolour PNG written with `zlib` only.
+- `lomax_modern.wld` — a `.WLD` parser/writer that reads a world file into
+  `Chunk`/`World` records and re-emits it byte-for-byte. Only the verified
+  layout is interpreted (chunk header `tag[4]` + big-endian `u32` payload size,
+  `HEAD` width/height, whole 64-byte `CELL` count, `MAP` cell/padding math);
+  every other tag (`TTAB`, `ANIM`, `NMY`, `MACR`, `PAGE`, ...) round-trips as
+  opaque bytes. Round-trip is proven against all 9 retail world files
+  (SHA-256 in == out).
 - Local-only game-data layout: `scripts/new_game_folder.sh` creates one slot per
   repository outside every git working tree, and `.gitignore` covers
   `game-files/`, `gamedata/`, `GAMES/` as a second line of defence.
@@ -68,8 +75,10 @@ Versioning: [Semantic Versioning](https://semver.org/).
 
 ### Notes
 
-- No format layout has been verified against a real game file yet; every
-  documented chunk claim is graded H/D in `docs/file-formats.md`.
+- Format claims are graded V/D/H in `docs/file-formats.md`: the chunk container,
+  `HEAD` dimensions, `MAP` cell math, `CELL` sizing and the audio formats are
+  verified against the retail install; `TTAB`, `ANIM` and `GNMY` internals remain
+  documented or hypothetical.
 - No engine work, no loader, no patcher in this release.
 
 ## [0.1.0] - 2026-11-16
