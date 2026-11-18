@@ -21,6 +21,9 @@ from .state import GameState, first_passable_cell, new_game_state
 #: A script turns the current tick and state into one tick of input.
 InputScript = Callable[[int, GameState], Input]
 
+#: A frame sink receives ``(tick_index, frame)`` after each engine tick.
+FrameSink = Callable[[int, Frame], None]
+
 
 def default_script(tick: int, state: GameState) -> Input:
     """Walk right, jump periodically — enough to exercise move + collide."""
@@ -98,12 +101,18 @@ def run_slice(
     max_ticks: int = 300,
     playfield: int = 0,
     script: InputScript | None = None,
+    on_frame: FrameSink | None = None,
 ) -> tuple[SliceReport, Frame]:
     """Run one level (the first in ``worlds``) headless and return its report.
 
     Returns ``(report, final_frame)``.  Only the first world is played here: a
     vertical slice is one level end to end before any second world, and the
     next-level transition is exercised by the unit tests on synthetic data.
+
+    ``on_frame`` is called with ``(tick_index, frame)`` after every tick, before
+    the exit check, so a caller that wants one image per 60 Hz tick (the
+    ``--frames`` capture) never has to hold the whole run in memory.  The sink
+    is the only thing that writes; the engine itself stays read-only.
 
     ``world_path`` overrides the ``<game_dir>/WORLDS/<world>.WLD`` lookup.  The
     presenter passes the path the install check resolved, so a lower-case
@@ -132,13 +141,17 @@ def run_slice(
     )
 
     ticks = 0
+    captured: Frame | None = None
     for tick in range(max_ticks):
         state.tick(script(tick, state))
         ticks += 1
+        if on_frame is not None:
+            captured = render(level, state)
+            on_frame(ticks - 1, captured)
         if state.complete:
             break
 
-    final_frame = render(level, state)
+    final_frame = captured if captured is not None else render(level, state)
     next_level = worlds[1] if state.complete and len(worlds) > 1 else None
     report = SliceReport(
         world=world_name,

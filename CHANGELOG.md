@@ -6,6 +6,17 @@ Versioning: [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+### Added
+
+- `slice` and `present` accept `--frames N --out DIR`: one PNG per 60 Hz tick,
+  written as `frame_0000.png` … (`ffmpeg -i frame_%04d.png` numbering) through
+  the same scale/pad/PNG path as `--frame`. `--out` is created if absent and
+  refused inside the game folder (`art.check_output_dir`); `--frames` and
+  `--frame` are mutually exclusive, and `--frames` without `--out` is a usage
+  error (exit 2).
+- `engine.run.run_slice` gained an optional `on_frame(tick_index, frame)` sink,
+  so a capture writes each tick instead of holding the whole run in memory.
+
 ### Fixed
 
 - `anim-nmy` refuses a `*.WLD` that is not a world container the way `slice`
