@@ -66,6 +66,11 @@ Versioning: [Semantic Versioning](https://semver.org/).
   every other tag (`TTAB`, `ANIM`, `NMY`, `MACR`, `PAGE`, ...) round-trips as
   opaque bytes. Round-trip is proven against all 9 retail world files
   (SHA-256 in == out).
+- `lomax-modern wld roundtrip [--check]` — re-parses every `WORLDS/*.WLD` file
+  (a single file, or the whole folder via `LOMAX_GAME_DIR`/`--game-dir`),
+  re-emits it in memory and reports per-file `identical`/`DIFFERENT` without
+  ever printing payload bytes or a digest. `--check` exits non-zero on the
+  first mismatch. `python -m lomax_modern` now works via a new `__main__.py`.
 - Local-only game-data layout: `scripts/new_game_folder.sh` creates one slot per
   repository outside every git working tree, and `.gitignore` covers
   `game-files/`, `gamedata/`, `GAMES/` as a second line of defence.
