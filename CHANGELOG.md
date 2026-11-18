@@ -6,7 +6,11 @@ Versioning: [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
-Nothing yet.
+### Fixed
+
+- `anim-nmy` refuses a `*.WLD` that is not a world container the way `slice`
+  and `present` already did: one `error: cannot read …` line and exit 1,
+  instead of a `WLDParseError` traceback.
 
 ## [0.4.0-alpha.1] — 2026-11-18
 

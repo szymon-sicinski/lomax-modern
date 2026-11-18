@@ -44,6 +44,28 @@ def test_anim_nmy_without_worlds_exits_2(tmp_path: Path) -> None:
     assert main(["anim-nmy", str(tmp_path)]) == 2
 
 
+def test_non_world_file_reports_a_clean_error(tmp_path: Path, capsys) -> None:
+    """A ``*.WLD`` that is not a container must be refused, not crash.
+
+    Regression guard for the ``anim-nmy`` half of 84d41b0 (``slice`` and
+    ``present`` already refuse cleanly): ``anim-nmy`` used to let
+    ``WLDParseError`` escape, so a single non-world file under the game dir
+    printed a traceback.  Same shape as its sibling commands: one ``error:``
+    line on stderr and a non-zero exit, with no traceback text.
+    """
+    (tmp_path / "worlds").mkdir()
+    (tmp_path / "lomax.exe").write_bytes(b"")
+    (tmp_path / "worlds" / "a.wld").write_bytes(b"")  # not a world container
+
+    code = main(["anim-nmy", str(tmp_path)])
+    captured = capsys.readouterr()
+
+    assert code == 1
+    assert "error: cannot read" in captured.err
+    assert "Traceback" not in captured.err
+    assert captured.out == ""
+
+
 def test_probe_still_requires_a_directory() -> None:
     with pytest.raises(SystemExit) as exc:
         build_parser().parse_args(["probe-anim-nmy"])

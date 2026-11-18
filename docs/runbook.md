@@ -278,7 +278,7 @@ Other cases:
 | Two sub-folders look like an install | refused as `ambiguous`, both names printed — point at one |
 | `--world` typo | `world 'X' not found; available: BONUS, ED, ...`, exit 2 |
 | Config or `--frame` inside the game folder | refused before writing, exit 2 |
-| A `*.WLD` that is not a world container | `error: cannot read VILLAGE.WLD: offset 0: empty input: no chunk header`, exit 1 — caught, no traceback |
+| A `*.WLD` that is not a world container | `error: cannot read VILLAGE.WLD: offset 0: empty input: no chunk header`, exit 1 — caught, no traceback (also on `slice` and `anim-nmy`) |
 
 ## 9. Platforms and packaging
 
