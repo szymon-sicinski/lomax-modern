@@ -8,6 +8,12 @@ Versioning: [Semantic Versioning](https://semver.org/).
 
 ### Added
 
+- `examples/demo.sh` and [`docs/demo.md`](docs/demo.md): the alpha's capability
+  as one runnable walkthrough — `doctor` → `present --modern` →
+  `present --authentic` → `slice --frames` → `gif` → `conformance` → `export` —
+  against the viewer's own unpacked copy. The script prints each command before
+  running it, stops at the first failure, and writes only to `demo-out/` (or
+  `--out DIR`); the doc quotes the output each command really printed.
 - `slice` and `present` accept `--frames N --out DIR`: one PNG per 60 Hz tick,
   written as `frame_0000.png` … (`ffmpeg -i frame_%04d.png` numbering) through
   the same scale/pad/PNG path as `--frame`. `--out` is created if absent and

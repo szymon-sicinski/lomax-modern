@@ -115,6 +115,12 @@ Full runbook — config-file reference, example output, exit codes, the
 missing-data paths and the platform/packaging status:
 [`docs/runbook.md`](docs/runbook.md).
 
+**The three-minute demo.** [`docs/demo.md`](docs/demo.md) is the alpha's whole
+capability in seven commands with the output they really printed, and
+[`examples/demo.sh`](examples/demo.sh) runs the same seven in order against
+*your* copy — `bash examples/demo.sh "<install>"` — stopping at the first
+failure and writing only to `./demo-out`.
+
 ## Quick start
 
 ```bash
