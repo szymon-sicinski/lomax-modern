@@ -397,7 +397,19 @@ def _cmd_anim_nmy(args: argparse.Namespace) -> int:
     if not files:
         print(f"error: no *.WLD found under {game_dir}", file=sys.stderr)
         return 2
-    print(format_anim_nmy_report(probe_recovered_framings(files)))
+    try:
+        report = probe_recovered_framings(files)
+    except WLDError as exc:
+        # Mirror ``slice``/``present`` (84d41b0): a file that is not a world
+        # container is a refused input -- one diagnostic line, no traceback.
+        # The parse error carries no path, so name the folder, as ``no *.WLD``
+        # above does.
+        print(f"error: cannot read a .WLD under {game_dir}: {exc}", file=sys.stderr)
+        return 1
+    except (OSError, ValueError) as exc:
+        print(f"error: {exc}", file=sys.stderr)
+        return 1
+    print(format_anim_nmy_report(report))
     return 0
 
 
