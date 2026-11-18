@@ -48,13 +48,14 @@ it will be written from public API documentation, and the file will say so.
 ```
 src/lomax_modern/
   __init__.py     version
-  cli.py          argparse entry point (doctor, wldscan, measure, export, wld, slice, present)
+  cli.py          argparse entry point (doctor, wldscan, measure, export, wld, slice, present, gif)
   doctor.py       install inventory: presence, counts, sizes, SHA-256
   wld.py          .WLD chunk parser/writer (byte-exact round trip)
   wldscan.py      chunk/tag scanner with hypothesis ranking
   measure.py      read-only probes: chunk sequence, plane widths, audio, text
   art.py          TTAB/CELL/MAP decode + palette + PNG sheets (data layer)
-  png.py          stdlib-only PNG writer
+  png.py          stdlib-only PNG reader/writer (frames for the GIF writer)
+  gif.py          stdlib-only animated GIF89a writer (palette + LZW, no deps)
   scaler.py       integer scalers, pixel-art filter, integer fit + padding
   renderer.py     M4 renderer: 16-bit B5G6R5 blit, palette, transparency, fade
   config.py       presenter settings + the JSON config written on first run

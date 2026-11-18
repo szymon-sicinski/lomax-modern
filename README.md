@@ -50,6 +50,12 @@ is in [`docs/research/02-resolution.md`](docs/research/02-resolution.md):
   that is not an unpacked retail install with a file-by-file manifest. It
   writes the presented surface as a PNG; the windowed presenter is future work.
   See the [runbook](docs/runbook.md).
+- A **demo path** (`lomax-modern gif`): folds a directory of frame PNGs — one
+  file per 60 Hz tick — into one looping animated GIF89a that a README or a
+  chat window can play. Pure standard library (`src/lomax_modern/gif.py`): the
+  colour table is chosen by measured size, `--fps` sets the delay and
+  `--max-frames` samples evenly so a 300-tick capture does not become a 60 MB
+  file.
 
 ## What this repository is not
 
@@ -145,6 +151,10 @@ lomax-modern present "/path/to/Lomax" --authentic --frame /tmp/lomax-native.png
 
 # Switch the filter for one run; persist a choice with --save
 lomax-modern present "/path/to/Lomax" --filter nearest --save
+
+# Fold a directory of frame PNGs into one looping animated GIF (stdlib only;
+# --fps sets the delay, --max-frames samples evenly)
+lomax-modern gif /tmp/frames --out /tmp/demo.gif --fps 30
 ```
 
 Run the tests with `python -m pytest tests -m "not realgame"`. The integration
