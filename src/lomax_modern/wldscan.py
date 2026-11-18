@@ -36,9 +36,10 @@ from dataclasses import dataclass, field
 from pathlib import Path
 
 #: Tags documented for the PC world files, in the order the game reads them.
-#: Three of them are shorter than the four-byte header field, so the field is
-#: assumed to be space-padded ("NMY ", "MAP ", "END ") -- an unverified
-#: assumption, see docs/file-formats.md.
+#: Three of them are shorter than the four-byte header field, which is
+#: space-padded ("NMY ", "MAP ", "END "). Verified, not assumed: all 9 retail
+#: world files parse to EOF with a 4-byte space-padded tag followed by a
+#: big-endian u32 payload-only size -- see docs/file-formats.md.
 #: ``PARA``, ``MACR`` and ``PAGE`` are not in the loader's documented list but
 #: occur in every retail world file (PARA once per file, MACR/PAGE per level
 #: group); they are accepted here so a real file does not look "unexpected".
