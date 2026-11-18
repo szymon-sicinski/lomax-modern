@@ -20,8 +20,12 @@ Companion documents: [`00-research-plan.md`](00-research-plan.md),
   - [L2 — No game assets in the repository](#l2--no-game-assets-in-the-repository)
   - [L3 — The CD check must never be bypassed](#l3--the-cd-check-must-never-be-bypassed)
 - [Product](#product)
-  - [P1 — Scope creep into a rewrite](#p1--scope-creep-into-a-rewrite)
-- [Open decisions for the human](#open-decisions-for-the-human)
+  - [P1 — Engine scope explosion](#p1--engine-scope-explosion)
+  - [P2 — No music track](#p2--no-music-track)
+  - [P3 — Data provenance](#p3--data-provenance)
+  - [P4 — Save and progress compatibility](#p4--save-and-progress-compatibility)
+  - [P5 — Disc-less still means the user supplies data](#p5--disc-less-still-means-the-user-supplies-data)
+- [Decisions (resolved by the human)](#decisions-resolved-by-the-human)
 
 ---
 
@@ -157,41 +161,98 @@ Companion documents: [`00-research-plan.md`](00-research-plan.md),
 
 ## Product
 
-### P1 — Scope creep into a rewrite
+### P1 — Engine scope explosion
 
-- **What.** The temptation to "do it properly" by reimplementing the whole
-  engine, which costs months and delivers no delta over the working
-  (unlicensed) loader — and is exactly what the earlier research ruled out
-  ([`02-resolution.md` §2.7](../research/02-resolution.md#27-recommendation)).
-- **Likelihood.** M (rewrites are attractive). **Impact.** H (schedule blowout,
-  no shippable result, loss of the "smallest change" thesis).
-- **Mitigation.** The one-page answer in
-  [`00-research-plan.md`](00-research-plan.md#1-the-one-page-answer) names the
-  smallest change and the DLL-proxy winner; M6 is framed as a bounded spike with
-  a kill criterion, not a rewrite; non-goals are listed in
+- **What.** The own-engine path (open decision #4, resolved disc-less) is a
+  reimplementation, and reimplementations grow: once map/collision/entities/
+  timing/render/present works, "just add" physics quirks, exact bug
+  compatibility, AI. The earlier research ruled out a rewrite for the *shim*
+  plan; that verdict is superseded by the human's disc-less decision, and the
+  cost of losing is a months-long engine with no shippable presenter.
+- **Likelihood.** H (the temptation is stronger now the rewrite is the plan).
+  **Impact.** H (schedule blowout, no shippable result).
+- **Mitigation.** Bound the engine to what the presenter needs — reproduce the
+  frame and the game loop from data, not the full simulation. The milestone
+  boundaries (M2 data → M3 engine → M4 presenter) and the 2×-spike kill
+  criterion keep it from becoming a full remake. Non-goals are listed in
   [`04-improvement-backlog.md`](../research/04-improvement-backlog.md).
 - **Stop trigger.** A milestone's scope grows to touch gameplay/simulation
-  logic beyond viewport + tile + sprite + fade (the M6 boundary) — stop and
+  logic beyond map + collision + entities + timing + render + present — stop and
   re-scope before continuing.
 
-## Open decisions for the human
+### P2 — No music track
 
-The following are written here rather than blocking the plan; each continues
-under a stated assumption until the human decides:
+- **What.** The data carries 67 SFX, 12 ambient loops (6 worlds × a stereo
+  `_L`/`_R` pair) and 3 jingles, but **no music**: the soundtrack was CD-DA on
+  the disc. The engine has ambience and jingles but no music track.
+- **Likelihood.** H (a measured fact). **Impact.** L (ambience + jingles + SFX
+  already cover the soundscape; the game is not silent).
+- **Mitigation.** Play the ambient L/R pair as the per-world bed, jingles on
+  transitions, SFX as-is; no ripping, no bundled audio. An optional
+  user-supplied music folder is a later possibility, not v0.1.
+- **Stop trigger.** None — escalate only if "music" is claimed while absent.
 
-1. **Target audience / legal posture.** Assumed: "hobbyist who owns a retail
-   copy; ship only MIT code and tooling, never assets." If the human wants a
-   different posture (e.g. a packaged disc-image workflow), re-open L3.
-2. **Budget ceiling.** Assumed: part-time, off-peak agent effort; effort
-   estimates in `10-milestones.md` are agent-days, not calendar-days.
-3. **Whether to contact the `Lomax+` author** about a licence (Q12). Assumed:
-   no contact for now; we stay interoperable, not derivative.
-4. **M2 target host: disc owners vs disc-less users.** New from WP-4: the CD
-   check (B3) is MCI `cdaudio` in the binary and blocks a disc-less user under
-   Wine regardless of our shim, and the GDI gate (B1) is not reachable by a
-   ddraw proxy. Assumed for now: M2 serves **disc owners** (their own disc
-   satisfies B3); a **disc-less** user would need our own engine + presenter over
-   the MIT data layer instead of running the retail exe. That is a scope and
-   budget fork (re-opening the "reimplementation loses" verdict), so it is left
-   to the human before M2 is costed — see [`10-milestones.md`](10-milestones.md#m2--open-source-presenter-l1)
-   and [`40-budget.md`](40-budget.md).
+### P3 — Data provenance
+
+- **What.** "Disc-less" still means the user supplies game data. The engine
+  reads the user's own files, so the repository must never contain them, and the
+  engine must name exactly which files it reads (the data manifest, Q29).
+- **Likelihood.** M (accidental inclusion). **Impact.** H (a committed asset
+  makes the repo a redistribution — see L2).
+- **Mitigation.** The same three-layer guard as L2; a published manifest of the
+  engine's inputs; `grep -rniE '[0-9a-f]{64}'` empty before push.
+- **Stop trigger.** Any game byte in the working tree or a proposed diff — stop
+  and remove it before proceeding.
+
+### P4 — Save and progress compatibility
+
+- **What.** The game has no save files; progress is password-based. The own
+  engine must reproduce the password codec (M10/Q25) or a user's existing
+  passwords stop working.
+- **Likelihood.** M. **Impact.** L–M (progress loss, not a crash).
+- **Mitigation.** The password word codec ships with round-trip tests; refuse to
+  *generate* until the checksum function is known (M10 scope).
+- **Stop trigger.** A generated password fails to decode in the real game — stop
+  and record as blocked, do not claim compatibility.
+
+### P5 — Disc-less still means the user supplies data
+
+- **What.** The engine is useless without the user's data copy; a first-run
+  experience that says "insert disc" is no better than the exe's CD check.
+- **Likelihood.** H. **Impact.** M (onboarding failure).
+- **Mitigation.** The runbook's "what you must supply" section (the Q29
+  manifest) and a loud, non-destructive check that fails with a precise,
+  file-by-file report rather than a vague error.
+- **Stop trigger.** A user reports the engine "cannot find its data" with no
+  actionable list — stop and add the manifest check.
+
+## Decisions (resolved by the human)
+
+Recorded here so the plan proceeds on settled ground rather than assumptions.
+Each was an open decision; the answer is stated.
+
+1. **Target audience / legal posture.** **Resolved (2026-11-18):** disc-less
+   users who own a legal copy; ship only MIT code and tooling, never assets. The
+   engine reads an unpacked game directory. **No ISO handling, no ripping
+   instructions** anywhere (not README, not docs, not runbook).
+2. **Budget ceiling.** **Resolved (2026-11-18):** none yet — track actual spend
+   per milestone and report it; the human decides when it stops being worth it
+   ([`40-budget.md`](40-budget.md) §6).
+3. **`Lomax+` contact.** **Resolved: no contact — do not raise it again.** The
+   factual citations in
+   [`../research/03-prior-art.md`](../research/03-prior-art.md) stay as
+   provenance, not a relationship.
+4. **M2 target host: disc owners vs disc-less users.** ✅ **Resolved
+   (2026-11-18): disc-less** — our own engine + presenter over the MIT data
+   layer; the `ddraw.dll` proxy is demoted to an optional disc-owner appendix.
+   Recorded in [`15-strategy-report.md`](15-strategy-report.md) and
+   [`../research/05-open-questions.md`](../research/05-open-questions.md) (Q28).
+5. **Product stance: fidelity vs quality-of-life.** **Resolved (2026-11-18):
+   quality-of-life first** — modern defaults (widescreen, 60 fps/unlocked, smooth
+   scaling, save states, generous input) with an *authentic* toggle. Native
+   320×240 integer-scaled first; HD internal render later. The password system is
+   kept both ways, plus our own save.
+6. **Platforms.** **Resolved (2026-11-18):** Linux (AppImage) and Windows
+   (`.exe`) now; macOS deferred (no hardware to test); no store presence.
+7. **Repository layout.** **Resolved (2026-11-18):** one repository — engine
+   (`native/`) and Python tooling together; no split.
