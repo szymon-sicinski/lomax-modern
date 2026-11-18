@@ -59,8 +59,15 @@ CACHE = re.compile(r"cache=(?P<cached>\d+)/(?P<ctx>\d+)")
 
 
 def parse_logs(logs_dir: Path) -> dict[str, dict]:
-    """session id -> {model -> [in, out, calls]} and totals."""
-    sessions: dict[str, dict] = defaultdict(lambda: {"in": 0, "out": 0, "calls": 0, "models": defaultdict(lambda: [0, 0, 0])})
+    """session id -> {in, out, calls, cached} and per-model [in, out, calls, cached].
+
+    ``cached`` is summed from each line's ``cache=<cached>/<context>`` field;
+    ``fresh = in - cached`` is the part actually billed at the miss rate.
+    """
+    sessions: dict[str, dict] = defaultdict(
+        lambda: {"in": 0, "out": 0, "calls": 0, "cached": 0,
+                 "models": defaultdict(lambda: [0, 0, 0, 0])}
+    )
     for path in sorted(logs_dir.glob("*/logs/agent.log")):
         profile = path.parent.parent.name
         with path.open("r", encoding="utf-8", errors="replace") as handle:
@@ -68,16 +75,20 @@ def parse_logs(logs_dir: Path) -> dict[str, dict]:
                 match = CALL.search(line)
                 if not match:
                     continue
+                cm = CACHE.search(line)
+                cached = int(cm.group("cached")) if cm else 0
                 entry = sessions[match["session"]]
                 tin, tout = int(match["in"]), int(match["out"])
                 entry["in"] += tin
                 entry["out"] += tout
                 entry["calls"] += 1
+                entry["cached"] += cached
                 entry["profile"] = profile
                 bucket = entry["models"][match["model"]]
                 bucket[0] += tin
                 bucket[1] += tout
                 bucket[2] += 1
+                bucket[3] += cached
     return sessions
 
 
@@ -119,6 +130,10 @@ def milestone_of(title: str) -> str:
     return f"LMX-{tag.group('lmx')}" if tag else "other"
 
 
+def _usage_row(in_: int, out: int, calls: int, cached: int) -> dict:
+    return {"in": in_, "out": out, "calls": calls, "cached": cached, "fresh": in_ - cached}
+
+
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--board", default="retrolab", choices=sorted(DEFAULT_BOARDS))
@@ -147,35 +162,50 @@ def main(argv: list[str] | None = None) -> int:
                 "task_id": run["task_id"], "title": run["title"], "profile": run["profile"],
                 "milestone": milestone_of(run["title"]),
                 "in": usage["in"], "out": usage["out"], "calls": usage["calls"],
+                "cached": usage["cached"],
             }
         else:  # a card retried: several sessions, same task
             prev["in"] += usage["in"]
             prev["out"] += usage["out"]
             prev["calls"] += usage["calls"]
+            prev["cached"] += usage["cached"]
 
-    by_milestone: dict[str, dict] = defaultdict(lambda: {"in": 0, "out": 0, "calls": 0, "cards": 0})
-    by_profile: dict[str, dict] = defaultdict(lambda: {"in": 0, "out": 0, "calls": 0, "cards": 0})
-    by_model: dict[str, list[int]] = defaultdict(lambda: [0, 0, 0])
+    for row in by_task.values():
+        row["fresh"] = row["in"] - row["cached"]
+
+    by_milestone: dict[str, dict] = defaultdict(lambda: {"in": 0, "out": 0, "calls": 0, "cached": 0, "cards": 0})
+    by_profile: dict[str, dict] = defaultdict(lambda: {"in": 0, "out": 0, "calls": 0, "cached": 0, "cards": 0})
+    by_model: dict[str, list[int]] = defaultdict(lambda: [0, 0, 0, 0])  # [in, out, calls, cached]
     for task_id, row in by_task.items():
-        for bucket, key in ((by_milestone[row["milestone"]], None), (by_profile[row["profile"]], None)):
-            bucket["in"] += row["in"]; bucket["out"] += row["out"]; bucket["calls"] += row["calls"]; bucket["cards"] += 1
+        for bucket in (by_milestone[row["milestone"]], by_profile[row["profile"]]):
+            bucket["in"] += row["in"]
+            bucket["out"] += row["out"]
+            bucket["calls"] += row["calls"]
+            bucket["cached"] += row["cached"]
+            bucket["cards"] += 1
         usage = sessions.get(next((r["session"] for r in runs if r["task_id"] == task_id), ""), None)
         if usage:
-            for model, (tin, tout, calls) in usage["models"].items():
-                by_model[model][0] += tin; by_model[model][1] += tout; by_model[model][2] += calls
+            for model, (tin, tout, calls, cached) in usage["models"].items():
+                by_model[model][0] += tin
+                by_model[model][1] += tout
+                by_model[model][2] += calls
+                by_model[model][3] += cached
+
+    total = _usage_row(
+        sum(r["in"] for r in by_task.values()),
+        sum(r["out"] for r in by_task.values()),
+        sum(r["calls"] for r in by_task.values()),
+        sum(r["cached"] for r in by_task.values()),
+    )
 
     result = {
         "board": args.board,
         "cards_measured": len(by_task),
         "runs_without_log": unmatched,
-        "total": {
-            "in": sum(r["in"] for r in by_task.values()),
-            "out": sum(r["out"] for r in by_task.values()),
-            "calls": sum(r["calls"] for r in by_task.values()),
-        },
+        "total": total,
         "by_milestone": {k: dict(v) for k, v in sorted(by_milestone.items())},
         "by_profile": {k: dict(v) for k, v in sorted(by_profile.items())},
-        "by_model": {k: {"in": v[0], "out": v[1], "calls": v[2]} for k, v in by_model.items()},
+        "by_model": {k: _usage_row(v[0], v[1], v[2], v[3]) for k, v in by_model.items()},
         "cards": sorted(by_task.values(), key=lambda r: -r["in"]),
     }
     if args.milestone:
@@ -186,21 +216,27 @@ def main(argv: list[str] | None = None) -> int:
         print(json.dumps(result, indent=2))
         return 0
 
+    ratio = total["cached"] / total["in"] if total["in"] else 0.0
     print(f"board: {args.board}   cards measured: {len(by_task)}   runs without a matching log: {unmatched}")
-    print(f"total: {result['total']['in']:,} in / {result['total']['out']:,} out "
-          f"over {result['total']['calls']:,} model calls")
+    print(f"input processed: {total['in']:,}  (cached {total['cached']:,} = {ratio:.1%}, "
+          f"fresh {total['fresh']:,})")
+    out_line = f"output: {total['out']:,}  over {total['calls']:,} model calls"
+    if total["out"]:
+        out_line += f"  fresh:output = {total['fresh'] / total['out']:.2f}:1"
+    print(out_line)
     print()
-    print(f"{'milestone':10s} {'cards':>5s} {'input':>12s} {'output':>10s} {'calls':>7s}")
+    print(f"{'milestone':10s} {'cards':>5s} {'input':>12s} {'cached':>12s} {'fresh':>10s} {'output':>10s} {'calls':>7s}")
     for name, row in result["by_milestone"].items():
-        print(f"{name:10s} {row['cards']:5d} {row['in']:12,} {row['out']:10,} {row['calls']:7,}")
+        print(f"{name:10s} {row['cards']:5d} {row['in']:12,} {row['cached']:12,} "
+              f"{row['in'] - row['cached']:10,} {row['out']:10,} {row['calls']:7,}")
     print()
-    print(f"{'profile':10s} {'cards':>5s} {'input':>12s} {'output':>10s}")
+    print(f"{'profile':10s} {'cards':>5s} {'input':>12s} {'cached':>12s} {'output':>10s}")
     for name, row in result["by_profile"].items():
-        print(f"{name:10s} {row['cards']:5d} {row['in']:12,} {row['out']:10,}")
+        print(f"{name:10s} {row['cards']:5d} {row['in']:12,} {row['cached']:12,} {row['out']:10,}")
     print()
-    print(f"{'model':26s} {'input':>12s} {'output':>10s} {'calls':>7s}")
+    print(f"{'model':26s} {'input':>12s} {'cached':>12s} {'output':>10s} {'calls':>7s}")
     for name, row in sorted(result["by_model"].items(), key=lambda kv: -kv[1]["in"]):
-        print(f"{name:26s} {row['in']:12,} {row['out']:10,} {row['calls']:7,}")
+        print(f"{name:26s} {row['in']:12,} {row['cached']:12,} {row['out']:10,} {row['calls']:7,}")
     print()
     print("most expensive cards:")
     for row in result["cards"][:8]:

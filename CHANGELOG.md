@@ -8,6 +8,14 @@ Versioning: [Semantic Versioning](https://semver.org/).
 
 ### Added
 
+- Token-cost measurement and reduction analysis: `scripts/token_cost_report.py`
+  joins the board's `worker_session_id` against per-call `logs/agent.log` lines
+  and now splits input into **cached vs fresh** (from the per-call `cache=`
+  field), so the processed-vs-billed split is reproducible
+  (`docs/roadmap/41-measured-cost.md`). `docs/roadmap/42-input-token-reduction.md`
+  shows the 91:1 input:output headline is a cache artifact — 2.4:1 fresh:output,
+  ~$10 off-peak rather than the ~$104 the raw number implies — and ranks the
+  measured levers on `calls × context`.
 - Research report: platform assessment (Win32/MFC/DirectDraw 7, not DOS),
   three-layer resolution analysis, prior-art and licence review, ranked
   improvement backlog, open questions, cited source list.
