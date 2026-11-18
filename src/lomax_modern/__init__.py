@@ -5,6 +5,6 @@ The Adventures of Lomax (Psygnosis, 1996/97). It ships no game data and
 writes nothing into the game folder.
 """
 
-__version__ = "0.1.0"
+__version__ = "0.4.0-alpha.1"
 
 __all__ = ["__version__"]
