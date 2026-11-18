@@ -10,7 +10,7 @@ payload size, and the chunk order
 from __future__ import annotations
 
 import struct
-from typing import Iterable
+from typing import Iterable, Sequence
 
 
 def build_container(
@@ -38,26 +38,80 @@ def build_container(
     return bytes(out)
 
 
-def head_payload(width_units: int, height_units: int, *, endian: str = ">") -> bytes:
+def head_payload(
+    width_units: int,
+    height_units: int,
+    *,
+    endian: str = ">",
+    palettes: "Sequence[Sequence[int]] | None" = None,
+) -> bytes:
     """A HEAD payload: plane width/height in 8-pixel units plus zeroed fields.
 
     The real payload is 5240 bytes (10 palettes, editor data, ANIM bitmap); the
     fixture keeps the two leading SIZE fields and pads the rest, which is all
     the measurement code reads.
+
+    ``palettes`` optionally supplies up to 10 slots of 256 15-bit colours each,
+    written little-endian at the documented offset 8, for palette tests.
     """
     body = struct.pack(endian + "II", width_units, height_units)
-    return body + b"\0" * (5240 - len(body))
+    if palettes is None:
+        return body + b"\0" * (5240 - len(body))
+    block = bytearray(5120)
+    for slot, words in enumerate(palettes):
+        if len(words) != 256:
+            raise ValueError(f"palette slot {slot} holds {len(words)} words, expected 256")
+        struct.pack_into("<256H", block, slot * 512, *words)
+    return body + bytes(block) + b"\0" * (5240 - len(body) - len(block))
 
 
-def map_payload(width_units: int, height_units: int) -> bytes:
+def cell_payload(blocks: Iterable[bytes | Sequence[int]]) -> bytes:
+    """A CELL payload: 64-byte 8x8 blocks, as raw bytes or 64 palette indices."""
+    out = bytearray()
+    for block in blocks:
+        raw = bytes(block)
+        if len(raw) != 64:
+            raise ValueError(f"cell block is {len(raw)} bytes, expected 64")
+        out += raw
+    return bytes(out)
+
+
+def ttab_payload(records: Iterable[Sequence[int]]) -> bytes:
+    """A TTAB payload: 8-byte records of four big-endian u16 cell-index words."""
+    out = bytearray()
+    for record in records:
+        if len(record) != 4:
+            raise ValueError(f"tile record holds {len(record)} words, expected 4")
+        for word in record:
+            if not 0 <= word <= 0xFFFF:
+                raise ValueError(f"tile word {word} does not fit in a u16")
+        out += struct.pack(">4H", *record)
+    return bytes(out)
+
+
+def map_payload(
+    width_units: int,
+    height_units: int,
+    *,
+    cells: Iterable[tuple[int, int]] | None = None,
+) -> bytes:
     """A MAP payload: 3 bytes per 16x16 cell, padded to a multiple of 4.
 
     Measured on all 104 retail sections: ``size - 3 * cells`` is 0..3 and the
-    payload size is always a multiple of 4.
+    payload size is always a multiple of 4.  ``cells`` supplies ``(tile_word,
+    collision)`` pairs; the default fills zeros.
     """
-    cells = (width_units * 8 // 16) * (height_units * 8 // 16)
-    raw = cells * 3
-    return b"\0" * (raw + (-raw % 4))
+    count = (width_units * 8 // 16) * (height_units * 8 // 16)
+    if cells is None:
+        raw = b"\0" * (count * 3)
+    else:
+        out = bytearray()
+        for tile_word, collision in cells:
+            out += struct.pack(">H", tile_word) + bytes((collision,))
+        if len(out) != count * 3:
+            raise ValueError(f"{len(out) // 3} map cells supplied, expected {count}")
+        raw = bytes(out)
+    return raw + b"\0" * (-len(raw) % 4)
 
 
 def gnmy_payload(types: Iterable[int] = (), *, trailer: int = 4) -> bytes:

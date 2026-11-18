@@ -40,3 +40,4 @@ jobs:
         run: |
           lomax-modern --version
           python -m lomax_modern.cli doctor /nonexistent || test $? -eq 2
+          python -m lomax_modern wld roundtrip || test $? -eq 2

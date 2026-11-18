@@ -116,9 +116,20 @@ palette 0 `[D]` (unverified — Q8).
   ([`research/05-open-questions.md`](research/05-open-questions.md)).
 - **`CELL` [V]**: whole 64-byte 8x8 palettised cells. 14,974 cells across the 9
   files, every payload a multiple of 64.
-- **Collision byte [D]**: `(b & 0xC0) == 0xC0` is a one-way floor (bits 4–5
-  shape, bit 3 mirror, bits 0–2 material); `0x80` is solid with
-  `0x08`/`0x10`/`0x20` blocking from below, left and right.
+- **Collision byte [retracted, measured 2026-11-18]**: the third byte of a
+  `MAP` cell was documented `[D]` as a bit-field (`0x80` solid, `0xC0` one-way
+  floor, `0x08`/`0x10`/`0x20` directional blocking). That is **retracted**: the
+  byte measured across all 104 retail planes is near-uniform over all 256
+  values — `0x00` dominates (81–95 % by world) and every value `0x01`–`0xFF`
+  occurs, with `0x01` a clear second in the playable worlds (VILLAGE 5.7 %,
+  HAUNTED 2.9 %, WEST 1.7 %, MEDIEVAL 2.2 %) **[V]** (reproducible with
+  `python -m lomax_modern slice --world <W>` or `art.planes` + a byte
+  histogram). A flag byte clusters at a handful of values; this does not. The
+  byte's per-value semantics (material / one-way / hazard) are **unresolved**
+  ([`research/05-open-questions.md`](research/05-open-questions.md) Q31). The
+  engine core therefore ships only the 0-vs-non-zero rule (`0` passable,
+  non-zero solid) as a labelled hypothesis `[H]`, preserves the byte verbatim,
+  and never interprets its bits.
 - **`TTAB` [V structure, H meaning]**: 8 bytes per 16x16 tile — four big-endian
   `u16` cell indices, each a 13-bit index plus flags in `0x2000`/`0x4000`
   (`0x8000` never set). All 104 payloads are divisible by 8 and by 16, giving
