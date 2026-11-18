@@ -4,13 +4,14 @@ from __future__ import annotations
 
 import argparse
 import os
+import re
 import sys
 from pathlib import Path
 from typing import Callable
 
 from . import __version__
-from . import png
-from .art import ArtError, check_output_dir, export_world
+from . import gif, png
+from .art import ArtError, check_output_dir, export_world, refuse_into_game_folder
 from .config import (
     UNSET,
     ConfigError,
@@ -21,7 +22,9 @@ from .config import (
     write_config,
 )
 from .anim_nmy import format_anim_nmy_report
+from .anim_nmy import format_gnmy_report
 from .anim_nmy import probe_anim_nmy as probe_recovered_framings
+from .anim_nmy import probe_gnmy
 from .doctor import find_world_files, format_report, inventory
 from .engine.run import run_slice
 from .install import check_install, is_inside_tree, resolve_world
@@ -278,6 +281,96 @@ def _cmd_slice(args: argparse.Namespace) -> int:
     return 0
 
 
+def _natural_key(name: str) -> tuple[tuple[int, int | str], ...]:
+    """Sort key that puts ``frame_0009.png`` before ``frame_0010.png``.
+
+    The ``--frames`` exporter zero-pads to at least four digits, so plain
+    lexicographic order already works for its output; this also keeps a mixed
+    directory (``frame_9.png`` next to ``frame_10.png``) in playback order
+    instead of silently scrambling it.
+    """
+    return tuple(
+        (0, int(part)) if part.isdigit() else (1, part)
+        for part in re.split(r"(\d+)", name)
+    )
+
+
+def _frame_paths(frame_dir: Path) -> list[Path]:
+    """Every ``*.png`` in ``frame_dir``, in numeric filename order."""
+    return sorted(
+        (
+            path
+            for path in frame_dir.iterdir()
+            if path.is_file() and path.suffix.lower() == ".png"
+        ),
+        key=lambda path: _natural_key(path.name),
+    )
+
+
+def _read_frames(paths: list[Path]) -> tuple[int, int, list[bytes]]:
+    """Decode the frame sequence, refusing one whose frames differ in size.
+
+    A GIF has a single logical screen, so a mixed-size sequence cannot be
+    written faithfully; failing here beats writing a file whose later frames are
+    cropped or shifted.
+    """
+    width = height = 0
+    frames: list[bytes] = []
+    for path in paths:
+        frame_width, frame_height, pixels = png.read(path)
+        if not frames:
+            width, height = frame_width, frame_height
+        elif (frame_width, frame_height) != (width, height):
+            raise gif.GIFError(
+                f"frames must all be the same size: {paths[0].name} is "
+                f"{width}x{height}, {path.name} is {frame_width}x{frame_height}"
+            )
+        frames.append(pixels)
+    return width, height, frames
+
+
+def _cmd_gif(args: argparse.Namespace) -> int:
+    """Encode a directory of frame PNGs as one looping animated GIF89a."""
+    frame_dir = Path(args.frame_dir)
+    if not frame_dir.is_dir():
+        print(f"error: not a directory: {frame_dir}", file=sys.stderr)
+        return 2
+    paths = _frame_paths(frame_dir)
+    if not paths:
+        print(f"error: no *.png frames in {frame_dir}", file=sys.stderr)
+        return 2
+    out = Path(args.out)
+    try:
+        refuse_into_game_folder(out.parent)
+    except ArtError as exc:
+        print(f"error: {exc}", file=sys.stderr)
+        return 2
+    try:
+        width, height, frames = _read_frames(paths)
+        report = gif.write(
+            out,
+            width,
+            height,
+            frames,
+            fps=args.fps,
+            max_frames=args.max_frames,
+        )
+    except (gif.GIFError, png.PNGError, OSError) as exc:
+        print(f"error: {exc}", file=sys.stderr)
+        return 2
+    sampled = (
+        f"{report.frames} of {report.frames_seen} (step {report.step})"
+        if report.step > 1
+        else f"{report.frames}"
+    )
+    print(f"frames: {sampled}, {report.width}x{report.height}")
+    print(f"timing: {args.fps} fps -> {report.delay_cs} cs per frame, loops forever")
+    print(f"palette: {report.palette}")
+    print(f"size: {report.size} bytes")
+    print(f"written: {out}")
+    return 0
+
+
 def _parse_surface(text: str) -> tuple[int, int]:
     """Parse ``WIDTHxHEIGHT`` (``x``, ``*`` or ``,`` accepted)."""
     cleaned = text.lower().replace(" ", "")
@@ -508,6 +601,31 @@ def _cmd_anim_nmy(args: argparse.Namespace) -> int:
     return 0
 
 
+def _cmd_gnmy(args: argparse.Namespace) -> int:
+    """Decode every ``GNMY`` entry and report the placement correlation."""
+    game_dir = args.game_dir or os.environ.get("LOMAX_GAME_DIR")
+    if not game_dir:
+        print(
+            "error: pass a game dir, or set LOMAX_GAME_DIR",
+            file=sys.stderr,
+        )
+        return 2
+    files = find_world_files(game_dir)
+    if not files:
+        print(f"error: no *.WLD found under {game_dir}", file=sys.stderr)
+        return 2
+    try:
+        report = probe_gnmy(files)
+    except WLDError as exc:
+        print(f"error: cannot read a .WLD under {game_dir}: {exc}", file=sys.stderr)
+        return 1
+    except (OSError, ValueError) as exc:
+        print(f"error: {exc}", file=sys.stderr)
+        return 1
+    print(format_gnmy_report(report))
+    return 0
+
+
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
         prog="lomax-modern",
@@ -640,6 +758,42 @@ def build_parser() -> argparse.ArgumentParser:
     )
     p_slice.set_defaults(func=_cmd_slice)
 
+    p_gif = sub.add_parser(
+        "gif",
+        help="encode a directory of frame PNGs as one looping animated GIF89a",
+    )
+    p_gif.add_argument(
+        "frame_dir",
+        help="directory of *.png frames, as written by slice/present --frames",
+    )
+    p_gif.add_argument(
+        "--out",
+        required=True,
+        metavar="PATH",
+        help="GIF file to write (outside the game folder)",
+    )
+    p_gif.add_argument(
+        "--fps",
+        type=_positive_int,
+        default=gif.DEFAULT_FPS,
+        metavar="N",
+        help=(
+            "playback rate in frames per second (default: "
+            f"{gif.DEFAULT_FPS}); the delay is written in centiseconds, minimum 1"
+        ),
+    )
+    p_gif.add_argument(
+        "--max-frames",
+        type=_non_negative_int,
+        default=0,
+        metavar="N",
+        help=(
+            "keep at most N frames, sampled evenly (default: 0 = every frame); "
+            "sampling by k and playing at 60/k fps keeps the capture's real speed"
+        ),
+    )
+    p_gif.set_defaults(func=_cmd_gif)
+
     p_probe = sub.add_parser(
         "probe-anim-nmy",
         help=(
@@ -768,6 +922,19 @@ def build_parser() -> argparse.ArgumentParser:
         help="folder containing WORLDS/*.WLD (default: $LOMAX_GAME_DIR)",
     )
     p_anm.set_defaults(func=_cmd_anim_nmy)
+
+    p_gnmy = sub.add_parser(
+        "gnmy",
+        help="decode the recovered GNMY entry layout and report the placement "
+        "correlation (read-only)",
+    )
+    p_gnmy.add_argument(
+        "game_dir",
+        nargs="?",
+        default=None,
+        help="folder containing WORLDS/*.WLD (default: $LOMAX_GAME_DIR)",
+    )
+    p_gnmy.set_defaults(func=_cmd_gnmy)
 
     return parser
 

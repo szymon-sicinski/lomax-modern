@@ -8,9 +8,14 @@ readers and then **validated against the retail install**:
 * ``NMY`` — reader at VA ``0x415199`` (file offset ``0x14599``): 9/9 chunks parse
   cleanly under the framing in :func:`decode_nmy` (the sequence ends with a
   ``u16`` zero terminator; retail files carry two further zero bytes of pad).
+* ``GNMY`` — reader at VA ``0x414D16`` (file offset ``0x14116``): 104/104
+  chunks parse cleanly under the framing in :func:`decode_gnmy`, yielding
+  **3,593 entries** whose ``u16`` size field equals the structural entry length
+  on **3,593/3,593** entries, and whose ``x``/``y`` words are pixel coordinates
+  (3,584/3,593 land inside their plane's cell bounds at one 16-px cell each).
 
 The recovery and evidence are recorded in ``docs/file-formats.md`` §2.5/§2.6 and
-``docs/research/05-open-questions.md`` Q23/Q24.
+``docs/research/05-open-questions.md`` Q23/Q24/Q32.
 
 Payload fields are **little-endian** (the readers use plain ``mov`` on the words;
 only the chunk header's size — and the ``HEAD``/``WRLD`` fields — are byte-swapped
@@ -22,6 +27,7 @@ keep in the repository.
 from __future__ import annotations
 
 import struct
+from collections.abc import Mapping
 from dataclasses import dataclass, field
 from pathlib import Path
 
@@ -198,6 +204,107 @@ def decode_nmy(payload: bytes) -> tuple[list[NmyRecord], int] | None:
 
 
 # ---------------------------------------------------------------------------
+# GNMY
+# ---------------------------------------------------------------------------
+
+
+@dataclass(frozen=True)
+class GnmyEntry:
+    """One ``GNMY`` placement entry (structural fields only, no content).
+
+    Field grades are in ``docs/file-formats.md`` §2.5.  Each field below is
+    **[V]** as *structure* (the reader's ``mov``/``and``/``shr`` sequence is
+    reproduced by ``decode_gnmy``), with the *meaning* of the semantic fields
+    graded separately:
+
+    * ``size`` **[V]** — the entry's total byte length (the reader only tests it
+      for ``0`` as the list terminator; the data always stores the true length).
+    * ``type_index`` **[V]** — index into the world's ``NMY`` type table (the
+      reader ORs ``0x100`` for ``MAIN.WLD`` before the lookup).
+    * ``x``/``y`` **[V]** — pixel coordinates, stored to object ``+0xC``/``+0xE``.
+    * ``flags`` **[V structure, H meaning]** — stored to ``+0x10``; bits 8–9 are
+      extracted to ``+0x12`` (a 2-bit subfield) and bit 15 gates the extra word.
+    * ``params`` **[V structure, H meaning]** — ``K`` per-animation ``u16``
+      values, ``K = (NMY record's W_A >> 4) & 0xF``.
+    * ``extra`` **[V structure, H meaning]** — present iff ``flags & 0x8000``,
+      stored to object ``+0x4``.
+    """
+
+    size: int  # total entry length in bytes, as stored (0 terminates the list)
+    type_index: int  # zero-based index into the world's ``NMY`` type table
+    x: int  # pixel X (a MAP cell is 16 px)
+    y: int  # pixel Y
+    flags: int  # bit 15 = extra u16 follows; bits 8-9 = a 2-bit subfield
+    params: tuple[int, ...]  # K per-animation u16 values, K = (W_A >> 4) & 0xF
+    extra: int | None  # present iff flags & 0x8000
+
+    @property
+    def structural_size(self) -> int:
+        """The byte length the reader advances by: 10 + 2*K + (2 if extra)."""
+        return 10 + 2 * len(self.params) + (2 if self.extra is not None else 0)
+
+
+def decode_gnmy(
+    payload: bytes, k_of: Mapping[int, int]
+) -> tuple[list[GnmyEntry], int] | None:
+    """Decode a ``GNMY`` payload under the recovered entry layout.
+
+    Layout (all little-endian)::
+
+        u16 size     # total entry bytes == 10 + 2*K + (2 if flags & 0x8000); 0 ends
+        u16 type     # index into the NMY type table (the loader ORs 0x100 for MAIN)
+        u16 x        # pixel X
+        u16 y        # pixel Y
+        u16 flags    # bit 15 = extra u16 follows; bits 8-9 = a 2-bit subfield
+        K x u16      # per-animation params, K = (NMY record's W_A >> 4) & 0xF
+        [u16 extra]  # present iff flags & 0x8000
+
+    ``k_of`` maps a type index to K (the reader derives it from the type's
+    ``NMY`` record: ``K = (W_A >> 4) & 0xF``, the high nibble of the flags
+    word, read from the record's ``+0x18`` slot).  Returns ``(entries,
+    consumed)`` where ``consumed`` is the offset just after the ``u16`` zero
+    terminator, or ``None`` on a malformed stream.
+
+    The ``size`` field is read only to test for the zero terminator — the
+    reader advances *structurally* (``esi`` is bumped by fixed ``add $0x2``
+    steps), so ``decode_gnmy`` does the same and never trusts ``size`` to
+    advance.  A caller that wants to assert ``size == structural_size`` does
+    that as a measurement, not as a parse gate: on the retail install that
+    equality holds on **3,593/3,593** entries, which is what proves ``K`` (and
+    the base-10-byte header and the bit-15 extra rule) correct — the wrong
+    ``K`` desynchronises and the walk fails with a params overrun.
+    """
+    entries: list[GnmyEntry] = []
+    pos = 0
+    n = len(payload)
+    while pos + 2 <= n:
+        size = struct.unpack_from("<H", payload, pos)[0]
+        if size == 0:
+            pos += 2
+            return entries, pos
+        if pos + 10 > n:
+            return None
+        type_index = struct.unpack_from("<H", payload, pos + 2)[0]
+        k = k_of.get(type_index)
+        if k is None:
+            return None
+        x, y, flags = struct.unpack_from("<HHH", payload, pos + 4)
+        pend = pos + 10 + 2 * k
+        if pend > n:
+            return None
+        params = struct.unpack_from("<" + "H" * k, payload, pos + 10) if k else ()
+        extra = None
+        if flags & 0x8000:
+            if pend + 2 > n:
+                return None
+            extra = struct.unpack_from("<H", payload, pend)[0]
+            pend += 2
+        entries.append(GnmyEntry(size, type_index, x, y, flags, tuple(params), extra))
+        pos = pend
+    return None  # payload exhausted without a u16 terminator
+
+
+# ---------------------------------------------------------------------------
 # Probe over an install
 # ---------------------------------------------------------------------------
 
@@ -271,4 +378,160 @@ def format_anim_nmy_report(report: AnimNmyReport) -> str:
             f"{str(w['nmy_records'] or '-'):>10}"
             f"{str(int(w['nmy_clean'])):>8}"
         )
+    return "\n".join(lines)
+
+
+def _plane_geometry(head, map_chunk) -> tuple[int, int, bytes]:
+    """Plane size in cells plus the collision bytes (corrected MAP layout).
+
+    ``MAP`` is ``N`` big-endian ``u16`` tile words then ``N`` collision bytes,
+    padded to 4 (``docs/file-formats.md`` §2.4, recovered by the map→tile
+    pass — the reader at VA ``0x415430`` byte-swaps exactly ``2·N`` bytes and
+    stores the collision pointer at ``payload + 2·N``); ``N = width_cells *
+    height_cells`` and the ``HEAD`` dimensions are big-endian ``u32`` in
+    8-pixel units (§2.3).  Read directly here, not through ``art.decode_map``,
+    which still carries the superseded interleaved layout (port tracked
+    separately).
+    """
+    width_units, height_units = struct.unpack(">II", head.payload[0:8])
+    width_cells = width_units * 8 // 16
+    height_cells = height_units * 8 // 16
+    n = width_cells * height_cells
+    payload = map_chunk.payload
+    collision = payload[2 * n : 2 * n + n]
+    return width_cells, height_cells, collision
+
+
+@dataclass
+class GnmyReport:
+    """Per-world and whole-install ``GNMY`` placement stats (no content)."""
+
+    worlds: list[dict] = field(default_factory=list)
+    entries: int = 0
+    size_mismatches: int = 0
+    x_min: int | None = None
+    x_max: int | None = None
+    y_min: int | None = None
+    y_max: int | None = None
+    with_extra: int = 0  # entries whose flags carry bit 15 (extra u16 present)
+    on_map: int = 0  # (x // 16, y // 16) inside the plane's cell bounds
+    walkable: int = 0  # of the on-map placements, collision byte == 0
+    total_cells: int = 0  # every plane's cell count, summed
+    walkable_cells: int = 0  # of those cells, collision byte == 0
+    type_entries: dict[int, int] = field(default_factory=dict)  # type -> total entries
+    type_worlds: dict[int, int] = field(default_factory=dict)  # type -> distinct worlds
+
+
+def probe_gnmy(world_files: list[Path]) -> GnmyReport:
+    """Walk world files and validate every ``GNMY`` entry.
+
+    ``world_files`` is the list of ``*.WLD`` paths (see
+    :func:`lomax_modern.doctor.find_world_files`).  Structural only: the report
+    carries counts, ranges and a coordinate-vs-map correlation, never a name, a
+    payload or a pixel.
+    """
+    from .wld import parse_file  # local import keeps the module dependency-free
+
+    report = GnmyReport()
+    for path in world_files:
+        world = parse_file(path)
+        nmy_chunk = next((c for c in world.chunks if c.tag == "NMY"), None)
+        if nmy_chunk is None:
+            continue
+        result = decode_nmy(nmy_chunk.payload)
+        if result is None:
+            continue
+        records, _ = result
+        k_of = {i: (r.flags >> 4) & 0xF for i, r in enumerate(records)}
+        world_entries = 0
+        world_types: set[int] = set()
+        head = None
+        map_chunk = None
+        for chunk in world.chunks:
+            if chunk.tag == "HEAD":
+                head = chunk
+                map_chunk = None
+            elif chunk.tag == "MAP":
+                map_chunk = chunk
+            elif chunk.tag == "GNMY":
+                if head is None or map_chunk is None:
+                    continue
+                decoded = decode_gnmy(chunk.payload, k_of)
+                if decoded is None:
+                    continue
+                entries, _consumed = decoded
+                width_cells, height_cells, collision = _plane_geometry(head, map_chunk)
+                report.total_cells += len(collision)
+                report.walkable_cells += sum(1 for b in collision if b == 0)
+                for entry in entries:
+                    world_entries += 1
+                    world_types.add(entry.type_index)
+                    report.entries += 1
+                    report.type_entries[entry.type_index] = (
+                        report.type_entries.get(entry.type_index, 0) + 1
+                    )
+                    if entry.size != entry.structural_size:
+                        report.size_mismatches += 1
+                    report.x_min = (
+                        entry.x if report.x_min is None else min(report.x_min, entry.x)
+                    )
+                    report.x_max = (
+                        entry.x if report.x_max is None else max(report.x_max, entry.x)
+                    )
+                    report.y_min = (
+                        entry.y if report.y_min is None else min(report.y_min, entry.y)
+                    )
+                    report.y_max = (
+                        entry.y if report.y_max is None else max(report.y_max, entry.y)
+                    )
+                    if entry.extra is not None:
+                        report.with_extra += 1
+                    cell_x, cell_y = entry.x // 16, entry.y // 16
+                    if 0 <= cell_x < width_cells and 0 <= cell_y < height_cells:
+                        report.on_map += 1
+                        if collision[cell_y * width_cells + cell_x] == 0:
+                            report.walkable += 1
+        for t in world_types:
+            report.type_worlds[t] = report.type_worlds.get(t, 0) + 1
+        report.worlds.append({"name": path.name, "entries": world_entries})
+    return report
+
+
+def format_gnmy_report(report: GnmyReport) -> str:
+    """Human-readable digest of :func:`probe_gnmy` (counts and ranges only)."""
+    base = report.entries
+    walkable_frac = (
+        f"{report.walkable_cells / report.total_cells * 100:.1f}%"
+        if report.total_cells
+        else "-"
+    )
+    n_worlds = len(report.worlds)
+    distinct = len(report.type_entries)
+    once_per_world = [
+        t
+        for t, total in report.type_entries.items()
+        if total == n_worlds and report.type_worlds.get(t, 0) == n_worlds
+    ]
+    rarest = sorted(report.type_worlds.items(), key=lambda kv: (kv[1], kv[0]))[:8]
+    rarest_desc = ", ".join(
+        f"{t}({report.type_entries[t]} in {w} world{'s' if w != 1 else ''})"
+        for t, w in rarest
+    )
+    lines = [
+        f"GNMY: {report.entries} entries; size field == structural length on "
+        f"{base - report.size_mismatches}/{base}",
+        f"x range {report.x_min}..{report.x_max} px, "
+        f"y range {report.y_min}..{report.y_max} px (a MAP cell is 16 px)",
+        f"flags bit 15 (extra u16 follows) set on {report.with_extra}/{base} entries",
+        f"coordinate correlation: {report.on_map}/{base} placements inside their "
+        f"plane's cell bounds; {report.walkable}/{base} on collision-byte 0 "
+        f"(baseline walkable {walkable_frac})",
+        f"spawn/exit: {distinct} distinct types; {len(once_per_world)} appear "
+        f"exactly once per world (a player start or level exit would have to), "
+        f"so spawn/exit is not a unique type index; rarest types: {rarest_desc}",
+        "",
+        f"{'world':<12}{'entries':>10}",
+    ]
+    for w in report.worlds:
+        lines.append(f"{w['name']:<12}{w['entries']:>10}")
     return "\n".join(lines)

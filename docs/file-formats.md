@@ -198,13 +198,66 @@ MEDIEVAL 68, TITLE 22, VILLAGE 49, WEST 53** — each equals that world's maximu
 `GNMY` type index **+ 1** (BONUS 29, WEST 52, HAUNTED 73) **[V]**, which is
 exactly the "records == max type index + 1" falsifier named for Q23.
 
-**`GNMY`** entries reference those records directly. Each entry is a `u16` size
-+ `u16` type index (little-endian, 3,593 entries across 104 chunks); the reader
-resolves the type with `type_table[bank | type_index]`, where `bank` is `0x100`
-for `MAIN.WLD` and 0 for every other world (the loader ORs a per-world "MAIN"
-flag into the index). So **a `GNMY` type index is the zero-based position of the
-record in the `NMY` table** — not a name, a hash, or an offset into a string
-blob.
+**`GNMY`** entries reference those records directly, one per placed object
+(3,593 entries across 104 chunks). The loader walks them **structurally** — its
+read pointer is bumped by fixed `add $0x2` steps, and the leading `u16` is read
+only to test for the `0` list terminator — so the entry layout below is the
+reader's own arithmetic, not a size-driven walk. On the retail data that `u16`
+equals the entry's structural length on **3,593/3,593** entries, which is what
+proves the variable-length part correct. All little-endian:
+
+```
+u16 size        # total entry length in bytes; 0 ends the list
+u16 type        # zero-based index into the world's NMY table
+u16 x           # pixel X
+u16 y           # pixel Y
+u16 flags       # bit 15 = extra u16 follows; bits 8-9 = a 2-bit subfield
+K × u16         # per-animation parameters, K = (W_A >> 4) & 0xF
+[u16 extra]     # present iff flags & 0x8000
+```
+
+The reader resolves the type with `type_table[bank | type_index]`, where `bank`
+is `0x100` for `MAIN.WLD` and 0 for every other world (the loader ORs a
+per-world "MAIN" flag into the index). So **a `GNMY` type index is the
+zero-based position of the record in the `NMY` table** — not a name, a hash, or
+an offset into a string blob. `K` is the high nibble of the type's `W_A` flags
+word: the `NMY` reader stores `(W_A >> 4) & 0xF` at record slot `+0x18`, and
+the `GNMY` reader loads that slot back as its param-loop count.
+
+Per-field evidence grades:
+
+| Field | Grade | What the reader does (VA `0x414D16`) |
+|---|---|---|
+| `size` | **[V]** | `0x414D21` `cmpw $0` — terminator test only; never used to advance |
+| `type` | **[V]** | `0x414D2B` `or 0x100` (MAIN), then `type_table[type·4 + 0x498F78]` |
+| `x` | **[V]** | `0x414D67` stored to object `+0xC` |
+| `y` | **[V]** | `0x414D6F` stored to object `+0xE` |
+| `flags` | **[V structure, H meaning]** | `0x414D7F` stored to `+0x10`; `and 0x300; shr 8` → `+0x12` (2-bit); `testb $0x80,0x11` gates the extra word |
+| `params` | **[V structure, H meaning]** | `0x414DA2` copied to object `+0x1A…` (K values) |
+| `extra` | **[V structure, H meaning]** | `0x414DBF` stored to object `+0x4` (dword) when bit 15 set |
+
+The coordinates are **pixel** coordinates: 3,584/3,593 entries place
+`(x // 16, y // 16)` inside their plane's cell bounds, against 2/3,593 for
+cell units, 9/3,593 for 8-px units and 1,146/3,593 for swapped `x`/`y` — the
+pixel reading wins by an order of magnitude **[V]**. On collision — read under
+the corrected `MAP` layout (`N` big-endian tile words then `N` collision bytes,
+the map→tile pass's revision of §2.4, where byte 0 is passable on 97.4 % of
+cells) — 2,881/3,593 entries land on a passable cell, so placements skew
+*toward* solid cells (≈7.6× enrichment) — consistent with entities anchored to
+ground/platforms, but **not** the "walkable more than chance" signature the
+demo plan assumed, so the coordinate→walkability claim stays **[H]**. Reproduce
+with `lomax-modern gnmy <dir>`.
+
+**Spawn/exit/collectable is not resolved by this reader.** Every entry becomes
+an identical sprite instance (type + position + flags + optional extra +
+params); nothing in the `GNMY` reader distinguishes a player start, a level
+exit or a collectable. The per-type placement counts are decisive on the
+"unique type" hypothesis: 74 distinct types are referenced, and **0 appear
+exactly once per world** (or per plane) — so the player start and level exit
+are *not* a single `NMY` type. The two remaining semantic candidates are the
+2-bit flags subfield (bits 8–9 → object `+0x12`) and the optional extra word
+(bit 15 → object `+0x4`); their meanings are not visible in this reader and
+are left as [`Q32`](research/05-open-questions.md).
 
 ### 2.6 `ANIM` / sprites **[V]**
 
