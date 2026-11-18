@@ -21,7 +21,9 @@ from .config import (
     write_config,
 )
 from .anim_nmy import format_anim_nmy_report
+from .anim_nmy import format_gnmy_report
 from .anim_nmy import probe_anim_nmy as probe_recovered_framings
+from .anim_nmy import probe_gnmy
 from .doctor import find_world_files, format_report, inventory
 from .engine.run import run_slice
 from .install import check_install, is_inside_tree, resolve_world
@@ -495,6 +497,31 @@ def _cmd_anim_nmy(args: argparse.Namespace) -> int:
     return 0
 
 
+def _cmd_gnmy(args: argparse.Namespace) -> int:
+    """Decode every ``GNMY`` entry and report the placement correlation."""
+    game_dir = args.game_dir or os.environ.get("LOMAX_GAME_DIR")
+    if not game_dir:
+        print(
+            "error: pass a game dir, or set LOMAX_GAME_DIR",
+            file=sys.stderr,
+        )
+        return 2
+    files = find_world_files(game_dir)
+    if not files:
+        print(f"error: no *.WLD found under {game_dir}", file=sys.stderr)
+        return 2
+    try:
+        report = probe_gnmy(files)
+    except WLDError as exc:
+        print(f"error: cannot read a .WLD under {game_dir}: {exc}", file=sys.stderr)
+        return 1
+    except (OSError, ValueError) as exc:
+        print(f"error: {exc}", file=sys.stderr)
+        return 1
+    print(format_gnmy_report(report))
+    return 0
+
+
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
         prog="lomax-modern",
@@ -743,6 +770,19 @@ def build_parser() -> argparse.ArgumentParser:
         help="folder containing WORLDS/*.WLD (default: $LOMAX_GAME_DIR)",
     )
     p_anm.set_defaults(func=_cmd_anim_nmy)
+
+    p_gnmy = sub.add_parser(
+        "gnmy",
+        help="decode the recovered GNMY entry layout and report the placement "
+        "correlation (read-only)",
+    )
+    p_gnmy.add_argument(
+        "game_dir",
+        nargs="?",
+        default=None,
+        help="folder containing WORLDS/*.WLD (default: $LOMAX_GAME_DIR)",
+    )
+    p_gnmy.set_defaults(func=_cmd_gnmy)
 
     return parser
 

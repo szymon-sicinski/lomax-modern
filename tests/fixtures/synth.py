@@ -124,6 +124,31 @@ def gnmy_payload(types: Iterable[int] = (), *, trailer: int = 4) -> bytes:
     return bytes(out)
 
 
+def gnmy_entries_payload(
+    entries: Iterable[tuple[int, int, int, int, tuple[int, ...], int | None]] = (),
+    *,
+    trailer: int = 2,
+) -> bytes:
+    """A ``GNMY`` payload in the recovered entry layout (docs §2.5).
+
+    ``entries`` is ``(type, x, y, flags, params, extra)`` tuples; ``extra`` is
+    the ``u16`` that follows the params when ``flags & 0x8000``, else ``None``.
+    The ``u16`` size field is computed (``10 + 2*len(params) + extra``), the
+    list ends with a ``u16`` zero terminator, then ``trailer`` zero pad bytes.
+    """
+    out = bytearray()
+    for type_, x, y, flags, params, extra in entries:
+        k = len(params)
+        body = 10 + 2 * k + (2 if flags & 0x8000 else 0)
+        out += struct.pack("<HHHHH", body, type_, x, y, flags)
+        out += struct.pack("<" + "H" * k, *params) if k else b""
+        if flags & 0x8000:
+            out += struct.pack("<H", extra if extra is not None else 0)
+    out += b"\0" * 2  # u16 terminator
+    out += b"\0" * trailer
+    return bytes(out)
+
+
 def anim_payload(
     frame_count: int = 1,
     *,

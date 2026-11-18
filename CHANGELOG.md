@@ -8,6 +8,12 @@ Versioning: [Semantic Versioning](https://semver.org/).
 
 ### Added
 
+- `gnmy` command: decodes the recovered `GNMY` entry layout (`u16 size/type/x/y/
+  flags` + `K` params + optional extra) and reports the placement correlation —
+  3,593 entries, `size == structural length` on 3,593/3,593, `x`/`y` as pixel
+  coordinates (3,584/3,593 on-map) — recovered from the reader at VA `0x414D16`
+  (file offset `0x14116`) in `LOMAX.EXE` and validated on all 104 retail chunks
+  (`docs/file-formats.md` §2.5). Read-only; accepts `$LOMAX_GAME_DIR`.
 - `slice` and `present` accept `--frames N --out DIR`: one PNG per 60 Hz tick,
   written as `frame_0000.png` … (`ffmpeg -i frame_%04d.png` numbering) through
   the same scale/pad/PNG path as `--frame`. `--out` is created if absent and
