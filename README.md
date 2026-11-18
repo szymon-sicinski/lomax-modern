@@ -143,6 +143,12 @@ lomax-modern present "/path/to/Lomax" --frame /tmp/lomax-frame.png
 # Authentic toggle: native 320x240, nearest-neighbour, no invented smoothing
 lomax-modern present "/path/to/Lomax" --authentic --frame /tmp/lomax-native.png
 
+# Capture one presented PNG per 60 Hz tick: frame_0000.png ... (the naming
+# `ffmpeg -i frame_%04d.png` expects); --out is created and must be outside
+# the game folder
+lomax-modern present "/path/to/Lomax" --authentic --surface 640x480 \
+    --frames 300 --out /tmp/lomax-frames
+
 # Switch the filter for one run; persist a choice with --save
 lomax-modern present "/path/to/Lomax" --filter nearest --save
 ```
