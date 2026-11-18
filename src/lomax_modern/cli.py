@@ -156,6 +156,9 @@ def _cmd_slice(args: argparse.Namespace) -> int:
     if args.frame:
         png.write(Path(args.frame), frame.width, frame.height, frame_to_rgba(frame))
         print(f"frame written: {args.frame}")
+    return 0
+
+
 def _cmd_probe_anim_nmy(args: argparse.Namespace) -> int:
     game_dir = args.game_dir or os.environ.get("LOMAX_GAME_DIR")
     if not game_dir:
@@ -258,6 +261,12 @@ def build_parser() -> argparse.ArgumentParser:
     p_slice = sub.add_parser(
         "slice",
         help="run the headless vertical slice of the first world (read-only)",
+    )
+    p_slice.add_argument(
+        "game_dir",
+        nargs="?",
+        default=None,
+        help="folder containing WORLDS/*.WLD (default: $LOMAX_GAME_DIR)",
     )
     p_slice.add_argument(
         "--world",
