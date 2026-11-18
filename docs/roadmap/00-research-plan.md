@@ -6,7 +6,9 @@ already settled so we do not re-derive it, then groups the *remaining* questions
 into work packages. Each package states what evidence would settle its questions
 and what decision that evidence unblocks. Companion documents:
 
-- [`10-milestones.md`](10-milestones.md) — the staged plan (M0…M7).
+- [`10-milestones.md`](10-milestones.md) — the staged plan (M0…M11).
+- [`15-strategy-report.md`](15-strategy-report.md) — the target host and
+  mechanism decision (M1's deliverable).
 - [`20-releases.md`](20-releases.md) — releases v0.1…v1.0 and their contents.
 - [`30-risks.md`](30-risks.md) — the risk register.
 
@@ -22,56 +24,56 @@ and what decision that evidence unblocks. Companion documents:
 
 ## 1. The one-page answer
 
-**The smallest change that makes Lomax pleasant on a 2026 Linux desktop is an
-open-source presentation layer** — a clean-room DirectDraw shim (a `ddraw.dll`
-proxy) that takes the stock game's finished 16-bit frame and presents it
-borderless, integer-scaled, with pixel-art filters, under Wine/Proton.
+**The way to make Lomax pleasant on a 2026 Linux desktop for a disc-less user is
+our own engine + presenter over the MIT data layer** — a clean-room engine that
+reads the user's own data files and renders them borderless, integer-scaled,
+with pixel-art filters, on Linux and Windows. We do not run `LOMAX.EXE`.
 
-> **Confirmed by WP-1…WP-5 (LMX-7, 2026-11-17).** The mechanism is settled — a
-> clean-room `ddraw.dll` proxy (the sole DDRAW import is `DirectDrawCreate`),
-> refined to a *lighter* forward-everything proxy with a hook at the final
-> `Blt`/`Flip`, **not** a full DXVK-style translator. Two measured facts narrow
-> the claim: (1) the 8/16-bpp colour gate is a **GDI** query
-> (`GetDeviceCaps(BITSPIXEL)×GetDeviceCaps(PLANES)` at `0x40799c`) that the
-> proxy cannot clear alone — it needs a GDI hook, a depth-16 X server, or a
-> documented-only exe patch; and (2) the CD check is a disc problem (MCI
-> `cdaudio` in the binary), so the proxy path serves **disc owners**. A
-> disc-less user needs our own engine + presenter over the data layer instead —
-> recorded as an open decision in [`30-risks.md`](30-risks.md#open-decisions-for-the-human),
-> not silently chosen here.
+> **Resolved by the human (2026-11-18).** The earlier answer — a clean-room
+> `ddraw.dll` proxy over the retail exe — was correct *for disc owners only* and
+> is now demoted to an optional appendix
+> ([`15-strategy-report.md`](15-strategy-report.md)). Two measured facts forced
+> the change for disc-less users: (1) the 8/16-bpp colour gate is a **GDI**
+> query (`GetDeviceCaps(BITSPIXEL)×GetDeviceCaps(PLANES)` at `0x40799c`) that a
+> ddraw proxy cannot clear; and (2) the CD check is MCI `cdaudio` in the binary —
+> a disc problem no shim removes. Both live inside `LOMAX.EXE`, so a disc-less
+> user cannot use the exe at all, and the licence-clean path is our own engine +
+> presenter. Recorded in
+> [`30-risks.md`](30-risks.md#decisions-resolved-by-the-human) and
+> [`../research/05-open-questions.md`](../research/05-open-questions.md) (Q28).
 
 Why this and not something bigger:
 
 - The game is a Win32/MFC 4.2/DirectDraw 7 application, not DOS
-  ([`01-platform-assessment.md`](../research/01-platform-assessment.md)), so the
-  platform problem is "get a Win32 binary to present a 320x240 frame nicely on a
-  modern Linux screen", not "emulate a console".
-- Presentation (**L1**) needs no knowledge of game internals beyond "there is a
-  16-bit framebuffer", is the cheapest real win, and is the one improvement the
-  unlicensed prior art does **not** provide on Linux
-  ([`02-resolution.md` §2.3](../research/02-resolution.md#23-layer-1--presentation-the-cheapest-real-win)).
+  ([`01-platform-assessment.md`](../research/01-platform-assessment.md)), so we
+  reimplement only the subset the presenter needs — data layer, map/collision/
+  entities/timing, render, present — not the whole game (§4, M3 boundary).
+- The data layer is the licence-clean foundation: `.WLD`/sprite/audio readers
+  are distributable and testable with no game bytes
+  ([`07-wp3-asset-pipeline.md`](../research/07-wp3-asset-pipeline.md)).
 - Widescreen (**L2**) and CD/audio/controller fixes are **already solved** by
-  `Lomax+` but that project is Windows-only and unlicensed
+  `Lomax+`, but that project is Windows-only and unlicensed
   ([`03-prior-art.md`](../research/03-prior-art.md)); we interoperate with its
-  *facts*, we do not reimplement its *code*.
+  *facts*, we never reimplement its *code*.
 
 **The path from there to a modernised build**, in order of decreasing
 value-per-risk:
 
-1. **M1** — settle the platform strategy (Wine/Proton vs shim vs native) and the
-   hook mechanism (see [§4](#4-the-strategy-decision-three-mechanisms-one-winner)).
-2. **M2** — ship the open-source presenter (L1). Lomax renders nicely on Linux.
-3. **M3** — controller & input: a clean-room `dinput.dll` proxy, so the game is
-   actually *pleasant* to play. Worthless until M2 lands; cheap once it has.
-4. **M4** — ship the `.WLD` read/write toolkit with byte-exact round trip plus a
-   tile/sprite exporter. This unlocks every content project.
-5. **M5** — password tool (small, self-contained, immediately useful).
-6. **M6** — matte-aware 2× upscaler + 2× pack writer. The art pipeline.
-7. **M7** — 2× internal-render spike (true HD) with an explicit go/no-go.
-8. **M8** — long tail: level editor, translation support.
+1. **M1** — settle the platform strategy (done;
+   [`15-strategy-report.md`](15-strategy-report.md)).
+2. **M2** — data-layer completeness (WLD/SPR/palette/ANIM/audio).
+3. **M3** — engine core (map/collision/entities/timing).
+4. **M4** — presenter (own renderer, integer scaling, filters).
+5. **M5** — controller & input.
+6. **M6** — audio (SFX + music path).
+7. **M7** — packaging.
+8. **M8** — asset pipeline (2× upscaler + pack writer).
+9. **M9** — 2× internal-render spike (go/no-go).
+10. **M10** — password tool.
+11. **M11** — level editor + translation.
 
-Every step before M7 is distributable as code without shipping a single game
-byte; M7/M8 are only pursued if their falsifiers stay green (see
+Every step is distributable as code without shipping a single game byte; M9/M11
+are only pursued if their falsifiers stay green (see
 [`10-milestones.md`](10-milestones.md) and [`30-risks.md`](30-risks.md)).
 
 ## 2. What the earlier research already answered
@@ -237,35 +239,31 @@ depends on M1/M2's mechanism and on M2's display stability, so it is spun up as
 a card when M3 is reached rather than dispatched now. Its scope — analogue
 movement + buttons, d-pad menu navigation, hot-plug, per-controller mapping
 presets, rumble out — is fixed in
-[`10-milestones.md`](10-milestones.md#m3--controller--input).
+[`10-milestones.md`](10-milestones.md#m5--controller--input).
 
 ## 4. The strategy decision: three mechanisms, one winner
 
-Where two strategies compete for how to reach the game's frame, we name the
-winner now. M1's evidence (WP-1/WP-2) did **not** contradict it — it confirmed
-the DLL-proxy winner and refined its shape.
+WP-1/WP-2 settled the *patching surface*; the human's disc-less decision
+(2026-11-18) settled the *winner*. The three mechanisms now rank:
 
 | Mechanism | Verdict | Why |
 |---|---|---|
-| **DLL proxy** (`ddraw.dll` shim, import-table hook) | **Winner (confirmed)** | Clean-room buildable from public DirectDraw API docs; does not modify `LOMAX.EXE`, so it is legal to distribute and version-independent; works under Wine/Proton and on Windows; can present the 16-bit frame without touching gameplay code. WP-1 measured the sole hook point (`DDRAW.dll!DirectDrawCreate`) and the safe injection timing; WP-2 refined the shape to a **lighter forward-everything proxy that hooks only the final `Blt`/`Flip`** — the present call — rather than reimplementing surface/blit/colour-key/clipper/palette semantics. |
-| **Binary patching** (hex-edit the exe, as the VOGONS patch does) | Loses | Modifies the user's executable in place (fragile across builds, awkward to distribute legally), and the known patch already regresses transparency ([`01-platform-assessment.md` §1.3](../research/01-platform-assessment.md#13-why-there-is-no-quick-just-run-it-answer)). Fine as a *documented fact*, not as our product. |
-| **Reimplementation** (clean-room engine) | Loses (for now) | A full rewrite of a 2D engine is months of work for no user-visible delta over the existing loader, and it is exactly the scope-creep the product risk warns about ([`30-risks.md`](30-risks.md#product)). Revisit only if a source port becomes the only way to unlock true HD (M6) — and even then it is a spike, not a plan. |
+| **Own engine + presenter over the data layer** | **Winner (decided)** | The only licence-clean path for disc-less users: B1 (GDI gate) and B3 (CD check) live inside `LOMAX.EXE`, so the exe path is closed to them; our engine never runs the exe, never meets the CD check, and reads the user's unpacked directory. Bounded to map/collision/entities/timing/render/present (M3) — not a full game rewrite. |
+| **DLL proxy** (`ddraw.dll` shim, import-table hook) | **Appendix (demoted)** | Still the right mechanism *for disc owners*: `DDRAW.dll!DirectDrawCreate` is the sole hook point, and a forward-everything proxy with a hook at the final `Blt`/`Flip` works under Wine and Windows. It cannot clear B1 and does nothing about B3, so it is not the v0.4 path. |
+| **Binary patching** (hex-edit the exe) | Loses | Modifies the user's executable (fragile, legally awkward) and the known patch regresses transparency. A documented fact, not our product. |
 
-The decision is therefore **confirmed**: **M2 is a clean-room `ddraw.dll` proxy
-— lighter, forward-everything, with a hook at the final `Blt`/`Flip`** — not an
-app-level presenter and not a full DXVK-style translator. Two boundaries from
-the research stay explicit: the proxy cannot clear the GDI colour gate alone
-(B1), and it only serves **disc owners** (the CD check B3 needs their own
-disc). Whether M2 should also target disc-less users via our own engine +
-presenter over the data layer is an open decision recorded in
-[`30-risks.md`](30-risks.md#open-decisions-for-the-human), not made here.
+The decision is therefore: **the main line is our own engine + presenter over
+the MIT data layer** (disc-less), and the **`ddraw.dll` proxy is a documented,
+optional appendix** for disc owners — explicitly *not* a DXVK-style translator.
+Two boundaries stay absolute: we never run the exe on the main line, and we
+never bypass or patch out the CD check ([`30-risks.md`](30-risks.md) L3).
 
-The same logic carries to input: because `LOMAX.EXE` imports `DINPUT.dll`
-([`06-measurements-and-improvements.md`](../research/06-measurements-and-improvements.md#64-q1q14)),
-a clean-room **`dinput.dll` proxy** intercepting `DirectInputCreateA` is the
-controller route (M3) — a second dropped-in DLL, identical in shape and legal
-posture to the display proxy, not a binary patch and not a Steam-Input
-dependency. It is decided here so it is not re-litigated at M3.
+The same logic carries to input and audio: because our engine reads the device
+and the data directly, input is our own evdev/XInput layer (M5) — not a
+`dinput.dll` proxy — and audio is the on-disk WAVs (ambience + jingles + SFX),
+with no music track. The measured `DINPUT.dll!DirectInputCreateA` /
+`WINMM.dll!joyGetPosEx` paths and the MCI `cdaudio` music are evidence about the
+original, not hooks we need.
 
 ## 5. How the packages map to board cards
 
