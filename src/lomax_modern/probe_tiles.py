@@ -284,7 +284,11 @@ def format_report(report: dict) -> str:
         "",
         "CELL collision bytes:",
         f"  {c['bytes']} bytes, {c['distinct_values']} distinct values, "
-        f"{c['zero_count']} zero ({100.0 * c['zero_count'] / c['bytes']:.1f}%)",
+        + (
+            f"{c['zero_count']} zero ({100.0 * c['zero_count'] / c['bytes']:.1f}%)"
+            if c["bytes"]
+            else "0 zero (no planes read)"
+        ),
         "",
         "Superseded readings (scoreboard only):",
         f"  MAP interleaved (3 B/cell): {s['map_interleaved_out_of_bank']}/"

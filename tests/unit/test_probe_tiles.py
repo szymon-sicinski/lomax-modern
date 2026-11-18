@@ -185,6 +185,28 @@ def test_probe_empty_install(tmp_path: Path) -> None:
     assert report["ttab"]["records"] == 0
 
 
+def test_format_report_on_empty_install_does_not_divide_by_zero(tmp_path: Path) -> None:
+    """An install with no *.WLD has zero collision bytes; the percentage has no denominator.
+
+    Regression: `format_report` computed `100.0 * zero_count / bytes` unconditionally
+    and raised ZeroDivisionError, so `probe-tiles <empty-dir>` dumped a traceback
+    instead of reporting 0 planes.
+    """
+    root = _install(tmp_path)  # no worlds
+    text = format_report(probe_tiles(root))
+    assert "0 bytes" in text
+    assert "no planes read" in text
+    assert "%" not in text.split("CELL collision bytes:")[1].split("\n")[1]
+
+
+def test_cli_subcommand_on_empty_install_exits_zero(tmp_path: Path, capsys: pytest.CaptureFixture) -> None:
+    root = _install(tmp_path)  # no worlds
+    assert cli_main(["probe-tiles", str(root)]) == 0
+    out = capsys.readouterr().out
+    assert "planes: 0" in out
+    assert "Traceback" not in out
+
+
 # ---------------------------------------------------------------------------
 # Report formatting and CLI.
 # ---------------------------------------------------------------------------
