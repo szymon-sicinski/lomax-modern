@@ -16,6 +16,7 @@ the game's own data on a modern screen.
 | Decode tile art to PNG sheets | **works** (`export`) |
 | Headless engine slice: map, collision, 60 Hz tick, 16-bit frame | **works** (`slice`) |
 | Present the frame at an integer scale, modern or authentic profile | **works**, writes a PNG (`present`) |
+| Fold a frame sequence into one looping animated GIF | **works** (`gif`) |
 | Conformance harness: depth 16 vs 24, transparency, integer scale | **works**, `PASS 10/10` |
 | A window you can watch | **not yet** — `present` renders and writes a PNG; the windowed presenter is the next milestone |
 | Keyboard or gamepad input | **not yet** (M5 / v0.7) |
@@ -141,6 +142,10 @@ lomax-modern present "/path/to/Lomax" --authentic --frame /tmp/lomax-native.png
 # the game folder
 lomax-modern present "/path/to/Lomax" --authentic --surface 640x480 \
     --frames 300 --out /tmp/lomax-frames
+
+# Fold that directory into one looping animated GIF (standard library only;
+# --fps sets the delay, --max-frames samples evenly)
+lomax-modern gif /tmp/lomax-frames --out /tmp/lomax-demo.gif --fps 30
 ```
 
 You get a summary on stdout — excerpted below; `present` first prints the install
@@ -171,6 +176,12 @@ are invented here.
 **There is no music track.** The PC soundtrack was CD audio and a disc-less
 install has none: ambience, jingles and SFX only. Nothing is bundled, downloaded
 or extracted, and this build's presenter is silent until the audio layer (M6).
+
+**The three-minute demo.** [`docs/demo.md`](docs/demo.md) is the alpha's whole
+capability in seven commands with the output they really printed, and
+[`examples/demo.sh`](examples/demo.sh) runs the same seven in order against
+*your* copy — `bash examples/demo.sh "<install>"` — stopping at the first
+failure and writing only to `./demo-out`.
 
 ## Configure it
 
@@ -255,6 +266,7 @@ the other writers (`present --frame`, `slice --frame/--frames`, `export --out`,
 | `export <file.wld> --out DIR` | Decode `CELL`/`TTAB`/`MAP` into PNG sheets. |
 | `slice <dir>` | Headless vertical slice: map, collision, 60 Hz tick, 16-bit frame. |
 | `present <dir>` | Present the frame at an integer scale; writes a PNG. |
+| `gif <frame-dir> --out PATH` | Fold a directory of frame PNGs into one looping animated GIF89a; `--fps` sets the delay, `--max-frames` samples evenly. |
 | `probe-anim-nmy <dir>` | Structural probe of `ANIM`/`NMY`/`GNMY`: offsets and hypotheses scored by coverage, never a claimed parse. |
 | `anim-nmy <dir>` | Decode the recovered `ANIM`/`NMY` framings; report per-world counts. |
 
@@ -299,6 +311,8 @@ it is what caught a green-channel bug in three separate copies.
 
 ```
 docs/runbook.md        the long-form guide: manifest, config, examples, exit codes
+docs/demo.md           the alpha in seven commands, with the output each printed
+examples/demo.sh       runs those seven against your own copy, into ./demo-out
 docs/architecture.md   layering, the windowed-presenter plan, clean-room boundary
 docs/file-formats.md   what is known about .WLD / CELL / TTAB / MAP / ANIM / NMY
 docs/roadmap/          milestones, releases, risks, budget
