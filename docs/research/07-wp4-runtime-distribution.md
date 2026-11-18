@@ -13,6 +13,15 @@
 >
 > **Scope.** Answers **LMX-3**, feeds **WP-6** (synthesis).
 >
+> **Revision** (LMX-10/M7 runbook, 2026-11-18). The disc-owner notes no longer
+> describe mounting a disc image. The human decision of 2026-11-18 makes an
+> unpacked game directory the project's only input and forbids image handling or
+> ripping instructions anywhere in this repository
+> ([`../roadmap/15-strategy-report.md`](../roadmap/15-strategy-report.md) §8);
+> the retail-exe appendix in §9 of that report is limited to a physical disc the
+> user owns. Q17 below is therefore out of scope for this project; it stays a
+> question for anyone who chooses to pursue it.
+>
 > **Grades** used for every claim: **V** = verified in that session (command
 > output quoted) · **D** = documented by an outside source · **H** = hypothesis,
 > test listed.
@@ -152,7 +161,7 @@ and `?` marks the part that is unverified (**H**).
 
 | Row | B1 | B2 | B3 | B4 |
 |---|---|---|---|---|
-| stock `LOMAX.EXE` | ✓ `screen_bpp` = 16, `BITSPIXEL*PLANES` = 16 **V**(mechanism) + **D** `[S8]` | ? Wine fakes/ignores the 320x240 change; the 2013 Wine 1.7 run did reach gameplay at 16 bpp **D** `[S8]` | ✗ without a disc; **✓ if the user's own disc or a CDEmu CD-DA device is present** (MCI `cdaudio` path is in the binary: `open cdaudio`, `set cdaudio time format tmsf`, `status cdaudio length track %d` **V**) | – |
+| stock `LOMAX.EXE` | ✓ `screen_bpp` = 16, `BITSPIXEL*PLANES` = 16 **V**(mechanism) + **D** `[S8]` | ? Wine fakes/ignores the 320x240 change; the 2013 Wine 1.7 run did reach gameplay at 16 bpp **D** `[S8]` | ✗ without a disc; **✓ if the user's own physical disc is in the drive** (MCI `cdaudio` path is in the binary: `open cdaudio`, `set cdaudio time format tmsf`, `status cdaudio length track %d` **V**) | – |
 | + DxWnd | ✓ (already 16 bpp) | ✓ | ✗ | – |
 | + dgVoodoo 2 | ✓ (already 16 bpp) | ✓ | ✗ | – |
 | + Lomax+ | ✓ | ✓ | ✓ (not shippable by us) | – |
@@ -215,14 +224,10 @@ export DISPLAY=:2
 export WINEPREFIX="$HOME/.local/share/lomax-wine"
 wineboot -u
 
-# 4. The CD check needs the user's own disc. Either insert it, or present the
-#    user's own image as a CD-DA-capable device (CDEmu ships in RPM Fusion on
-#    Fedora — verify before promising it):
-#      sudo dnf install cdemu-daemon cdemu-client
-#      cdemu load 0 /path/to/your/Lomax.cue
-#    A loop-mounted ISO is not equivalent: it exposes no CD-DA tracks, and the
-#    game opens MCI cdaudio for its music (strings: "open cdaudio",
-#    "play cdaudio from %d to %d notify", "status cdaudio length track %d").
+# 4. The CD check needs the user's own disc in the drive. This project does not
+#    mount disc images and gives no instructions for making one: an unpacked
+#    game directory is its only input (strategy report §8). The game opens MCI
+#    `cdaudio` for its music, so music is silent without the disc.
 
 # 5. Play from the installed copy (no writing into the game folder)
 LOMAX_GAME_DIR="$HOME/games/lomax"
@@ -241,8 +246,7 @@ are looking for a licensable path to them.
 
 Unverified in this recipe (each with its probe): the 16-bpp Xephyr under a
 modern Mesa/Vulkan driver (16-bpp visuals are increasingly refused by GPU
-drivers — **H**), the Wine 11 behaviour of the 320x240 change (probe P1/P2),
-and CDEmu-backed CD-DA under Wine (probe P3).
+drivers — **H**) and the Wine 11 behaviour of the 320x240 change (probe P1/P2).
 
 ---
 
@@ -338,7 +342,9 @@ human run on a real GPU — the probe is the *only* honest automated gate.
 * **P1** `DISPLAY=:2 wine ddrawprobe.exe` at depth 16 vs 24 → B1 mechanism.
 * **P2** same with `EmulateModeset=Y` at depth 32 → does B1 stay ✗, does B2
   improve.
-* **P3** `cdemu load 0 your.cue` then `wine LOMAX.EXE` → B3 clears, music plays.
+* **P3** `wine LOMAX.EXE` with the user's own disc in the drive → B3 clears,
+  music plays. A CD-DA device backed by a disc image is **out of scope**: this
+  project's only input is an unpacked game directory, so it mounts nothing.
 
 ---
 
@@ -397,6 +403,6 @@ No game bytes and no binary digest of a game file are included.
 |---|---|---|
 | Q15 | Does Wine 11.x still pass B1 with a 16-bpp X server, or has something in 12 years broken it? | probe P1 on a real host |
 | Q16 | Do the 2013 glitches (invisible platforms, one-frame sprite zoom) persist on Wine 11, and does dgVoodoo 2 remove them? | play test |
-| Q17 | Does a CDEmu-backed CD-DA device satisfy both the disc check and `open cdaudio`? | probe P3 |
+| Q17 | Does a CD-DA-capable device backed by a disc image satisfy both the disc check and `open cdaudio`? | **out of scope here** — this project mounts no disc images (strategy report §8); the question stays open for anyone who pursues it |
 | Q18 | Does `EmulateModeset=Y` change what B1 sees (the gate runs before any mode set)? | probe P2 |
 | Q19 | Are 16-bpp X screens still usable under Mesa/XWayland on modern GPUs, or is Xvfb+VNC the only reliable depth-16 vehicle? | run Xephyr at depth 16 on the target GPU; fall back to Xvfb |

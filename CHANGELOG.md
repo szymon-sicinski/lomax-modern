@@ -169,6 +169,28 @@ Versioning: [Semantic Versioning](https://semver.org/).
     and run as its own CI step; 31 unit tests, including negative cases that
     hand the harness a truncated green channel, a key-colour leak, a placement
     offset and a fractional-scale presentation and require it to fail.
+- **Runbook + data manifest (M2/M7, docs only)**: `docs/runbook.md`, linked from
+  the README, takes a new user from `pip install` to `lomax-modern present` with
+  only their own unpacked game directory:
+  - the Q29 manifest in full — which entries are **required** (`LOMAX.EXE`
+    presence, `WORLDS/` with ≥1 `*.WLD`) and which are **expected but
+    non-fatal** (`SFX/`, `AMBIENT/`, `JINGLES/`, `DEMOS/`, `GAME.TXT`), with
+    which of them the engine actually reads today (only `WORLDS/*.WLD`), plus
+    the case-insensitivity and one-level-nesting rules;
+  - install, run, the modern-defaults/authentic toggle and the config-file
+    reference (location per platform, keys, `--save`, unknown-key rejection);
+  - an honest controls section: **no interactive input in this build** (the
+    engine runs a scripted input for `--ticks`; keyboard/pad is M5/v0.7) — no
+    invented key bindings;
+  - an honest audio section: **there is no music track** (the PC build's music
+    was CD audio; the installed data holds 67 SFX, 12 ambient loops and 3
+    jingles → 82 WAVs), nothing bundled, downloaded or extracted;
+  - the missing-data behaviour (required vs expected verdicts, exit codes, typo
+    and nesting cases) and the platform/packaging status (Linux AppImage +
+    Windows `.exe` at M7/v0.8, macOS deferred, no store).
+- `docs/development.md` — the local game-data layout now has **one** slot, an
+  unpacked install; the disc-image slot is gone, since an unpacked directory is
+  the project's only input.
 - **Measurement (2026-11-18)**: the `MAP` collision byte is near-uniform over
   all 256 values across the 104 retail planes (`0x00` 81–95 % by world, `0x01`
   the clear second in playable worlds) — retracting the `[D]` "`0x80` solid /

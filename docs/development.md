@@ -68,9 +68,14 @@ $HOME/projects/
 ├── lomax-modern/            the repository (this)
 └── game-files/              not a repo, not publishable
     └── lomax-modern/        one folder per repository
-        ├── pc-retail/       LOMAX.EXE, WORLDS/, SFX/, DEMOS/, ...
-        └── pc-disc/         optional .bin/.cue image
+        └── pc-retail/       LOMAX.EXE, WORLDS/, SFX/, AMBIENT/, JINGLES/,
+                             DEMOS/, GAME.TXT  (an unpacked install)
 ```
+
+One slot, because the project has one input: an unpacked directory. A disc image
+is not an input anywhere in this project — there is no image slot, no mounting
+step and no extraction step (see the [runbook](runbook.md) §3 and
+`docs/roadmap/15-strategy-report.md` §8).
 
 Create a slot for a new project (never inside a checkout):
 
