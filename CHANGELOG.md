@@ -85,6 +85,15 @@ Versioning: [Semantic Versioning](https://semver.org/).
 - Local-only game-data layout: `scripts/new_game_folder.sh` creates one slot per
   repository outside every git working tree, and `.gitignore` covers
   `game-files/`, `gamedata/`, `GAMES/` as a second line of defence.
+- **`ANIM`/`NMY` framings recovered from `LOMAX.EXE` (LMX-11)** — `lomax_modern.anim_nmy`
+  plus `lomax-modern anim-nmy`, which decodes and validates the recovered sprite and
+  type-table framings against an install (read-only, counts only). `ANIM` is a
+  12-byte header + `n` frames (`i16` width/height, `u16` fields, then `w·h`
+  (or packed 4-bit `(w·h)>>1`) pixel bytes) — **566/566** chunks parse cleanly;
+  `NMY` is a variable-length name + binary-tail type table (tag/animations/frames)
+  — **9/9** parse cleanly, and each world's record count equals its max `GNMY`
+  type index + 1. Addresses and the load chain are in `docs/file-formats.md`
+  §2.8. Unit tests use synthetic fixtures only.
 - CI workflow: Python 3.10–3.13, byte-compile, unit tests, CLI smoke test.
 - Project scaffolding: `AGENTS.md`, `CONTRIBUTING.md`, `docs/architecture.md`,
   `docs/development.md`, `docs/file-formats.md`, `.gitignore` covering game data.
@@ -157,9 +166,9 @@ Versioning: [Semantic Versioning](https://semver.org/).
 ### Notes
 
 - Format claims are graded V/D/H in `docs/file-formats.md`: the chunk container,
-  `HEAD` dimensions, `MAP` cell math, `CELL` sizing and the audio formats are
-  verified against the retail install; `TTAB`, `ANIM` and `GNMY` internals remain
-  documented or hypothetical.
+  `HEAD` dimensions, `MAP` cell math, `CELL` sizing, the audio formats and the
+  `ANIM`/`NMY`/`GNMY` framings are verified against the retail install; `TTAB`
+  internals (cell order, flag semantics) remain documented or hypothetical.
 - The engine core (M3) is a Python reference simulation: a playable first world
   at the original 60 Hz, drawing a geometric frame from decoded `CELL`/`TTAB`/
   `MAP` data. The tile-art blit, palette transparency and the fade rule ship in

@@ -10,6 +10,8 @@ from pathlib import Path
 from . import __version__
 from . import png
 from .art import ArtError, export_world
+from .anim_nmy import format_anim_nmy_report
+from .anim_nmy import probe_anim_nmy as probe_recovered_framings
 from .config import (
     UNSET,
     ConfigError,
@@ -363,6 +365,23 @@ def _cmd_present(args: argparse.Namespace) -> int:
     return 0
 
 
+def _cmd_anim_nmy(args: argparse.Namespace) -> int:
+    """Decode the recovered ANIM/NMY framings and report per-world counts."""
+    game_dir = args.game_dir or os.environ.get("LOMAX_GAME_DIR")
+    if not game_dir:
+        print(
+            "error: pass a game dir, or set LOMAX_GAME_DIR",
+            file=sys.stderr,
+        )
+        return 2
+    files = find_world_files(game_dir)
+    if not files:
+        print(f"error: no *.WLD found under {game_dir}", file=sys.stderr)
+        return 2
+    print(format_anim_nmy_report(probe_recovered_framings(files)))
+    return 0
+
+
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
         prog="lomax-modern",
@@ -569,6 +588,18 @@ def build_parser() -> argparse.ArgumentParser:
         help="also write the presented surface as PNG (outside the game folder)",
     )
     p_pres.set_defaults(func=_cmd_present)
+
+    p_anm = sub.add_parser(
+        "anim-nmy",
+        help="decode the recovered ANIM/NMY framings and report counts (read-only)",
+    )
+    p_anm.add_argument(
+        "game_dir",
+        nargs="?",
+        default=None,
+        help="folder containing WORLDS/*.WLD (default: $LOMAX_GAME_DIR)",
+    )
+    p_anm.set_defaults(func=_cmd_anim_nmy)
 
     return parser
 

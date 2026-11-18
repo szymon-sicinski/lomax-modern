@@ -37,7 +37,8 @@ is in [`docs/research/02-resolution.md`](docs/research/02-resolution.md):
   audio formats), `export` (decode `CELL`/`TTAB`/`MAP` into PNG sheets),
   `wld roundtrip` (byte-exact round-trip proof) and `probe-anim-nmy` (structural
   probe for the `ANIM`/`NMY`/`GNMY` chunks: offsets and record hypotheses scored
-  by coverage).
+  by coverage), `anim-nmy` (decodes the recovered `ANIM`/`NMY` framings and
+  reports per-world counts).
 - A **reference engine core** (`lomax_modern.engine` + `lomax-modern slice`):
   a headless vertical slice that loads the first world, ticks at the original
   60 Hz, collides against the decoded `MAP`, and draws a 16-bit `B5G6R5` frame —
@@ -103,10 +104,9 @@ tests are opt-in: `LOMAX_GAME_DIR=/path/to/Lomax python -m pytest tests`.
 docs/research/     the research deliverables (read in order)
 docs/file-formats.md   what is known about .WLD / SFX / DEMOS / registry
 src/lomax_modern/  read-only CLI (doctor, wldscan, measure, export, wld, slice,
-                   probe-anim-nmy)
-                   + engine core (engine/: map/collision, 60 Hz tick, frame)
-                   present) + engine core (map/collision, 60 Hz tick, frame),
-                   scaler/filter, renderer, config and the P5 install gate
+                   probe-anim-nmy, anim-nmy, present) + engine core
+                   (engine/: map/collision, 60 Hz tick, frame), scaler/filter,
+                   renderer, config and the P5 install gate
 tests/             unit tests on synthetic fixtures + opt-in real-install tests
 ```
 

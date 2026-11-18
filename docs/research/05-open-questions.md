@@ -20,6 +20,10 @@ these can be answered from public documentation alone.
 > is retracted (near-uniform byte histogram across all 104 planes,
 > [`../file-formats.md`](../file-formats.md) §2.4). The engine core ships only
 > the 0-vs-non-zero solidity rule as a labelled hypothesis.
+> **Revision v3** (LMX-11, 2026-11-18). Q23 (`NMY`) and Q24 (`ANIM`) are
+> resolved by static analysis of the readers in `LOMAX.EXE` and validated with
+> `lomax-modern anim-nmy` (ANIM 566/566, NMY 9/9); the framings and
+> addresses are in [`../file-formats.md`](../file-formats.md) §2.5/§2.6.
 
 | # | Question | Why it matters | How to resolve |
 |---|---|---|---|
@@ -45,8 +49,8 @@ these can be answered from public documentation alone.
 | Q20 | How does a `MAP` cell name its `TTAB` tile record? | Unblocks "unique tiles per level" and a correct exporter | three disagreeing counts (43,612 distinct map words vs 75,122 records vs 14,862 distinct indices; `byte0 & 0x7F` saturates at 127) — find the map→tile lookup in the EXE. Until then, print `map cell → tile record: unresolved` |
 | Q21 | What do the `TTAB` flags `0x2000`/`0x4000` mean? | Correct tile rendering (flip-H/flip-V is the guess, not evidence) | render one flagged tile under each flag, or read the blit routine that consumes the word |
 | Q22 | Why does `BONUS.WLD` reference `TTAB` index 256 while its `CELL` chunk holds only 251 records? | Decides whether a writer must reject or preserve out-of-bank indices | find the cell-array allocation (max-index+1 vs 256-rung rounding); do **not** clamp index 256 |
-| Q23 | What is the `NMY` table's record framing? | Unblocks the `GNMY` index→name mapping and the editor's placement falsifier | the documented "`u16` size + NUL name" walk was **falsified** (0/9 chunks fully consumed — it walks one record per world file, 8–16 B of 2,352–19,292 B, then stalls; reproducible with `lomax-modern probe-anim-nmy`); read the `NMY` walker in the EXE, check "records == max `GNMY` type index + 1" |
-| Q24 | What is the `ANIM` record layout? | Unblocks 2× sprite scaling and any sprite exporter | the documented "0x38-byte record array" was **falsified** (only 44/566 chunk sizes are multiples of 0x38, and the 52 B chunk in `MAIN.WLD` opens with a token stream; reproducible with `lomax-modern probe-anim-nmy`); static-analysis the `ANIM` reader in the EXE |
+| Q23 | What is the `NMY` table's record framing? | Unblocks the `GNMY` index→name mapping and the editor's placement falsifier | ✅ **answered** — recovered from the EXE reader (VA `0x415199`, file offset `0x14599`): each record is a NUL-terminated name plus a binary tail (`W_A` flags, `W_B` animation count, then `W_B` animations of a 4-byte tag + size field + frame count + 9×u16 params + 8-byte frames). Validated 9/9; record counts 30/44/74/24/17/68/22/49/53 each equal max `GNMY` type index **+ 1** (`anim-nmy`, `file-formats.md` §2.5) |
+| Q24 | What is the `ANIM` record layout? | Unblocks 2× sprite scaling and any sprite exporter | ✅ **answered** — recovered from the EXE reader (VA `0x414A82`, file offset `0x13E82`): 12-byte header (`a, b, n, flags, type_index, pad`) then `n` frames of `i16 w, i16 h, u16 d, u16 e, pixel data`; bit 15 of `flags` = packed 4-bit pixels. Validated **566/566** (`anim-nmy`, `file-formats.md` §2.6). The 0x38-byte `SpriteFrame` is the in-memory stride, not the on-disk unit |
 | Q25 | What are the password checksum function, field bit order and gem alphabet? | The password tool can decode but not yet generate | read the password routine in the EXE, or verify two generated words in-game (LMX-7's stated falsifier) |
 | Q26 | What are the `MACR`/`PAGE` chunk layouts? | A level editor needs them decoded (7 each, 24–968 B / 1,092–40,344 B) | structural probe + the EXE's reader |
 | Q27 | Which `TTAB` counting units are authoritative? | The flag counts disagree between WP-3 (`0x2000` 15,787 / `0x4000` 1,783) and WP-5 (16,503 / 2,499), and distinct indices differ by 1 (14,861 vs 14,862) | agree a single unit (per-word vs per-record, `BONUS.WLD` included or not) before these numbers enter `file-formats.md` |
