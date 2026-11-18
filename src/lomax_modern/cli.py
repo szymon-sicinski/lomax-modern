@@ -8,11 +8,38 @@ import sys
 from pathlib import Path
 
 from . import __version__
+from . import png
+from .art import ArtError, export_world
 from .doctor import find_world_files, format_report, inventory
+from .engine.render import frame_to_rgba
+from .engine.run import run_slice
 from .measure import measure_install, summarise, to_json
 from .wld import WLDError, parse_file
 from .wldscan import format_report as format_wld_report
 from .wldscan import scan_file
+
+
+def _cmd_export(args: argparse.Namespace) -> int:
+    source = Path(args.wld_file)
+    if not source.is_file():
+        print(f"error: not a file: {source}", file=sys.stderr)
+        return 2
+    try:
+        report = export_world(
+            source,
+            args.out,
+            palette_slot=args.palette,
+            tile_layout=args.tile_layout,
+            cell_columns=args.cell_columns,
+            tile_columns=args.tile_columns,
+            scale=args.scale,
+            map_channel=args.map_field,
+        )
+    except (ArtError, OSError) as exc:
+        print(f"error: {exc}", file=sys.stderr)
+        return 2
+    print(report.format())
+    return 0
 
 
 def _cmd_doctor(args: argparse.Namespace) -> int:
@@ -93,6 +120,44 @@ def _cmd_wld_roundtrip(args: argparse.Namespace) -> int:
     return 1 if (args.check and any_diff) else 0
 
 
+def _cmd_slice(args: argparse.Namespace) -> int:
+    """Run the headless vertical slice of the first world (read-only)."""
+    game_dir = args.game_dir or os.environ.get("LOMAX_GAME_DIR")
+    if not game_dir:
+        print(
+            "error: pass GAME_DIR or set LOMAX_GAME_DIR to a Lomax installation",
+            file=sys.stderr,
+        )
+        return 2
+    if not Path(game_dir).is_dir():
+        print(f"error: not a directory: {game_dir}", file=sys.stderr)
+        return 2
+    if args.frame:
+        out = Path(args.frame).resolve()
+        root = Path(game_dir).resolve()
+        if out == root or root in out.parents:
+            print(
+                "error: --frame must not be written inside the game folder",
+                file=sys.stderr,
+            )
+            return 2
+    try:
+        report, frame = run_slice(
+            game_dir,
+            worlds=(args.world,),
+            max_ticks=args.ticks,
+            playfield=args.playfield,
+        )
+    except (OSError, ValueError) as exc:
+        print(f"error: {exc}", file=sys.stderr)
+        return 1
+    print(report.format())
+    if args.frame:
+        png.write(Path(args.frame), frame.width, frame.height, frame_to_rgba(frame))
+        print(f"frame written: {args.frame}")
+    return 0
+
+
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
         prog="lomax-modern",
@@ -121,6 +186,36 @@ def build_parser() -> argparse.ArgumentParser:
     p_meas.add_argument("--quiet", action="store_true", help="print JSON instead of the digest")
     p_meas.set_defaults(func=_cmd_measure)
 
+    p_exp = sub.add_parser(
+        "export",
+        help="decode CELL/TTAB/MAP of one .WLD into PNG sheets (read-only on the source)",
+    )
+    p_exp.add_argument("wld_file", help="path to a WORLDS/*.WLD file")
+    p_exp.add_argument("--out", required=True, help="directory for the PNG sheets")
+    p_exp.add_argument(
+        "--palette",
+        type=int,
+        default=1,
+        metavar="SLOT",
+        help="HEAD palette slot 0-9 (default 1; which slot the art uses is Q8)",
+    )
+    p_exp.add_argument(
+        "--tile-layout",
+        choices=("strip", "2x2"),
+        default="strip",
+        help="tile sheet: four cells in stored order (default) or 2x2 (G1 hypothesis)",
+    )
+    p_exp.add_argument("--cell-columns", type=int, default=32, help="cells per sheet row")
+    p_exp.add_argument("--tile-columns", type=int, default=16, help="records per sheet row")
+    p_exp.add_argument("--scale", type=int, default=2, help="integer upscale factor")
+    p_exp.add_argument(
+        "--map-field",
+        choices=("collision", "word-hi", "word-lo"),
+        default="collision",
+        help="which raw MAP byte the map sheet shows as greyscale",
+    )
+    p_exp.set_defaults(func=_cmd_export)
+
     p_wld = sub.add_parser("wld", help="read and re-emit .WLD world containers (read-only)")
     wld_sub = p_wld.add_subparsers(dest="wld_command", required=True)
 
@@ -145,6 +240,40 @@ def build_parser() -> argparse.ArgumentParser:
         help="exit 1 if any file does not round-trip byte-exactly",
     )
     p_rt.set_defaults(func=_cmd_wld_roundtrip)
+
+    p_slice = sub.add_parser(
+        "slice",
+        help="run the headless vertical slice of the first world (read-only)",
+    )
+    p_slice.add_argument(
+        "game_dir",
+        nargs="?",
+        default=None,
+        help="folder containing WORLDS/*.WLD (default: $LOMAX_GAME_DIR)",
+    )
+    p_slice.add_argument(
+        "--world",
+        default="VILLAGE",
+        help="world file stem to play (default: VILLAGE)",
+    )
+    p_slice.add_argument(
+        "--ticks",
+        type=int,
+        default=300,
+        help="maximum ticks to run (default: 300 = 5 s at 60 Hz)",
+    )
+    p_slice.add_argument(
+        "--playfield",
+        type=int,
+        default=0,
+        help="plane index used as the playable grid (default: 0)",
+    )
+    p_slice.add_argument(
+        "--frame",
+        metavar="PATH",
+        help="also write the final frame as PNG here (outside the game folder)",
+    )
+    p_slice.set_defaults(func=_cmd_slice)
 
     return parser
 

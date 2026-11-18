@@ -77,6 +77,30 @@ Versioning: [Semantic Versioning](https://semver.org/).
 - CI workflow: Python 3.10–3.13, byte-compile, unit tests, CLI smoke test.
 - Project scaffolding: `AGENTS.md`, `CONTRIBUTING.md`, `docs/architecture.md`,
   `docs/development.md`, `docs/file-formats.md`, `.gitignore` covering game data.
+- **Engine core (M3) — vertical slice**: `lomax_modern.engine`, the simulation
+  half of the own engine, and `lomax-modern slice`, a headless vertical-slice
+  runner:
+  - `level` — loads a `.WLD` into a playable grid via `wld` + `art`, with a
+    `CollisionModel` that uses only the measured 0-vs-non-zero rule (`0`
+    passable, non-zero solid `[H]`), preserves every collision byte verbatim,
+    and retracts the documented `[D]` bit-field.
+  - `state` — a fixed **60 Hz** tick: input, gravity, axis-separated movement
+    and collision resolution (player bounded by the level edge), collect and
+    exit detection, and a JSON-serialisable `Snapshot` save-state design.
+  - `render` — a 16-bit `B5G6R5` `Frame` (little-endian `u16` words) and a
+    camera that composes the collision grid plus player/collectible/exit
+    markers at the native 320x240 viewport; the art blit/palette path is M4's.
+  - `run` — `run_slice`, the headless harness that reports ticks, frames, the
+    collision-byte histogram, and a clean exit, without a display or
+    `LOMAX.EXE`.
+  - 23 unit tests over synthetic worlds (loading, collision model, gravity,
+    walking, wall/floor collision, jump, collect, exit, next-level transition,
+    fixed timestep, save-state round-trip, `B5G6R5` packing, frame
+    serialisation, camera, rendering, the headless runner).
+- **Measurement (2026-11-18)**: the `MAP` collision byte is near-uniform over
+  all 256 values across the 104 retail planes (`0x00` 81–95 % by world, `0x01`
+  the clear second in playable worlds) — retracting the `[D]` "`0x80` solid /
+  `0xC0` one-way" bit-field and filing the byte's true semantics as **Q31**.
 
 ### Notes
 
@@ -84,7 +108,11 @@ Versioning: [Semantic Versioning](https://semver.org/).
   `HEAD` dimensions, `MAP` cell math, `CELL` sizing and the audio formats are
   verified against the retail install; `TTAB`, `ANIM` and `GNMY` internals remain
   documented or hypothetical.
-- No engine work, no loader, no patcher in this release.
+- The engine core (M3) is a Python reference simulation: a playable first world
+  at the original 60 Hz, drawing a geometric frame from decoded `CELL`/`TTAB`/
+  `MAP` data. The tile-art blit, palette transparency and scaling are the M4
+  renderer card; entity and spawn placement wait on the `GNMY` semantics (Q23)
+  and the map→tile link (Q20).
 
 ## [0.1.0] - 2026-11-16
 
