@@ -32,9 +32,10 @@ is in [`docs/research/02-resolution.md`](docs/research/02-resolution.md):
 - A citation-backed research report on the game's platform, file formats and
   improvement options.
 - Read-only Python tooling that inspects **your own** copy of the game:
-  `doctor` (install inventory), `wldscan` (chunk scanner for `.WLD` files) and
+  `doctor` (install inventory), `wldscan` (chunk scanner for `.WLD` files),
   `measure` (install measurement: chunk sequence, per-section plane widths,
-  audio formats).
+  audio formats) and `probe-anim-nmy` (structural probe for the `ANIM`/`NMY`/
+  `GNMY` chunks: offsets and record hypotheses scored by coverage).
 
 ## What this repository is not
 
@@ -57,6 +58,10 @@ lomax-modern wldscan "/path/to/Lomax/WORLDS/MAIN.WLD"
 
 # Measure the install: chunk sequence, plane widths per section, audio formats
 lomax-modern measure "/path/to/Lomax" --json /tmp/lomax-report.json
+
+# Structural probe for ANIM/NMY/GNMY: offsets and record hypotheses scored by
+# coverage (labels every framing a hypothesis; prints "unresolved" when none wins)
+lomax-modern probe-anim-nmy "/path/to/Lomax"
 ```
 
 Run the tests with `python -m pytest tests -m "not realgame"`. The integration
@@ -67,7 +72,7 @@ tests are opt-in: `LOMAX_GAME_DIR=/path/to/Lomax python -m pytest tests`.
 ```
 docs/research/     the research deliverables (read in order)
 docs/file-formats.md   what is known about .WLD / SFX / DEMOS / registry
-src/lomax_modern/  read-only CLI (doctor, wldscan, measure)
+src/lomax_modern/  read-only CLI (doctor, wldscan, measure, probe-anim-nmy)
 tests/             unit tests on synthetic fixtures + opt-in real-install tests
 ```
 

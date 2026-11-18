@@ -26,6 +26,7 @@ python -m compileall -q src tests
 lomax-modern --version
 lomax-modern doctor /path/to/Lomax
 lomax-modern wldscan /path/to/Lomax/WORLDS/MAIN.WLD
+lomax-modern probe-anim-nmy /path/to/Lomax
 ```
 
 ## Testing rules
