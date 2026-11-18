@@ -66,6 +66,12 @@ Versioning: [Semantic Versioning](https://semver.org/).
 
 ### Fixed
 
+- `measure --json` and `probe-anim-nmy --json` now refuse a report destination
+  inside the game folder, with the same wording and exit code as every other
+  writer (`error: refusing to write inside the game folder (<dir>); choose an
+  output directory outside it`, exit 2, nothing created). They were the last two
+  paths that would drop a derived file into the install; `--json` outside the
+  install, and the JSON-on-stdout `--quiet` form, are unchanged.
 - `anim-nmy` refuses a `*.WLD` that is not a world container the way `slice`
   and `present` already did: one `error: cannot read …` line and exit 1,
   instead of a `WLDParseError` traceback.
