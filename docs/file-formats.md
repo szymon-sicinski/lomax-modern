@@ -256,7 +256,6 @@ reader. `ANIM` receives the payload and a per-world "MAIN" bank flag (`0x100` fo
 receives the payload, the bank flag and a plane mask. The `WRLD` chunk is the one
 place the loader checks a magic (`"PS-X"` + `1234`).
 
-
 ## 3. `SFX/*.WAV` **[V]**
 
 All 82 audio files (`SFX` 67, `AMBIENT` 12, `JINGLES` 3) are RIFF/WAVE, PCM
