@@ -68,6 +68,35 @@ card). `40-budget.md` §3 assumed "~25 % of each session's tokens re-read repo
 context"; the real figure is that **input is 30–70× output**, so context
 re-reading *is* the bill, not a 25 % surcharge.
 
+## The split that matters: processed vs billed
+
+The 219.5M input figure counts **tokens processed**, and 97.3 % of them were
+cache hits — the per-call `cache=` field says so, and `token_cost_report.py`
+now sums it:
+
+| | tokens | share |
+|---|---:|---:|
+| input processed | 221,747,051 | 100 % |
+| of which cached | 215,817,088 | **97.3 %** |
+| of which fresh | 5,929,963 | 2.7 % |
+| output | 2,437,509 | — |
+| **fresh input : output** | **2.43 : 1** | |
+
+So the headline "91 input tokens per output token" is an artifact of counting
+cache hits as input. The rate that actually drives prompt-processing cost is
+**2.4 fresh tokens per output token** — ordinary for agentic work — while the
+cached 215.8M is billed at the provider's cache rate, which on these models is
+roughly an order of magnitude below the fresh rate.
+
+Two consequences for the budget:
+
+1. **Do not report `in=` as the unit of spend.** It is a context-size metric.
+   The spend metric is `fresh_in`, plus `cached_in` weighted by the cache price,
+   plus `out`.
+2. **The real lever on cached volume is calls × context size**, not the work
+   itself: halving calls per card halves the cached bill even if every call
+   costs the same per token.
+
 ## What this does and does not mean for the money
 
 - Do **not** multiply the input column by a full-rate price and panic. The logs
