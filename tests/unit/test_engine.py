@@ -425,5 +425,22 @@ def test_run_slice_reports_ticks_and_clean_exit(tmp_path) -> None:
     assert report.clean_exit
     assert report.world == "VILLAGE"
     assert frame.width == 320 and frame.height == 240
-    assert "unresolved (Q20)" in report.format()
-    assert "retracted" in report.format()
+    text = report.format()
+    assert "unresolved (Q20)" in text
+    assert "retracted" in text
+    # Q23 (the NMY framing) is answered; the spawn/collect placeholders must
+    # blame only the GNMY *entry meaning*, not the layout or the index mapping.
+    assert "the real spawn is a GNMY entry" in text
+    assert "the real positions are GNMY entries" in text
+    assert text.count("framing verified, entry meaning unverified") == 2
+    assert "Q23" not in text
+    assert "semantics unresolved" not in text
+
+
+def test_new_game_state_docstring_grades_gnmy_entry_meaning() -> None:
+    """The docstring must keep the Q23 answer and flag only what is open."""
+    doc = new_game_state.__doc__ or ""
+    assert "unverified" in doc
+    assert "verified" in doc
+    assert "Q23" not in doc
+    assert "unresolved" not in doc

@@ -160,7 +160,12 @@ def new_game_state(
     """Build a fresh state; ``spawn`` defaults to the top-left passable cell.
 
     The default spawn is a placeholder: the real spawn lives in the ``GNMY``
-    placements, whose record semantics are unresolved (Q23).
+    placements.  The ``GNMY`` framing is verified and so is the type-index ->
+    ``NMY`` record mapping (``docs/file-formats.md`` §2.5), but what an entry
+    *means* -- what its ``u16 size`` spans, where its position sits, which
+    entries are spawns versus exits -- is unverified (verified structure,
+    unverified meaning; ``docs/research/06-measurements-and-improvements.md``
+    :50), so the spawn stays a placeholder.
     """
     if spawn_x is None or spawn_y is None:
         sx, sy = first_passable_cell(level)

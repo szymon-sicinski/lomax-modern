@@ -20,8 +20,9 @@ The scanner still holds no assumption about which file it is given, so it:
 * scores each convention by how cleanly the chunk chain terminates at EOF,
 * reports tag names, header offsets and payload offsets only,
 * decodes no payload bytes -- ``HEAD`` dimensions, ``MAP`` cells, ``CELL``
-  pixels, ``ANIM`` frames and ``GNMY``/``NMY`` type names are all opaque here
-  and stay documented as unverified where those layouts are unknown.
+  pixels, ``ANIM`` frames and ``GNMY``/``NMY`` type names are all opaque *to
+  this scanner*: it reports their offsets and sizes, and the formats
+  themselves are documented in ``docs/file-formats.md``.
 
 If two conventions explain the same file equally well, the result is marked
 ``ambiguous`` and nothing should be trusted from it beyond the tag list; on a

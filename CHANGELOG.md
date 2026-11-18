@@ -57,6 +57,20 @@ Versioning: [Semantic Versioning](https://semver.org/).
   `measure` globs worlds recursively but probes folders at the root, `slice`
   expects `WORLDS/VILLAGE.WLD` literally.
 
+### Changed
+
+- Re-graded the caveats the CLI prints instead of calling `Q23`/`Q24`
+  unresolved: `art export` now reports `sprite frames: not exported`
+  (sprite-frame export is not implemented) and notes that the `ANIM` record
+  layout is verified 566/566 (`docs/file-formats.md` §2.6); the `slice`/`present`
+  spawn and collect lines and the `new_game_state` docstring now say the `GNMY`
+  framing is verified and only the entry *meaning* is unverified
+  ("verified structure, unverified meaning",
+  `docs/research/06-measurements-and-improvements.md`:50) — the type index →
+  `NMY` record mapping is answered (§2.5). The placeholder spawn itself is
+  unchanged. `wldscan` and `measure` docstrings no longer describe the `ANIM`
+  layout as unknown or unmeasured — those modules simply do not decode it.
+
 ### Fixed
 
 - `anim-nmy` refuses a `*.WLD` that is not a world container the way `slice`
