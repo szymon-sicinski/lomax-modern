@@ -6,7 +6,23 @@ Versioning: [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
-Nothing yet.
+### Added
+
+- `lomax-modern probe-tiles` — a read-only probe that validates the recovered
+  `MAP`/`TTAB`/`CELL` tile-pipeline layouts against an install and reports the
+  counts (map words, tiles, flips, palettes, collision bytes) plus the scores of
+  the superseded interleaved/8-byte readings, so a wrong assumption stays visible.
+
+### Changed
+
+- `docs/file-formats.md` §2.4/§2.8: the `MAP` payload is `N` big-endian `u16`
+  tile words then `N` collision bytes (not 3 bytes interleaved per cell); a
+  `TTAB` record is 16 bytes = four `[16-bit index word, flag word]` cells (not
+  four 13-bit indices). The map word is a direct `TTAB` record index; the flag
+  word carries flip (`0x2000` H / `0x4000` V / `0x6000` both) and palette
+  (bits 8-11).
+- `docs/research/05-open-questions.md`: Q20, Q21, Q22 and Q27 answered; Q8, Q9
+  and Q31 narrowed by the same correction.
 
 ## [0.4.0-alpha.1] — 2026-11-18
 
