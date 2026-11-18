@@ -3,12 +3,14 @@
 from __future__ import annotations
 
 import argparse
+import os
 import sys
 from pathlib import Path
 
 from . import __version__
 from .doctor import find_world_files, format_report, inventory
 from .measure import measure_install, summarise, to_json
+from .wld import WLDError, parse_file
 from .wldscan import format_report as format_wld_report
 from .wldscan import scan_file
 
@@ -46,6 +48,51 @@ def _cmd_measure(args: argparse.Namespace) -> int:
     return 0
 
 
+def _cmd_wld_roundtrip(args: argparse.Namespace) -> int:
+    """Re-parse every world file and compare the re-emit byte-for-byte.
+
+    Read-only: nothing is written anywhere. Each file is parsed, re-serialised
+    in memory with :func:`lomax_modern.wld.World.to_bytes`, and the two byte
+    strings are compared directly. The verdict prints the file name only --
+    never payload bytes and never a file digest.
+    """
+    if args.wld_file:
+        files = [Path(args.wld_file)]
+        if not files[0].is_file():
+            print(f"error: not a file: {files[0]}", file=sys.stderr)
+            return 2
+    else:
+        game_dir = args.game_dir or os.environ.get("LOMAX_GAME_DIR")
+        if not game_dir:
+            print(
+                "error: pass a WLD file, or set LOMAX_GAME_DIR (or --game-dir) "
+                "to a Lomax installation",
+                file=sys.stderr,
+            )
+            return 2
+        files = find_world_files(game_dir)
+        if not files:
+            print(f"error: no *.WLD found under {game_dir}", file=sys.stderr)
+            return 2
+
+    any_diff = False
+    for path in files:
+        try:
+            source = path.read_bytes()
+            world = parse_file(path)
+            rebuilt = world.to_bytes()
+        except (OSError, WLDError) as exc:
+            print(f"{path.name}: ERROR ({exc})", file=sys.stderr)
+            any_diff = True
+            continue
+        ok = rebuilt == source
+        any_diff = any_diff or not ok
+        verdict = "identical" if ok else "DIFFERENT"
+        print(f"{path.name}: {verdict} ({len(world)} chunks, {len(source)} bytes)")
+
+    return 1 if (args.check and any_diff) else 0
+
+
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
         prog="lomax-modern",
@@ -73,6 +120,31 @@ def build_parser() -> argparse.ArgumentParser:
     p_meas.add_argument("--json", metavar="PATH", help="also write the raw report here")
     p_meas.add_argument("--quiet", action="store_true", help="print JSON instead of the digest")
     p_meas.set_defaults(func=_cmd_measure)
+
+    p_wld = sub.add_parser("wld", help="read and re-emit .WLD world containers (read-only)")
+    wld_sub = p_wld.add_subparsers(dest="wld_command", required=True)
+
+    p_rt = wld_sub.add_parser(
+        "roundtrip",
+        help="parse and re-serialise world files, reporting byte-identical round trips",
+    )
+    p_rt.add_argument(
+        "wld_file",
+        nargs="?",
+        default=None,
+        help="single .WLD file (default: every WORLDS/*.WLD under LOMAX_GAME_DIR)",
+    )
+    p_rt.add_argument(
+        "--game-dir",
+        default=None,
+        help="folder containing WORLDS/*.WLD (default: $LOMAX_GAME_DIR)",
+    )
+    p_rt.add_argument(
+        "--check",
+        action="store_true",
+        help="exit 1 if any file does not round-trip byte-exactly",
+    )
+    p_rt.set_defaults(func=_cmd_wld_roundtrip)
 
     return parser
 
