@@ -5,10 +5,13 @@
 - **V** — verified against the retail PC install: a measurement, with the
   command recorded in
   [`research/06-measurements-and-improvements.md`](research/06-measurements-and-improvements.md)
-  (2026-11-16) or in the LMX-7 reports of 2026-11-17
+  (2026-11-16), in the LMX-7 reports of 2026-11-17
   ([`research/07-wp3-asset-pipeline.md`](research/07-wp3-asset-pipeline.md),
   [`research/07-wp1-patching-surface.md`](research/07-wp1-patching-surface.md),
-  [`research/07-wp4-runtime-distribution.md`](research/07-wp4-runtime-distribution.md)).
+  [`research/07-wp4-runtime-distribution.md`](research/07-wp4-runtime-distribution.md)),
+  or in the LMX-11 static-analysis pass of 2026-11-18 (the `ANIM`/`NMY`/`GNMY`
+  readers in `LOMAX.EXE`, §2.5/§2.6, validated with
+  `lomax-modern probe-anim-nmy`).
 - **D** — documented by a third party `[S2]` `[S3]`, not verified here.
 - **H** — hypothesis in this repository, untested against a real file.
 - **retracted** — stated here previously and contradicted by measurement. The
@@ -134,40 +137,80 @@ palette 0 `[D]` (unverified — Q8).
   `0x4000` on 1,783–2,499 of the 300,488 words (G2 of the same report; WP-5,
   card `t_50f8aa85`, §7) — so they are quoted as a range, not a number.
 
-### 2.5 `GNMY` placements, and the `NMY` type table **[V structure, H names]**
+### 2.5 `GNMY` placements, and the `NMY` type table **[V]**
 
-Entries walk cleanly as `u16` size (little-endian) + `u16` type (little-endian):
-104 chunks, 3,593 entries. The bytes left over after the last entry are **4 in 63
-chunks and 2 in the other 41**, not 4 in all 104 — re-measured on 2026-11-17, and
-the earlier figure is annotated where it was recorded
-([`research/06-measurements-and-improvements.md`](research/06-measurements-and-improvements.md)
-§6.2). The type *index* is measured; what each index means is not, because the
-`NMY` type table (index → name) is not parseable yet:
+Recovered by static analysis of the readers in `LOMAX.EXE` — `NMY` at VA
+`0x415199` / file offset `0x14599`, `GNMY` at VA `0x414d16` / file offset
+`0x14116` — and validated against all 9 retail world files. Everything below is
+little-endian (the readers use plain `mov` on these words; only the chunk-header
+size and the `HEAD`/`WRLD` fields are byte-swapped big-endian).
 
-- The documented framing — a list of `u16` size + NUL-terminated name — is
-  **retracted**: it walks exactly **one record** per file (8–16 B of
-  2,352–19,292 B) in 9/9 worlds, and none of four conventional framings
-  (`u16`/`u32` size, name-only, 4-aligned) consumes a whole chunk (0/104; best
-  case one name recovered). What the payload does contain is 58–212 printable
-  runs of 4–14 characters at even offsets, pitch 12–18 with jumps of 36/38, each
-  run followed by `00 00` in 70–85 % of cases — a variable-length record table
-  carrying a name *plus* a binary tail. Framing graded **H**
-  ([`research/07-wp3-asset-pipeline.md`](research/07-wp3-asset-pipeline.md) G9;
-  WP-5, card `t_50f8aa85`, §1).
+**`NMY`** — a sequence of variable-length records:
 
-### 2.6 `ANIM` / sprites **[H]**
+```
+u16 count0                    # name-field size in bytes; 0 ends the table
+repeat (while count0 != 0):
+  name                       # NUL-terminated, padded; reader skips (count0>>1)*2 bytes
+  u16 W_A                    # flags word (high byte + two nibbles, used by GNMY)
+  u16 W_B                    # number of animations for this type
+  u16 gap1                   # 2 bytes, not read by the loader (0 in all retail data)
+  W_B animations, each:
+    u32 tag                  # 4-byte identifier, byte-swapped ASCII ("HANG"→"GNAH",
+                             #   "JUMP"→"PMUJ", "GRAB"→"BARG", ...)
+    u32 size                 # == 20 + 8·frame_count, not read by the loader
+    u16 count2               # frame count
+    9 × u16                  # animation parameters (width, height, offsets, ...)
+    count2 × 8-byte frames   # each {u8, u8, u16, u16, u16}
+  u16 count0                 # next record's name-field size (0 = end)
+[2 trailing zero bytes]      # retail files pad the u16 terminator to a u32
+```
 
-`SpriteFrame` records being 0x38 bytes `[S2]` is **retracted as a chunk-level
-unit**: of 566 measured `ANIM` chunks every payload size is a multiple of 4 and
-**none** is a multiple of 0x38 (e.g. 2,700 and 27,176 bytes; remainders 0–52,
-spread uniformly), so a chunk is not an array of 0x38-byte records. A
-"width, height, then w·h pixels" header tested at eight offsets under both
-endiannesses matches **0 of 566**, and `u16`-token walkers reach at best 339/566
-exact consumption, which is not proof. The chunk layout is therefore **H**:
-treat `ANIM` as an opaque blob until the reader in `LOMAX.EXE` is read
-([`research/07-wp3-asset-pipeline.md`](research/07-wp3-asset-pipeline.md) G7).
-Whether a 0x38-byte *in-memory* descriptor exists inside that stream is a
-separate claim that nothing here has tested.
+The documented framing — "a list of `u16` size + NUL-terminated name" `[S2]` — is
+**retracted**: the real records carry a *name plus a binary tail*, and the walk
+consumes the whole chunk (records/animations counted below), not one record.
+
+Measured record counts: **BONUS 30, ED 44, HAUNTED 74, MAIN 24, MAP 17,
+MEDIEVAL 68, TITLE 22, VILLAGE 49, WEST 53** — each equals that world's maximum
+`GNMY` type index **+ 1** (BONUS 29, WEST 52, HAUNTED 73) **[V]**, which is
+exactly the "records == max type index + 1" falsifier named for Q23.
+
+**`GNMY`** entries reference those records directly. Each entry is a `u16` size
++ `u16` type index (little-endian, 3,593 entries across 104 chunks); the reader
+resolves the type with `type_table[bank | type_index]`, where `bank` is `0x100`
+for `MAIN.WLD` and 0 for every other world (the loader ORs a per-world "MAIN"
+flag into the index). So **a `GNMY` type index is the zero-based position of the
+record in the `NMY` table** — not a name, a hash, or an offset into a string
+blob.
+
+### 2.6 `ANIM` / sprites **[V]**
+
+Recovered from the reader at VA `0x414A82` / file offset `0x13E82`, validated on
+**566/566** chunks. Little-endian; a 12-byte header then `n` frames:
+
+```
+u16 a              # copied verbatim by the reader
+u16 b              # copied verbatim by the reader
+u16 n              # frame count
+u16 flags          # bit 15 = packed (4-bit) pixels; low bits carried to the frame
+u16 type_index     # animation slot (reader stores the frame array at slot index+1)
+u16 pad            # skipped by the reader
+n × frame:
+   i16 width
+   i16 height
+   u16 d
+   u16 e
+   pixel data      # round4(w·h) bytes, or round4((w·h)>>1) when packed
+```
+
+The packed flag halves the storage (two 4-bit pixels per byte) and is set on
+**340** of the 566 chunks; the remaining **226** are 8-bit. Measured frame
+geometry: widths 2–220 px, heights 2–241 px, 1–46 frames per chunk, type indices
+0–147.
+
+The documented "`SpriteFrame` is 0x38 bytes" `[S2]` is **not the on-disk unit** —
+it is the in-memory stride the loader allocates per frame (`0x38` bytes in RAM);
+the on-disk framing is the one above, and no chunk is an array of `0x38`-byte
+records (re-measured: 0/566 chunk sizes are multiples of 0x38).
 
 ### 2.7 Palette rules that bite any art pipeline
 
@@ -175,6 +218,33 @@ Because index 0 is the transparent key and real white lives at 0x7FFE,
 upscaling must be **matte-aware**: treat index 0 as alpha and scale colour and
 coverage separately, or every sprite gets a halo. See
 [`research/02-resolution.md §2.5`](research/02-resolution.md#25-layer-3--higher-pixel-density-the-real-ceiling).
+
+### 2.8 Reader locations and the load chain (static analysis)
+
+The `ANIM`/`NMY`/`GNMY` framings above were recovered from the readers inside
+`LOMAX.EXE` (read-only `objdump`/Capstone pass, no execution). Addresses are
+virtual address + file offset:
+
+| Routine | VA | File offset |
+|---|---|---|
+| World loader (opens a `.WLD`, dispatches chunks) | `0x4147E0` | `0x13BE0` |
+| `ANIM` reader | `0x414A82` | `0x13E82` |
+| `NMY` reader | `0x415199` | `0x14599` |
+| `GNMY` reader | `0x414D16` | `0x14116` |
+| `File_Read` (reads N bytes into a buffer) | `0x416A70` | `0x15E70` |
+| byte-swap (`bswap`, big-endian→little-endian) | `0x416620` | `0x15A20` |
+
+**Call chain.** The world loader (`0x4147E0`, called from `0x40836A` and
+`0x40EC2C`) opens the world file, then loops: it reads the 8-byte chunk header
+(tag[4] + big-endian `u32` size) with `File_Read(8)`, byte-swaps the tag and the
+size with `0x416620`, compares the tag as a big-endian `u32` (e.g. `"ANIM"` =
+`0x414E494D`, `"NMY "` = `0x4E4D5920`) and dispatches. For a chunk it consumes it
+calls `File_Read(size)` to get the payload buffer and hands it to the per-tag
+reader. `ANIM` receives the payload and a per-world "MAIN" bank flag (`0x100` for
+`MAIN.WLD`, else 0); `NMY` receives the payload and the same bank flag; `GNMY`
+receives the payload, the bank flag and a plane mask. The `WRLD` chunk is the one
+place the loader checks a magic (`"PS-X"` + `1234`).
+
 
 ## 3. `SFX/*.WAV` **[V]**
 

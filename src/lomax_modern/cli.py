@@ -8,6 +8,7 @@ import sys
 from pathlib import Path
 
 from . import __version__
+from .anim_nmy import format_anim_nmy_report, probe_anim_nmy
 from .doctor import find_world_files, format_report, inventory
 from .measure import measure_install, summarise, to_json
 from .wld import WLDError, parse_file
@@ -93,6 +94,22 @@ def _cmd_wld_roundtrip(args: argparse.Namespace) -> int:
     return 1 if (args.check and any_diff) else 0
 
 
+def _cmd_probe_anim_nmy(args: argparse.Namespace) -> int:
+    game_dir = args.game_dir or os.environ.get("LOMAX_GAME_DIR")
+    if not game_dir:
+        print(
+            "error: pass a game dir, or set LOMAX_GAME_DIR",
+            file=sys.stderr,
+        )
+        return 2
+    files = find_world_files(game_dir)
+    if not files:
+        print(f"error: no *.WLD found under {game_dir}", file=sys.stderr)
+        return 2
+    print(format_anim_nmy_report(probe_anim_nmy(files)))
+    return 0
+
+
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
         prog="lomax-modern",
@@ -145,6 +162,18 @@ def build_parser() -> argparse.ArgumentParser:
         help="exit 1 if any file does not round-trip byte-exactly",
     )
     p_rt.set_defaults(func=_cmd_wld_roundtrip)
+
+    p_an = sub.add_parser(
+        "probe-anim-nmy",
+        help="validate the recovered ANIM/NMY framings against a game folder (read-only)",
+    )
+    p_an.add_argument(
+        "game_dir",
+        nargs="?",
+        default=None,
+        help="folder containing WORLDS/*.WLD (default: $LOMAX_GAME_DIR)",
+    )
+    p_an.set_defaults(func=_cmd_probe_anim_nmy)
 
     return parser
 
