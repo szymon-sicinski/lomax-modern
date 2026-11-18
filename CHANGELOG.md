@@ -97,6 +97,22 @@ Versioning: [Semantic Versioning](https://semver.org/).
     walking, wall/floor collision, jump, collect, exit, next-level transition,
     fixed timestep, save-state round-trip, `B5G6R5` packing, frame
     serialisation, camera, rendering, the headless runner).
+- **Renderer (M4) — 16-bit blit**: `lomax_modern.renderer`, the own-engine
+  renderer, plus a C99 core in `native/`:
+  - a 16-bit `B5G6R5` `Framebuffer` with palette lookup and the cell/tile blit
+    path from decoded `CELL`/`TTAB`, honouring transparency (index 0 leaves the
+    destination pixel untouched, so the key colour never leaks);
+  - `rgb15_to_rgb565` — the 15-bit `HEAD` palette widened to `B5G6R5` (green
+    5→6 by bit replication, `[H]`) with its inverse for round-tripping;
+  - `blit_map_field` — the raw `MAP` byte drawn as greyscale, because the
+    map→tile art link is still unresolved (Q20); no art is invented;
+  - `fade_surface_width` — the fade/dissolve surface rule `⌈w/32⌉·32`, the
+    ceiling we own and will lift at M9;
+  - `native/` reproduces the palette/blit/fade path bit-for-bit in C99, built
+    only in CI (`make -C native`), with a headless smoke binary asserting the
+    same golden `B5G6R5` words the Python oracle grades;
+  - 34 unit tests over synthetic fixtures, including the hand-derived golden
+    frame (transparent key never painted, green 5→6 expansion pinned).
 - **Measurement (2026-11-18)**: the `MAP` collision byte is near-uniform over
   all 256 values across the 104 retail planes (`0x00` 81–95 % by world, `0x01`
   the clear second in playable worlds) — retracting the `[D]` "`0x80` solid /
@@ -110,9 +126,10 @@ Versioning: [Semantic Versioning](https://semver.org/).
   documented or hypothetical.
 - The engine core (M3) is a Python reference simulation: a playable first world
   at the original 60 Hz, drawing a geometric frame from decoded `CELL`/`TTAB`/
-  `MAP` data. The tile-art blit, palette transparency and scaling are the M4
-  renderer card; entity and spawn placement wait on the `GNMY` semantics (Q23)
-  and the map→tile link (Q20).
+  `MAP` data. The tile-art blit, palette transparency and the fade rule ship in
+  `renderer.py` (+ C99 `native/`); scaling and filters stay in `scaler.py`.
+  Composing them into the engine frame, entity/spawn placement (Q23) and the
+  map→tile link (Q20) remain for the synthesis card.
 
 ## [0.1.0] - 2026-11-16
 

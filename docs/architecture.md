@@ -10,9 +10,11 @@ This repository has two deliverables with a strict separation:
 | **Read-only tooling** | `src/lomax_modern/` | the user's machine, against the user's own copy |
 
 There is deliberately no C/loader layer yet. The engine core (M3) is a
-dependency-free Python reference simulation in this package; the C/Win32
-renderer/presenter (M4) will be a separate `native/` component with its own
-build, because this package stays dependency-free Python.
+dependency-free Python reference simulation in this package; the renderer (M4)
+ships the same way — a Python reference (`renderer.py`, the oracle) plus a
+C99 core in `native/` that reproduces it bit-for-bit and is built in CI only.
+The C/Win32 *presenter* (window + surface) is still a separate future
+component, because this package stays dependency-free Python.
 
 ## 2. The clean-room boundary
 
@@ -54,15 +56,20 @@ src/lomax_modern/
   art.py          TTAB/CELL/MAP decode + palette + PNG sheets (data layer)
   png.py          stdlib-only PNG writer
   scaler.py       integer scalers, pixel-art filter, integer fit + padding
+  renderer.py     M4 renderer: 16-bit B5G6R5 blit, palette, transparency, fade
   engine/         engine core (M3): map/collision, 60 Hz tick, entities, frame
     level.py      Level + CollisionModel + load_level
     entities.py   Player, Input, Collectible, Exit, physics constants
     state.py      GameState, tick, save-state Snapshot, capture/restore
     render.py     16-bit B5G6R5 Frame, camera, collision-layer frame
     run.py        headless vertical-slice runner + report
+native/           the C99 hot-path port of renderer.py (CI-only, not at install)
+  renderer.c/.h   B5G6R5 palette/blit/fade, bit-for-bit vs renderer.py
+  smoke.c         headless golden smoke test (same words test_renderer.py grades)
+  Makefile        builds and runs the smoke binary
 tests/
   fixtures/synth.py     synthetic chunk containers (no game data)
-  unit/                 scanner, inventory, probe, scaler, art, engine
+  unit/                 scanner, inventory, probe, scaler, renderer, art, engine
   integration/          opt-in, needs LOMAX_GAME_DIR
 ```
 
@@ -136,8 +143,11 @@ tick (input, gravity, axis-separated collision, collect, exit) to a 16-bit
   0-vs-non-zero rule, flags it `[H]` in its report, and preserves every byte
   verbatim — a future decode plugs in without losing data.
 - **The frame is geometric.** It draws the collision grid and entity markers at
-  native 320x240; the tile-art blit, palette transparency, scaling and filters
-  are the M4 renderer card's job, and `scaler.py` remains that card's oracle.
+  native 320x240. The tile-art blit, palette transparency and the fade rule
+  are the M4 renderer card's job, and they now ship in `renderer.py` (oracle)
+  + `native/` (C99); scaling and filters stay in `scaler.py`. Composing the
+  art blit into the engine frame — and resolving the map→tile link (Q20) — is
+  the synthesis card's job, not invented here.
 - **Entity placement is deferred.** Spawn, collectibles and exit are explicit
   (placeholder) in the slice; the real placements live in `GNMY`, whose record
   semantics are unresolved (Q23). The map→tile link (Q20) is likewise flagged,
@@ -150,7 +160,7 @@ tick (input, gravity, axis-separated collision, collect, exit) to a 16-bit
 | `WLD` reader/writer (LMX-5) | Python | shipped in `lomax_modern.wld`, byte-exact round trip verified |
 | Exporter (LMX-6) | Python | shipped in `lomax_modern.art` + `lomax-modern export` |
 | **Engine core (M3)** | Python | shipped in `lomax_modern.engine`; reference simulation, not the presenter |
-| **Renderer (M4)** | C (Win32) | separate `native/` tree, built in CI only; `scaler.py` is its test oracle |
+| **Renderer (M4)** | Python reference + C core | `renderer.py` is the oracle; `native/` (C99) reproduces it bit-for-bit and is built in CI only; `scaler.py` grades the presentation half |
 | Upscaler (LMX-8) | Python + NumPy | index-space only; output is never committed |
 | 2x render spike (LMX-10) | C (Win32) | separate spike branch, may be abandoned |
 
