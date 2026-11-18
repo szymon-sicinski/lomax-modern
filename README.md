@@ -42,6 +42,12 @@ is in [`docs/research/02-resolution.md`](docs/research/02-resolution.md):
   a headless vertical slice that loads the first world, ticks at the original
   60 Hz, collides against the decoded `MAP`, and draws a 16-bit `B5G6R5` frame —
   with every unresolved format field flagged, not guessed.
+- A **presenter** (`lomax-modern present`): reads a JSON config (written on
+  first run), defaults to the modern profile — 16:9 surface, integer scaling,
+  `epx-aa` filter — with `--authentic` as the native 320x240 / nearest-
+  neighbour escape hatch, switches the filter at runtime, and refuses a folder
+  that is not an unpacked retail install with a file-by-file manifest. It
+  writes the presented surface as a PNG; the windowed presenter is future work.
 
 ## What this repository is not
 
@@ -77,6 +83,15 @@ LOMAX_GAME_DIR="/path/to/Lomax" python -m lomax_modern slice --world VILLAGE --t
 # Structural probe for ANIM/NMY/GNMY: offsets and record hypotheses scored by
 # coverage (labels every framing a hypothesis; prints "unresolved" when none wins)
 lomax-modern probe-anim-nmy "/path/to/Lomax"
+# Present the engine frame at the largest integer scale (modern defaults; the
+# config file is written on first run and can be saved from flags with --save)
+lomax-modern present "/path/to/Lomax" --frame /tmp/lomax-frame.png
+
+# Authentic toggle: native 320x240, nearest-neighbour, no invented smoothing
+lomax-modern present "/path/to/Lomax" --authentic --frame /tmp/lomax-native.png
+
+# Switch the filter for one run; persist a choice with --save
+lomax-modern present "/path/to/Lomax" --filter nearest --save
 ```
 
 Run the tests with `python -m pytest tests -m "not realgame"`. The integration
@@ -90,6 +105,8 @@ docs/file-formats.md   what is known about .WLD / SFX / DEMOS / registry
 src/lomax_modern/  read-only CLI (doctor, wldscan, measure, export, wld, slice,
                    probe-anim-nmy)
                    + engine core (engine/: map/collision, 60 Hz tick, frame)
+                   present) + engine core (map/collision, 60 Hz tick, frame),
+                   scaler/filter, renderer, config and the P5 install gate
 tests/             unit tests on synthetic fixtures + opt-in real-install tests
 ```
 

@@ -48,7 +48,7 @@ it will be written from public API documentation, and the file will say so.
 ```
 src/lomax_modern/
   __init__.py     version
-  cli.py          argparse entry point (doctor, wldscan, measure, export, wld, slice)
+  cli.py          argparse entry point (doctor, wldscan, measure, export, wld, slice, present)
   doctor.py       install inventory: presence, counts, sizes, SHA-256
   wld.py          .WLD chunk parser/writer (byte-exact round trip)
   wldscan.py      chunk/tag scanner with hypothesis ranking
@@ -57,6 +57,9 @@ src/lomax_modern/
   png.py          stdlib-only PNG writer
   scaler.py       integer scalers, pixel-art filter, integer fit + padding
   renderer.py     M4 renderer: 16-bit B5G6R5 blit, palette, transparency, fade
+  config.py       presenter settings + the JSON config written on first run
+  install.py      P5 install gate: file-by-file manifest, nested-root resolution
+  presenter.py    engine frame -> plan -> scaler.present (fit, filter, surface)
   engine/         engine core (M3): map/collision, 60 Hz tick, entities, frame
     level.py      Level + CollisionModel + load_level
     entities.py   Player, Input, Collectible, Exit, physics constants
@@ -105,6 +108,35 @@ not re-derived from a source we can cite, so neither was copied. Swapping in a
 bit-exact xBRZ or MMPX later is a drop-in behind `Filter`, with
 `tests/unit/test_scaler.py` as the contract.
 
+### The presenter resolves settings; it does not invent art
+
+`present` is the M4 seam: `install.py` proves the directory is an unpacked
+retail copy, `config.py` holds the persisted look, `presenter.py` turns the
+engine frame into the padded surface, and `cli.py` prints the exact geometry it
+used. Three rules keep it honest:
+
+- **Modern is the default; authentic is a profile, not a boolean.** The toggle
+  swaps the whole package (surface and filter together), and an explicit
+  `--filter`/`--surface`/`--scale` afterwards is a reported mix. Command-line
+  flags are per-run; only `--save` rewrites the config, so a one-off experiment
+  cannot silently become the permanent default.
+- **A pinned scale must fit.** `plan_presentation` raises with the largest
+  integer fit instead of letting `fit_scale` shrink the request silently; the
+  numbers in the report are the numbers that produced the image.
+- **No window is claimed.** The Python package has no display dependency, so
+  `present` computes the surface and can write it to PNG (`--frame`); the
+  Win32/C presenter remains future work (§5). The rendered frame is the
+  engine's *geometric* frame — composing decoded tile art into a world view
+  still needs the unresolved `MAP` cell -> `TTAB` record link (Q20), which the
+  presenter does not invent to look finished.
+
+The P5 gate is deliberately split into required and expected entries:
+`LOMAX.EXE` plus `WORLDS/` with at least one `*.WLD` is "the game"; missing
+`SFX/`, `AMBIENT/`, `JINGLES/` or `DEMOS/` is printed as incomplete but still
+runs. Name case is ignored and exactly one level of nesting is resolved, so a
+retail folder copied inside the directory the user points at is not reported as
+a missing file.
+
 ### Why the scanner ranks hypotheses instead of assuming one
 
 `docs/file-formats.md` §2.2 lists four unknowns in an 8-byte header (tag order,
@@ -127,6 +159,7 @@ written into `GAME.TXT` never appears in the report.
 user's install ──> doctor ──> inventory report (sizes, hashes, completeness)
                  └> wldscan ─> chunk table (tags, offsets) ──> research docs
                  └> wld/art ─> decoded TTAB/CELL/MAP ──> engine ──> 16-bit frame
+                 └> present ─> P5 manifest + config ──> engine ──> scaler ──> PNG
 ```
 
 All paths are read-only; none writes to the game folder. Fixtures used in
@@ -161,6 +194,7 @@ tick (input, gravity, axis-separated collision, collect, exit) to a 16-bit
 | Exporter (LMX-6) | Python | shipped in `lomax_modern.art` + `lomax-modern export` |
 | **Engine core (M3)** | Python | shipped in `lomax_modern.engine`; reference simulation, not the presenter |
 | **Renderer (M4)** | Python reference + C core | `renderer.py` is the oracle; `native/` (C99) reproduces it bit-for-bit and is built in CI only; `scaler.py` grades the presentation half |
+| **Presenter CLI (M4)** | Python | shipped as `lomax-modern present` (`config.py`, `install.py`, `presenter.py`): P5 manifest, persisted modern/authentic profile, integer fit and runtime filter; writes a PNG, no window — the Win32/C presenter stays future |
 | Upscaler (LMX-8) | Python + NumPy | index-space only; output is never committed |
 | 2x render spike (LMX-10) | C (Win32) | separate spike branch, may be abandoned |
 
