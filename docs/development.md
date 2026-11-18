@@ -26,6 +26,8 @@ python -m compileall -q src tests
 lomax-modern --version
 lomax-modern doctor /path/to/Lomax
 lomax-modern wldscan /path/to/Lomax/WORLDS/MAIN.WLD
+lomax-modern measure /path/to/Lomax --json /tmp/lomax-report.json
+lomax-modern export /path/to/Lomax/WORLDS/VILLAGE.WLD --out /tmp/lomax-art
 ```
 
 ## Testing rules

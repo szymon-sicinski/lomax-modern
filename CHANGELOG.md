@@ -8,6 +8,34 @@ Versioning: [Semantic Versioning](https://semver.org/).
 
 ### Added
 
+- **`lomax-modern export` — `TTAB`/`CELL`/`MAP` decoder and PNG sheet exporter**
+  (`src/lomax_modern/art.py`, `png.py`; stdlib only, no Pillow). Verified on the
+  retail install: 75,122 `TTAB` records / 300,488 cell-index words, 14,974
+  `CELL` records (14,861 of them referenced by `TTAB`), 523,229 `MAP` cells over
+  104 planes. The exporter writes `_cells.png`, `_tiles_planeNN.png` and
+  `_map_planeNN_collision.png` for one world to a user-chosen directory and
+  prints the confidence of every step:
+  - `MAP` → `TTAB` stays **unresolved (Q20)** and no unique-tile count is
+    invented; the tile sheet draws each record's four cells in stored order
+    because the order inside a record is not proven (G1).
+  - `TTAB` flag bits (`0x2000` on 16,503 words, `0x4000` on 2,499, `0x8000`
+    never) and out-of-bank indices (index 256 in `BONUS.WLD`, 1,644 words) are
+    preserved verbatim, never repaired or clamped.
+  - `ANIM` sprite frames are reported as **unresolved (Q24)** instead of being
+    guessed.
+  - The palette slot is a printed hypothesis (Q29): slot 1 renders natural art
+    where slot 0 is hue-shifted, and no container field names the slot.
+  - `export` refuses an output directory inside the install.
+- Retracted two documented format claims after measurement and recorded the
+  evidence: `colors[0]` is **not** white and real white is not at `0x7FFE`
+  (§2.3), and "all shipped tiles use palette 0" does not survive rendering
+  (§2.3, Q8). `CELL` pixel order and the `TTAB` 2x2 assembly are now graded
+  hypotheses rather than documented fact (§2.4).
+- Synthetic fixtures for `CELL`/`TTAB`/`MAP` payloads and palettes; 84 unit
+  tests plus 3 opt-in `realgame` tests that decode all 104 planes.
+- `python -m lomax_modern` now works (module entry point), not only the console
+  script.
+
 - Research report: platform assessment (Win32/MFC/DirectDraw 7, not DOS),
   three-layer resolution analysis, prior-art and licence review, ranked
   improvement backlog, open questions, cited source list.

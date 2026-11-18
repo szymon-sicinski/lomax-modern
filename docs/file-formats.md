@@ -74,12 +74,25 @@ All 9 files parse as a chain that reaches EOF (`wldscan`: `confirmed-chain`,
   reading fails for all of them.
 - Payload size is constant: **5,240 bytes (0x1478)**.
 - 10 palettes × 256 colours, little-endian, 15-bit (blue bits 0–4, red bits
-  10–14) `[D]`.
+  10–14) `[D]`; bit 15 is clear in **all 266,240 words** of the 104 `HEAD`
+  blocks **[V: `art.head_palette`]**, which is consistent with the 15-bit
+  reading but does not prove the channel order.
+- **The ten slots are not interchangeable [V measured].** In `VILLAGE.WLD` the
+  cells render as natural art with slot 1 and as a hue-shifted variant with
+  slot 0; slot 1 is the only slot non-empty in **101 of 104** `HEAD` blocks
+  (slot 0: 83). So the `[D]` claim "all shipped tiles use palette 0" is not what
+  the data shows — but no field in the container names the slot either (Q8), so
+  the exporter defaults to slot 1 **and prints that this is a hypothesis**.
+- ~~Colour 0 becomes the transparent key: white, with real white moved to
+  0x7FFE~~ — **retracted.** Measured over the 104 `HEAD` blocks, palette entry 0
+  of slot 0 takes seven different values (`0x0000`, `0x0008`, `0x1800`,
+  `0x1802`, `0x2806`, …), none of them white; `0x7FFE` occurs 10 times in the
+  whole palette block and `0x7FFF` 374 times. Index 0 is still the transparent
+  key — it is the index the renderer must skip — but its palette colour is not
+  special.
 - 0x50 bytes of editor data (0xFF filler) `[D]`.
 - A 256-bit ANIM bitmap at +0x1458 `[D]` — arithmetic confirms it:
   0x1458 + 32 = 0x1478, the measured payload size.
-- Colour 0 becomes the transparent key: white, with real white moved to 0x7FFE
-  `[D]`.
 
 Plane sizes are **not** bounded by the screen: measured widths 320–7,200 px and
 heights 240–2,928 px. Heights 240 and 256 both occur (the 256-line ones are the
@@ -94,15 +107,47 @@ palette 0 `[D]` (unverified — Q8).
 - **`MAP` [V]**: 3 bytes per 16x16 cell — a 16-bit tile word plus one collision
   byte — padded with 0–3 zero bytes so the payload size is a multiple of 4.
   Verified on all 104 sections: `size − 3·cells ∈ {0,1,2,3}` and every size is
-  4-aligned.
-- **`CELL` [V]**: whole 64-byte 8x8 palettised cells. 14,974 cells across the 9
-  files, every payload a multiple of 64.
+  4-aligned; every pad byte is zero (pad 0 on 85 planes, 1 on 3, 2 on 10, 3 on
+  6). 523,229 cells in total over 104 planes, whose cell widths run 20–450
+  (320–7,200 px).
+- **`MAP` tile word — unresolved (Q20).** The word is decodable but its meaning
+  is not: the best-scoring reading (`byte0 & 0x7F` as a tile index) has 0
+  violations on all 523,229 words, yet that field **saturates at 127** in every
+  section that uses tiles, while sibling `TTAB` banks hold up to 2,952 records.
+  The two tables are therefore not a plain per-plane index pair, so no tool in
+  this repository reports a unique-tile count; `lomax-modern export` prints
+  `map cell -> tile record: unresolved (Q20)`.
+- **`CELL` [V size, H pixels]**: 14,974 records of exactly 64 bytes, every
+  payload a multiple of 64. 64 one-byte pixels spanning the full 0–255 range
+  (222 distinct values, 18 % zeros) — which rules out packed 4-bpp pixels — so
+  8x8 is forced by the record size; the **row-major pixel order is still a
+  hypothesis** (`[H]`), and the exporter labels it as such.
+- **`TTAB` [V structure]**: 8-byte records — four **big-endian** `u16` cell
+  indices each, 75,122 records / 300,488 words across the 9 files, every
+  payload a multiple of 8. A word is a **13-bit index** (mask `0x1FFF`) plus
+  flags: `0x2000` is set on 16,503 words, `0x4000` on 2,499, `0x8000` never.
+  What the flags mean is open (Q21) and they are counted, never interpreted.
+- **Out-of-bank indices are preserved, not repaired (Q22).** `BONUS.WLD`
+  references index **256** while its `CELL` chunk holds 251 records: 1,644
+  words, and the same value is in range in every other world. Decoders keep the
+  word verbatim and re-emit it unchanged; a rendering that cannot resolve the
+  cell leaves it empty instead of drawing a substitute.
+- **Order of the four cells inside a record — unresolved (G1).** Every
+  permutation is equally consistent with the container, and a seam test found no
+  continuity across the four cells (18 % adjacent-equality at cell seams versus
+  46 % inside a cell), so the 16x16 assembly is *not* supported by the data.
+  The exporter therefore draws each record's four cells **in stored order** by
+  default and offers `--tile-layout 2x2` only as a labelled hypothesis.
 - **Collision byte [D]**: `(b & 0xC0) == 0xC0` is a one-way floor (bits 4–5
   shape, bit 3 mirror, bits 0–2 material); `0x80` is solid with
-  `0x08`/`0x10`/`0x20` blocking from below, left and right.
-- **`TTAB` [D]**: 16x16 tiles assembled from four 8x8 cells, big-endian tile
-  words, tile 0 and cell 0 empty. The tile→cell encoding and the exact entry
-  size are **not** verified; only that payloads are 4-aligned.
+  `0x08`/`0x10`/`0x20` blocking from below, left and right. Measured shape of
+  the field: 86.6 % of the 523,229 bytes are `0x00`, 2.4 % are `0x01`, and the
+  `0x80` class appears as coherent ledges — consistent with the documented
+  meaning, still not proof of it.
+- **Reproduce**: `lomax-modern export WORLDS/VILLAGE.WLD --out /tmp/lomax-art`
+  writes `_cells.png`, `_tiles_planeNN.png` and `_map_planeNN_collision.png`
+  (stdlib PNG, no Pillow) and prints the confidence of every step. Exported art
+  is a derivative work: it must never be committed.
 
 ### 2.5 `GNMY` placements **[V structure, D meaning]**
 
@@ -120,9 +165,9 @@ pixel data appended. Treat the record size as unverified.
 
 ### 2.7 Palette rules that bite any art pipeline
 
-Because index 0 is the transparent key and real white lives at 0x7FFE,
-upscaling must be **matte-aware**: treat index 0 as alpha and scale colour and
-coverage separately, or every sprite gets a halo. See
+Because index 0 is the transparent key (its palette colour is not white — see
+§2.3), upscaling must be **matte-aware**: treat index 0 as alpha and scale
+colour and coverage separately, or every sprite gets a halo. See
 [`research/02-resolution.md §2.5`](research/02-resolution.md#25-layer-3--higher-pixel-density-the-real-ceiling).
 
 ## 3. `SFX/*.WAV` **[V]**

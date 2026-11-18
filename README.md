@@ -57,7 +57,15 @@ lomax-modern wldscan "/path/to/Lomax/WORLDS/MAIN.WLD"
 
 # Measure the install: chunk sequence, plane widths per section, audio formats
 lomax-modern measure "/path/to/Lomax" --json /tmp/lomax-report.json
+
+# Decode CELL/TTAB/MAP of one world into PNG sheets (never into the install)
+lomax-modern export "/path/to/Lomax/WORLDS/VILLAGE.WLD" --out /tmp/lomax-art
 ```
+
+`export` prints the confidence of every step: it says so when the `MAP` → `TTAB`
+link is unresolved, labels the palette slot and the `CELL` pixel order as
+hypotheses, and reports `ANIM` sprite frames as unknown. Exported art is a
+derivative work of the game's assets — keep it out of any repository.
 
 Run the tests with `python -m pytest tests -m "not realgame"`. The integration
 tests are opt-in: `LOMAX_GAME_DIR=/path/to/Lomax python -m pytest tests`.

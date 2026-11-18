@@ -7,10 +7,34 @@ import sys
 from pathlib import Path
 
 from . import __version__
+from .art import ArtError, export_world
 from .doctor import find_world_files, format_report, inventory
 from .measure import measure_install, summarise, to_json
 from .wldscan import format_report as format_wld_report
 from .wldscan import scan_file
+
+
+def _cmd_export(args: argparse.Namespace) -> int:
+    source = Path(args.wld_file)
+    if not source.is_file():
+        print(f"error: not a file: {source}", file=sys.stderr)
+        return 2
+    try:
+        report = export_world(
+            source,
+            args.out,
+            palette_slot=args.palette,
+            tile_layout=args.tile_layout,
+            cell_columns=args.cell_columns,
+            tile_columns=args.tile_columns,
+            scale=args.scale,
+            map_channel=args.map_field,
+        )
+    except (ArtError, OSError) as exc:
+        print(f"error: {exc}", file=sys.stderr)
+        return 2
+    print(report.format())
+    return 0
 
 
 def _cmd_doctor(args: argparse.Namespace) -> int:
@@ -73,6 +97,36 @@ def build_parser() -> argparse.ArgumentParser:
     p_meas.add_argument("--json", metavar="PATH", help="also write the raw report here")
     p_meas.add_argument("--quiet", action="store_true", help="print JSON instead of the digest")
     p_meas.set_defaults(func=_cmd_measure)
+
+    p_exp = sub.add_parser(
+        "export",
+        help="decode CELL/TTAB/MAP of one .WLD into PNG sheets (read-only on the source)",
+    )
+    p_exp.add_argument("wld_file", help="path to a WORLDS/*.WLD file")
+    p_exp.add_argument("--out", required=True, help="directory for the PNG sheets")
+    p_exp.add_argument(
+        "--palette",
+        type=int,
+        default=1,
+        metavar="SLOT",
+        help="HEAD palette slot 0-9 (default 1; which slot the art uses is Q8)",
+    )
+    p_exp.add_argument(
+        "--tile-layout",
+        choices=("strip", "2x2"),
+        default="strip",
+        help="tile sheet: four cells in stored order (default) or 2x2 (G1 hypothesis)",
+    )
+    p_exp.add_argument("--cell-columns", type=int, default=32, help="cells per sheet row")
+    p_exp.add_argument("--tile-columns", type=int, default=16, help="records per sheet row")
+    p_exp.add_argument("--scale", type=int, default=2, help="integer upscale factor")
+    p_exp.add_argument(
+        "--map-field",
+        choices=("collision", "word-hi", "word-lo"),
+        default="collision",
+        help="which raw MAP byte the map sheet shows as greyscale",
+    )
+    p_exp.set_defaults(func=_cmd_export)
 
     return parser
 
