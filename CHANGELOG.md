@@ -16,6 +16,24 @@ Versioning: [Semantic Versioning](https://semver.org/).
   error (exit 2).
 - `engine.run.run_slice` gained an optional `on_frame(tick_index, frame)` sink,
   so a capture writes each tick instead of holding the whole run in memory.
+- `lomax-modern gif <frames-dir> --out demo.gif`: folds a directory of frame
+  PNGs (one file per 60 Hz tick) into one looping animated **GIF89a** with no
+  new dependency — `src/lomax_modern/gif.py` implements the format on the
+  standard library alone (logical screen descriptor, `NETSCAPE2.0` loop
+  extension, a graphic control extension per frame, LZW with 12-bit codes and a
+  table-reset path). The colour table is chosen by *measured* size: one global
+  palette against one palette per frame, whichever encodes smaller, using the
+  frames' exact colours when they fit in 256 and median-cut quantisation above
+  that. `--fps N` (default 30) writes the delay in centiseconds, floored at 1
+  because GIF cannot express 0; `--max-frames N` samples every k-th frame so a
+  300-tick capture does not become a 60 MB file. A sequence whose frames differ
+  in size is refused with both file names instead of being written broken, and
+  `--out` is refused inside a folder that holds `LOMAX.EXE` (the same
+  `art.refuse_into_game_folder` rule the art exporter uses).
+- `lomax_modern.png.decode` / `png.read`: the reader the GIF command needs to
+  read its own frame sequence back — non-interlaced 8-bit RGBA or RGB, all five
+  scanline filters, every chunk CRC verified, with the unsupported shapes
+  (palettised, 16-bit, interlaced) refused by name.
 
 ### Fixed
 
