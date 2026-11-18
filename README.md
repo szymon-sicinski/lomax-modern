@@ -2,8 +2,8 @@
 
 Research and read-only tooling for **The Adventures of Lomax** (Psygnosis,
 1996/97, Windows 95). Status: **research + read-only tooling + an engine-core
-vertical slice** — no game data in this repository; the measured state of the
-retail install is in
+vertical slice + an integer-scaling presenter** — no game data in this
+repository; the measured state of the retail install is in
 [`docs/research/06-measurements-and-improvements.md`](docs/research/06-measurements-and-improvements.md).
 
 The question this project starts from: *what can actually be improved in Lomax
@@ -42,6 +42,10 @@ is in [`docs/research/02-resolution.md`](docs/research/02-resolution.md):
   a headless vertical slice that loads the first world, ticks at the original
   60 Hz, collides against the decoded `MAP`, and draws a 16-bit `B5G6R5` frame —
   with every unresolved format field flagged, not guessed.
+- A **presentation layer** (`lomax-modern present`): the engine frame fitted to a
+  surface at an integer scale with a runtime-switchable pixel-art filter, modern
+  defaults in a config file and an authentic toggle — see the
+  [runbook](docs/runbook.md).
 
 ## What this repository is not
 
@@ -49,6 +53,57 @@ is in [`docs/research/02-resolution.md`](docs/research/02-resolution.md):
 - Not a CD-check bypass, and it does not patch or redistribute `LOMAX.EXE`.
 - Not a fork of `Lomax+` (that project has no licence; see
   [`docs/research/03-prior-art.md`](docs/research/03-prior-art.md)).
+
+## Runbook: from your own copy to a running presenter
+
+The engine takes **one path: an unpacked game directory** in the retail layout.
+It ships no game data, reads only the files below from *your* folder, and writes
+nothing into it.
+
+```bash
+git clone https://github.com/szymon-sicinski/lomax-modern.git && cd lomax-modern
+python3 -m venv .venv && . .venv/bin/activate
+pip install -e .
+lomax-modern present "/path/to/Lomax"            # modern defaults
+lomax-modern present "/path/to/Lomax" --authentic  # native 320x240, nearest
+```
+
+**What you must supply** (the Q29 manifest — the full table with counts is in
+[`docs/runbook.md`](docs/runbook.md#3-what-you-must-supply-the-data-manifest)):
+
+| Entry | Required | Read by the engine? |
+|---|---|---|
+| `LOMAX.EXE` | yes — presence only | **never** (presence check only) |
+| `WORLDS/` with ≥ 1 `*.WLD` | yes | **yes — the only game bytes the engine reads** |
+| `SFX/` (67 WAVs) | expected | not yet (audio layer, M6) |
+| `AMBIENT/` (12 loops) | expected | not yet (M6) |
+| `JINGLES/` (3 stingers) | expected | not yet (M6) |
+| `DEMOS/` (14 files) | expected | no |
+| `GAME.TXT` | expected | no (`measure` inspects it as a diagnostic) |
+
+"Expected" means the run reports it as an incomplete copy and continues;
+"required" means the run refuses the path with a file-by-file manifest. Name case
+is ignored, and a retail folder copied one level inside the named directory is
+resolved automatically.
+
+- **Modern defaults vs authentic toggle.** Modern (default) = 1920x1080 surface
+  with `epx-aa` and the largest integer scale; `--authentic` = native 320x240
+  with `nearest`. Flags override one axis for one run; `--save` persists them to
+  the config file (`$XDG_CONFIG_HOME/lomax-modern/config.json`,
+  `%APPDATA%\lomax-modern\config.json` on Windows, `$LOMAX_CONFIG` to override).
+- **Controls: none in this build.** `present` runs the engine's scripted input
+  for `--ticks` and has no window yet (the Win32 presenter is future,
+  [`docs/architecture.md`](docs/architecture.md) §5); keyboard and gamepad are
+  M5 (v0.7). The engine's actions are left, right and jump — no bindings are
+  invented here.
+- **There is no music track.** The PC build's soundtrack was CD audio and the
+  installed data has none: a disc-less copy has ambience (`AMBIENT/`), jingles
+  and SFX only. Nothing is bundled, downloaded or extracted, and this build's
+  presenter is silent until the audio layer (M6) reads those WAVs.
+
+Full runbook — config-file reference, example output, exit codes, the
+missing-data paths and the platform/packaging status:
+[`docs/runbook.md`](docs/runbook.md).
 
 ## Quick start
 
@@ -85,10 +140,11 @@ tests are opt-in: `LOMAX_GAME_DIR=/path/to/Lomax python -m pytest tests`.
 ## Repository layout
 
 ```
+docs/runbook.md        install -> run -> controls -> the data manifest (read this first)
 docs/research/     the research deliverables (read in order)
 docs/file-formats.md   what is known about .WLD / SFX / DEMOS / registry
 src/lomax_modern/  read-only CLI (doctor, wldscan, measure, export, wld, slice,
-                   probe-anim-nmy)
+                   probe-anim-nmy) + presenter (config, install gate, scaler)
                    + engine core (engine/: map/collision, 60 Hz tick, frame)
 tests/             unit tests on synthetic fixtures + opt-in real-install tests
 ```
