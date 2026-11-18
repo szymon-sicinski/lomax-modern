@@ -124,10 +124,39 @@ Versioning: [Semantic Versioning](https://semver.org/).
     same golden `B5G6R5` words the Python oracle grades;
   - 34 unit tests over synthetic fixtures, including the hand-derived golden
     frame (transparent key never painted, green 5→6 expansion pinned).
+- **Conformance harness (M4)**: `lomax_modern.conformance` +
+  `python -m lomax_modern.conformance` — renders synthetic scenes (own cells,
+  own palettes, deliberate index-0 holes) through the renderer and asserts the
+  output pixels:
+  - **depth 16 vs 24**: the same scene rendered as a 16-bit `B5G6R5` frame and
+    as an independent `RGB888` reference that shares no blit code, compared with
+    a tolerance *measured* by enumerating all 32,768 15-bit words — red and blue
+    must match exactly, green may differ by at most 2/255 (its 5→6→5 round
+    trip);
+  - **transparency**: every index-0 source pixel must still show the background
+    at both depths, and the transparent key colour must appear nowhere in the
+    frame (the fixture rejects an ambiguous palette, so the assertion is not
+    vacuous);
+  - **no shimmer at integer scale**: every source pixel becomes a uniform
+    `k x k` block, a one-source-pixel scroll moves the output by exactly `k`
+    pixels, and a 2.5x surface applies 2x with integer pads;
+  - headless by construction (no display, window, GPU, `LOMAX.EXE` or game data)
+    and run as its own CI step; 31 unit tests, including negative cases that
+    hand the harness a truncated green channel, a key-colour leak, a placement
+    offset and a fractional-scale presentation and require it to fail.
 - **Measurement (2026-11-18)**: the `MAP` collision byte is near-uniform over
   all 256 values across the 104 retail planes (`0x00` 81–95 % by world, `0x01`
   the clear second in playable worlds) — retracting the `[D]` "`0x80` solid /
   `0xC0` one-way" bit-field and filing the byte's true semantics as **Q31**.
+
+### Fixed
+
+- `renderer.Framebuffer.to_rgba()` over-brightened green: the 6-bit channel was
+  widened with `g<<2 | g>>2` instead of the bit-replicating `g<<2 | g>>4`, which
+  is wrong for 55 of the 64 values by up to 10/255. The expansion now lives in
+  `renderer.rgb565_to_rgb8()` (5-bit red/blue `r<<3 | r>>2`, 6-bit green
+  `g<<2 | g>>4`) and is pinned by pixel tests; found by the new depth 16 vs 24
+  conformance harness.
 
 ### Notes
 

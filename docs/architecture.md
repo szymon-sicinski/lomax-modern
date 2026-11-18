@@ -57,6 +57,7 @@ src/lomax_modern/
   png.py          stdlib-only PNG writer
   scaler.py       integer scalers, pixel-art filter, integer fit + padding
   renderer.py     M4 renderer: 16-bit B5G6R5 blit, palette, transparency, fade
+  conformance.py  headless harness: depth 16 vs 24, transparency, integer scale
   engine/         engine core (M3): map/collision, 60 Hz tick, entities, frame
     level.py      Level + CollisionModel + load_level
     entities.py   Player, Input, Collectible, Exit, physics constants
@@ -69,7 +70,8 @@ native/           the C99 hot-path port of renderer.py (CI-only, not at install)
   Makefile        builds and runs the smoke binary
 tests/
   fixtures/synth.py     synthetic chunk containers (no game data)
-  unit/                 scanner, inventory, probe, scaler, renderer, art, engine
+  unit/                 scanner, inventory, probe, scaler, renderer,
+                        conformance, art, engine
   integration/          opt-in, needs LOMAX_GAME_DIR
 ```
 
@@ -104,6 +106,30 @@ xBRZ's reference implementation is GPL and this package is MIT, and MMPX was
 not re-derived from a source we can cite, so neither was copied. Swapping in a
 bit-exact xBRZ or MMPX later is a drop-in behind `Filter`, with
 `tests/unit/test_scaler.py` as the contract.
+
+### Conformance is graded offscreen, at two depths
+
+`conformance.py` is the M4 exit criterion as a command:
+`python -m lomax_modern.conformance` renders synthetic scenes (our own cells,
+our own palettes, deliberate index-0 holes) through `renderer.py` at depth 16
+(`B5G6R5`) and at depth 24 (`RGB888`, an independent reference that shares no
+blit code — it places cells itself, so a geometry or transparency divergence is
+a pixel mismatch rather than a silent pass) and asserts the output pixels.
+
+The colour tolerance is **measured, not chosen**: it enumerates all 32,768
+15-bit words and reports the worst per-channel difference the two arithmetics
+can produce — `(0, 2, 0)`, i.e. red and blue agree exactly and green's
+5 -> 6 -> 5 round trip costs at most 2/255. Transparency is asserted twice
+(every index-0 source pixel still shows the background, and the key *colour*
+appears nowhere) and integer scaling is asserted on pixels (uniform `k x k`
+blocks, and a one-source-pixel scroll moves the output by exactly `k`), which is
+where "no shimmer" stops being an adjective. No display, window, GPU or game
+data is involved, so it runs under a bare `python` in CI. Every `check_*` takes
+the render call as a parameter, so `tests/unit/test_conformance.py` can hand it
+a broken renderer and require a failure — a checker that cannot fail is a
+tautology. (It earned that keep immediately: the depth-16 -> 24 green expansion
+was widening 6-bit green with `g >> 2` instead of `g >> 4`, which over-brightens
+55 of the 64 values by up to 10/255.)
 
 ### Why the scanner ranks hypotheses instead of assuming one
 
@@ -160,7 +186,7 @@ tick (input, gravity, axis-separated collision, collect, exit) to a 16-bit
 | `WLD` reader/writer (LMX-5) | Python | shipped in `lomax_modern.wld`, byte-exact round trip verified |
 | Exporter (LMX-6) | Python | shipped in `lomax_modern.art` + `lomax-modern export` |
 | **Engine core (M3)** | Python | shipped in `lomax_modern.engine`; reference simulation, not the presenter |
-| **Renderer (M4)** | Python reference + C core | `renderer.py` is the oracle; `native/` (C99) reproduces it bit-for-bit and is built in CI only; `scaler.py` grades the presentation half |
+| **Renderer (M4)** | Python reference + C core | `renderer.py` is the oracle; `native/` (C99) reproduces it bit-for-bit and is built in CI only; `scaler.py` grades the presentation half; `conformance.py` grades colour at depth 16 vs 24, transparency and integer scale offscreen |
 | Upscaler (LMX-8) | Python + NumPy | index-space only; output is never committed |
 | 2x render spike (LMX-10) | C (Win32) | separate spike branch, may be abandoned |
 
