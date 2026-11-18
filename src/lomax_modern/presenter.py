@@ -203,7 +203,7 @@ def image_to_rgba(image: Image) -> bytes:
         blue = word & 0x1F
         base = position * 4
         out[base] = (red << 3) | (red >> 2)
-        out[base + 1] = (green << 2) | (green >> 2)
+        out[base + 1] = (green << 2) | (green >> 4)
         out[base + 2] = (blue << 3) | (blue >> 2)
         out[base + 3] = 255
     return bytes(out)
