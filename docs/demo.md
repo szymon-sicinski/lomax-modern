@@ -70,8 +70,8 @@ verdict: looks like a complete PC install
 
 **What you are looking at:** one line per entry of *your* folder — nine world
 containers totalling 7,107,048 bytes, the `LOMAX.EXE` (505,344 bytes, hashed for
-inventory but never opened) and the audio and demo folders — and nothing is
-written.
+inventory but never read or executed by the engine) and the audio and demo
+folders — and nothing is written.
 
 ## 2. `present --modern` — one engine frame, filtered and scaled
 
@@ -124,8 +124,8 @@ frame: demo-out/frame-authentic.png (320x240)
 
 **What you are looking at:** the same engine frame with the escape hatch pulled
 — native 320×240, nearest-neighbour, no invented smoothing — so the only
-differences from step 2 are the four lines `profile`, `filter`, `surface` and
-`scale`.
+differences from step 2 are `profile`, `filter`, `surface`, `scale` and the
+output path.
 
 ### The two frames, side by side
 
