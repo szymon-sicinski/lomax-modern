@@ -34,8 +34,9 @@ is in [`docs/research/02-resolution.md`](docs/research/02-resolution.md):
 - Read-only Python tooling that inspects **your own** copy of the game:
   `doctor` (install inventory), `wldscan` (chunk scanner for `.WLD` files),
   `measure` (install measurement: chunk sequence, per-section plane widths,
-  audio formats), `export` (decode `CELL`/`TTAB`/`MAP` into PNG sheets) and
-  `wld roundtrip` (byte-exact round-trip proof).
+  audio formats), `export` (decode `CELL`/`TTAB`/`MAP` into PNG sheets),
+  `wld roundtrip` (byte-exact round-trip proof) and `probe-anim-nmy` (validates
+  the recovered `ANIM`/`NMY` framings against your install).
 - A **reference engine core** (`lomax_modern.engine` + `lomax-modern slice`):
   a headless vertical slice that loads the first world, ticks at the original
   60 Hz, collides against the decoded `MAP`, and draws a 16-bit `B5G6R5` frame —
@@ -71,6 +72,9 @@ lomax-modern export "/path/to/Lomax/WORLDS/VILLAGE.WLD" --out /tmp/art
 
 # Run the headless vertical slice of the first world (no display, no LOMAX.EXE)
 LOMAX_GAME_DIR="/path/to/Lomax" python -m lomax_modern slice --world VILLAGE --ticks 300
+
+# Validate the recovered ANIM/NMY framings against your install (counts only)
+lomax-modern probe-anim-nmy "/path/to/Lomax"
 ```
 
 Run the tests with `python -m pytest tests -m "not realgame"`. The integration
@@ -81,7 +85,8 @@ tests are opt-in: `LOMAX_GAME_DIR=/path/to/Lomax python -m pytest tests`.
 ```
 docs/research/     the research deliverables (read in order)
 docs/file-formats.md   what is known about .WLD / SFX / DEMOS / registry
-src/lomax_modern/  read-only CLI (doctor, wldscan, measure, export, wld, slice)
+src/lomax_modern/  read-only CLI (doctor, wldscan, measure, export, wld, slice,
+                   probe-anim-nmy)
                    + engine core (engine/: map/collision, 60 Hz tick, frame)
 tests/             unit tests on synthetic fixtures + opt-in real-install tests
 ```
