@@ -323,7 +323,7 @@ class Framebuffer:
             out += bytes(
                 (
                     (red << 3) | (red >> 2),
-                    (green << 2) | (green >> 2),
+                    (green << 2) | (green >> 4),
                     (blue << 3) | (blue >> 2),
                     255,
                 )
