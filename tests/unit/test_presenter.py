@@ -189,6 +189,21 @@ def test_image_to_rgba_expands_channels() -> None:
     )
 
 
+def test_image_to_rgba_expands_mid_tone_green_by_replication() -> None:
+    """Green is 6 bits: 6->8 is ``(g << 2) | (g >> 4)``, not ``>> 2``.
+
+    Full-scale green (0x07E0, g = 63) agrees under both formulas, so the
+    channel test above cannot see the difference; mid-tones can.  g = 4 -> 65
+    where ``>> 2`` would give 68.
+    """
+    assert image_to_rgba(Image(Mode.RGB565, 1, 1, (0x0200,))) == bytes((0, 65, 0, 255))
+
+    for g6 in range(64):
+        assert image_to_rgba(Image(Mode.RGB565, 1, 1, (g6 << 5,))) == bytes(
+            (0, (g6 << 2) | (g6 >> 4), 0, 255)
+        ), g6
+
+
 def test_image_to_rgba_refuses_a_non_rgb565_buffer() -> None:
     with pytest.raises(PresentationError, match="RGB565"):
         image_to_rgba(Image(Mode.INDEXED8, 1, 1, (0,)))
