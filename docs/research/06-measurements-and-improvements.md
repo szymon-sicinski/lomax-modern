@@ -218,6 +218,7 @@ falsify it, and the first executable step.
 - `TTAB` tile→cell mapping, `ANIM` frame layout and palette-per-tile are still
   unverified; nothing here should be read as a spec for them.
 - `GNMY` type indices are measured but their names are not: the NMY type table
-  is a list of `u16 size + NUL-terminated name` blocks, yet the index→type
-  mapping has not been confirmed.
+  was documented as `u16 size + NUL-terminated name` blocks, but that framing
+  is **retracted** (see `file-formats.md` §2.5); the index→type mapping has not
+  been confirmed.
 - Q2, Q8, Q10, Q11, Q12 stay `blocked` for the reasons in §6.4.
