@@ -10,14 +10,31 @@ from pathlib import Path
 from . import __version__
 from . import png
 from .art import ArtError, export_world
+from .config import (
+    UNSET,
+    ConfigError,
+    default_config_path,
+    load_or_create,
+    resolve_settings,
+    write_config,
+)
 from .anim_nmy import format_anim_nmy_report
 from .anim_nmy import probe_anim_nmy as probe_recovered_framings
 from .doctor import find_world_files, format_report, inventory
 from .engine.render import frame_to_rgba
 from .engine.run import run_slice
+from .install import check_install, is_inside_tree, resolve_world
 from .measure import measure_install, summarise, to_json
 from .probe_anim_nmy import format_report as format_probe_report
 from .probe_anim_nmy import probe_anim_nmy
+
+from .presenter import (
+    PresentationError,
+    image_to_rgba,
+    plan_presentation,
+    present_frame,
+)
+from .scaler import Filter
 from .wld import WLDError, parse_file
 from .wldscan import format_report as format_wld_report
 from .wldscan import scan_file
@@ -163,6 +180,9 @@ def _cmd_slice(args: argparse.Namespace) -> int:
             max_ticks=args.ticks,
             playfield=args.playfield,
         )
+    except WLDError as exc:
+        print(f"error: cannot read {args.world}.WLD: {exc}", file=sys.stderr)
+        return 1
     except (OSError, ValueError) as exc:
         print(f"error: {exc}", file=sys.stderr)
         return 1
@@ -170,6 +190,184 @@ def _cmd_slice(args: argparse.Namespace) -> int:
     if args.frame:
         png.write(Path(args.frame), frame.width, frame.height, frame_to_rgba(frame))
         print(f"frame written: {args.frame}")
+    return 0
+
+
+def _parse_surface(text: str) -> tuple[int, int]:
+    """Parse ``WIDTHxHEIGHT`` (``x``, ``*`` or ``,`` accepted)."""
+    cleaned = text.lower().replace(" ", "")
+    for separator in ("x", "*", ","):
+        if separator in cleaned:
+            parts = cleaned.split(separator)
+            break
+    else:
+        raise argparse.ArgumentTypeError(
+            f"surface must be WIDTHxHEIGHT, got {text!r}"
+        )
+    if len(parts) != 2 or not all(parts):
+        raise argparse.ArgumentTypeError(
+            f"surface must be WIDTHxHEIGHT, got {text!r}"
+        )
+    try:
+        width, height = int(parts[0]), int(parts[1])
+    except ValueError:
+        raise argparse.ArgumentTypeError(
+            f"surface must be two ints, got {text!r}"
+        ) from None
+    if width < 1 or height < 1:
+        raise argparse.ArgumentTypeError(
+            f"surface must be positive, got {width}x{height}"
+        )
+    return (width, height)
+
+
+def _parse_scale(text: str) -> int | str:
+    """Parse an integer factor, or ``auto`` for the largest integer fit."""
+    if text.casefold() == "auto":
+        return "auto"
+    try:
+        value = int(text)
+    except ValueError:
+        raise argparse.ArgumentTypeError(
+            f"scale must be a positive int or 'auto', got {text!r}"
+        ) from None
+    if value < 1:
+        raise argparse.ArgumentTypeError(f"scale must be >= 1, got {value}")
+    return value
+
+
+def _non_negative_int(text: str) -> int:
+    try:
+        value = int(text)
+    except ValueError:
+        raise argparse.ArgumentTypeError(f"expected an int, got {text!r}") from None
+    if value < 0:
+        raise argparse.ArgumentTypeError(f"must be >= 0, got {value}")
+    return value
+
+
+def _cmd_present(args: argparse.Namespace) -> int:
+    """Render the engine's frame through the configured presentation.
+
+    Read-only on the game folder: the only writes are the config file (on first
+    run or with ``--save``) and an optional ``--frame`` PNG, both refused when
+    they would land inside the install.
+    """
+    requested = Path(args.game_dir).expanduser()
+    manifest = check_install(requested)
+    if not manifest.ok:
+        print(manifest.format(), file=sys.stderr)
+        print(
+            f"error: not an unpacked Lomax game directory: {requested}",
+            file=sys.stderr,
+        )
+        print(
+            "hint: present expects the retail layout (WORLDS/ with *.WLD, SFX/, "
+            "AMBIENT/, JINGLES/, DEMOS/, LOMAX.EXE). It never reads a disc image.",
+            file=sys.stderr,
+        )
+        return 2
+    print(manifest.format())
+
+    config_path = (
+        Path(args.config).expanduser() if args.config else default_config_path()
+    )
+    if is_inside_tree(config_path, manifest.root):
+        print(
+            f"error: refusing to write the config inside the game folder "
+            f"({manifest.root}); pass --config elsewhere",
+            file=sys.stderr,
+        )
+        return 2
+
+    frame_path: Path | None = None
+    if args.frame:
+        frame_path = Path(args.frame).expanduser()
+        if is_inside_tree(frame_path, manifest.root):
+            print(
+                f"error: --frame must not be written inside the game folder "
+                f"({manifest.root}); choose a path outside it",
+                file=sys.stderr,
+            )
+            return 2
+
+    try:
+        stored, created = load_or_create(config_path)
+        settings = resolve_settings(
+            stored,
+            modern=args.modern,
+            filter=args.filter,
+            surface=args.surface,
+            scale=UNSET if args.scale is None else args.scale,
+        )
+    except ConfigError as exc:
+        print(f"error: {exc}", file=sys.stderr)
+        return 2
+
+    state = "created with modern defaults" if created else "existing"
+    print(f"config: {config_path} ({state})")
+
+    try:
+        world_path = resolve_world(manifest, args.world)
+    except LookupError as exc:
+        print(f"error: {exc}", file=sys.stderr)
+        return 2
+
+    try:
+        report, frame = run_slice(
+            manifest.root,
+            worlds=(world_path.stem,),
+            world_path=world_path,
+            max_ticks=args.ticks,
+            playfield=args.playfield,
+        )
+        plan = plan_presentation(settings, frame.width, frame.height)
+        presentation = present_frame(frame, plan)
+    except PresentationError as exc:
+        print(f"error: {exc}", file=sys.stderr)
+        return 2
+    except WLDError as exc:
+        print(f"error: cannot read {world_path.name}: {exc}", file=sys.stderr)
+        return 1
+    except (OSError, ValueError) as exc:
+        print(f"error: {exc}", file=sys.stderr)
+        return 1
+
+    print(f"world: {world_path.name}")
+    print(
+        f"engine: {report.ticks} ticks at 60 Hz (fixed by the engine core), "
+        f"{report.frames} frames, exit reached: "
+        f"{'yes' if report.complete else 'no'}"
+    )
+    for line in plan.describe():
+        print(line)
+
+    if args.save:
+        try:
+            write_config(config_path, settings)
+        except ConfigError as exc:
+            print(f"error: {exc}", file=sys.stderr)
+            return 2
+        print(f"saved: {config_path}")
+
+    if frame_path is not None:
+        surface = presentation.surface
+        try:
+            png.write(
+                frame_path,
+                surface.width,
+                surface.height,
+                image_to_rgba(surface),
+            )
+        except (OSError, png.PNGError) as exc:
+            print(f"error: cannot write frame: {exc}", file=sys.stderr)
+            return 1
+        print(f"frame: {frame_path} ({surface.width}x{surface.height})")
+    else:
+        print(
+            "frame: none written (pass --frame PATH for a PNG; this build has no "
+            "window -- the Win32 presenter remains future, docs/architecture.md §5)"
+        )
     return 0
 
 
@@ -319,6 +517,83 @@ def build_parser() -> argparse.ArgumentParser:
     p_probe.add_argument("--quiet", action="store_true", help="print JSON instead of the digest")
     p_probe.set_defaults(func=_cmd_probe_anim_nmy)
 
+    p_pres = sub.add_parser(
+        "present",
+        help="present the engine frame at an integer scale (modern defaults, config file)",
+    )
+    p_pres.add_argument(
+        "game_dir", help="unpacked game folder in the retail layout (no ISO)"
+    )
+    p_pres.add_argument(
+        "--config",
+        metavar="PATH",
+        default=None,
+        help="config file (default: platform config dir; written on first run)",
+    )
+    p_pres.add_argument(
+        "--world",
+        metavar="NAME",
+        default=None,
+        help="world stem to play (default: the first *.WLD in WORLDS/)",
+    )
+    p_pres.add_argument(
+        "--ticks",
+        type=_non_negative_int,
+        default=300,
+        help="maximum engine ticks to run (default: 300 = 5 s at 60 Hz)",
+    )
+    p_pres.add_argument(
+        "--playfield",
+        type=_non_negative_int,
+        default=0,
+        help="plane index used as the playable grid (default: 0)",
+    )
+    profile = p_pres.add_mutually_exclusive_group()
+    profile.add_argument(
+        "--modern",
+        dest="modern",
+        action="store_const",
+        const=True,
+        help="modern profile: widescreen surface + epx-aa filter (the default)",
+    )
+    profile.add_argument(
+        "--authentic",
+        dest="modern",
+        action="store_const",
+        const=False,
+        help="authentic profile: native 320x240 + nearest filter",
+    )
+    p_pres.add_argument(
+        "--filter",
+        choices=tuple(item.value for item in Filter),
+        default=None,
+        help="filter override for this run (runtime switch)",
+    )
+    p_pres.add_argument(
+        "--surface",
+        type=_parse_surface,
+        default=None,
+        metavar="WxH",
+        help="presentation surface override (default: from the config)",
+    )
+    p_pres.add_argument(
+        "--scale",
+        type=_parse_scale,
+        default=None,
+        metavar="N|auto",
+        help="integer scale override, or 'auto' for the largest fit",
+    )
+    p_pres.add_argument(
+        "--save",
+        action="store_true",
+        help="persist the effective settings to the config file",
+    )
+    p_pres.add_argument(
+        "--frame",
+        metavar="PATH",
+        help="also write the presented surface as PNG (outside the game folder)",
+    )
+    p_pres.set_defaults(func=_cmd_present)
     p_anm = sub.add_parser(
         "anim-nmy",
         help="decode the recovered ANIM/NMY framings and report counts (read-only)",

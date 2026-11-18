@@ -117,10 +117,108 @@ Versioning: [Semantic Versioning](https://semver.org/).
     walking, wall/floor collision, jump, collect, exit, next-level transition,
     fixed timestep, save-state round-trip, `B5G6R5` packing, frame
     serialisation, camera, rendering, the headless runner).
+- **Renderer (M4) — 16-bit blit**: `lomax_modern.renderer`, the own-engine
+  renderer, plus a C99 core in `native/`:
+  - a 16-bit `B5G6R5` `Framebuffer` with palette lookup and the cell/tile blit
+    path from decoded `CELL`/`TTAB`, honouring transparency (index 0 leaves the
+    destination pixel untouched, so the key colour never leaks);
+  - `rgb15_to_rgb565` — the 15-bit `HEAD` palette widened to `B5G6R5` (green
+    5→6 by bit replication, `[H]`) with its inverse for round-tripping;
+  - `blit_map_field` — the raw `MAP` byte drawn as greyscale, because the
+    map→tile art link is still unresolved (Q20); no art is invented;
+  - `fade_surface_width` — the fade/dissolve surface rule `⌈w/32⌉·32`, the
+    ceiling we own and will lift at M9;
+  - `native/` reproduces the palette/blit/fade path bit-for-bit in C99, built
+    only in CI (`make -C native`), with a headless smoke binary asserting the
+    same golden `B5G6R5` words the Python oracle grades;
+  - 34 unit tests over synthetic fixtures, including the hand-derived golden
+    frame (transparent key never painted, green 5→6 expansion pinned).
+- **Presenter CLI (M4)**: `lomax-modern present <game_dir>` — the engine frame
+  through the presentation layer, with the config file written on first run:
+  - `config.py` — versioned, validated JSON (`modern`, `filter`, `surface`,
+    `scale`) at the platform config path (`--config` / `$LOMAX_CONFIG`
+    override). Modern defaults are 1920x1080, `epx-aa`, auto integer scale;
+    authentic is a whole profile (`--authentic`: native 320x240, `nearest`).
+    Flags apply to one run; `--save` persists the effective settings.
+  - `install.py` — the P5 gate: a file-by-file manifest (names, counts, sizes;
+    no contents, no digests). Required: `LOMAX.EXE` and `WORLDS/` with at least
+    one `*.WLD`. Expected: `SFX/`, `AMBIENT/`, `JINGLES/`, `DEMOS/`, reported as
+    incomplete but non-fatal. Name case is ignored and exactly one level of
+    nested install (retail folder copied inside the slot) is resolved.
+  - `presenter.py` — one plan (source size, surface, integer fit, filter) and
+    one call to `scaler.present`; a pinned scale that does not fit is refused
+    with the largest integer fit instead of being silently shrunk.
+  - `present --frame out.png` writes the padded surface with the stdlib PNG
+    writer. There is no window in this build (the Win32 presenter remains
+    future), and the frame is the engine's geometric frame: the `MAP`→`TTAB`
+    art link (Q20) is still unresolved, so no art is invented to fill it.
+  - `engine.run_slice` accepts an explicit world path, so a resolved install
+    with lower-case folder names runs without renaming the user's files.
+  - 79 unit tests over synthetic installs and frames: first-run config, schema
+    rejection, modern/authentic resolution, `--save` persistence, manifest
+    refusal, nested and case-insensitive layouts, runtime filter change (the
+    written frame differs), and scale refusal.
+- **Conformance harness (M4)**: `lomax_modern.conformance` +
+  `python -m lomax_modern.conformance` — renders synthetic scenes (own cells,
+  own palettes, deliberate index-0 holes) through the renderer and asserts the
+  output pixels:
+  - **depth 16 vs 24**: the same scene rendered as a 16-bit `B5G6R5` frame and
+    as an independent `RGB888` reference that shares no blit code, compared with
+    a tolerance *measured* by enumerating all 32,768 15-bit words — red and blue
+    must match exactly, green may differ by at most 2/255 (its 5→6→5 round
+    trip);
+  - **transparency**: every index-0 source pixel must still show the background
+    at both depths, and the transparent key colour must appear nowhere in the
+    frame (the fixture rejects an ambiguous palette, so the assertion is not
+    vacuous);
+  - **no shimmer at integer scale**: every source pixel becomes a uniform
+    `k x k` block, a one-source-pixel scroll moves the output by exactly `k`
+    pixels, and a 2.5x surface applies 2x with integer pads;
+  - headless by construction (no display, window, GPU, `LOMAX.EXE` or game data)
+    and run as its own CI step; 31 unit tests, including negative cases that
+    hand the harness a truncated green channel, a key-colour leak, a placement
+    offset and a fractional-scale presentation and require it to fail.
+- **Runbook + data manifest (M2/M7, docs only)**: `docs/runbook.md`, linked from
+  the README, takes a new user from `pip install` to `lomax-modern present` with
+  only their own unpacked game directory:
+  - the Q29 manifest in full — which entries are **required** (`LOMAX.EXE`
+    presence, `WORLDS/` with ≥1 `*.WLD`) and which are **expected but
+    non-fatal** (`SFX/`, `AMBIENT/`, `JINGLES/`, `DEMOS/`, `GAME.TXT`), with
+    which of them the engine actually reads today (only `WORLDS/*.WLD`), plus
+    the case-insensitivity and one-level-nesting rules;
+  - install, run, the modern-defaults/authentic toggle and the config-file
+    reference (location per platform, keys, `--save`, unknown-key rejection);
+  - an honest controls section: **no interactive input in this build** (the
+    engine runs a scripted input for `--ticks`; keyboard/pad is M5/v0.7) — no
+    invented key bindings;
+  - an honest audio section: **there is no music track** (the PC build's music
+    was CD audio; the installed data holds 67 SFX, 12 ambient loops and 3
+    jingles → 82 WAVs), nothing bundled, downloaded or extracted;
+  - the missing-data behaviour (required vs expected verdicts, exit codes, typo
+    and nesting cases) and the platform/packaging status (Linux AppImage +
+    Windows `.exe` at M7/v0.8, macOS deferred, no store).
+- `docs/development.md` — the local game-data layout now has **one** slot, an
+  unpacked install; the disc-image slot is gone, since an unpacked directory is
+  the project's only input.
 - **Measurement (2026-11-18)**: the `MAP` collision byte is near-uniform over
   all 256 values across the 104 retail planes (`0x00` 81–95 % by world, `0x01`
   the clear second in playable worlds) — retracting the `[D]` "`0x80` solid /
   `0xC0` one-way" bit-field and filing the byte's true semantics as **Q31**.
+
+### Fixed
+
+- `renderer.Framebuffer.to_rgba()` over-brightened green: the 6-bit channel was
+  widened with `g<<2 | g>>2` instead of the bit-replicating `g<<2 | g>>4`, which
+  changes 55 of the 64 green values — over-brightens 46 by up to 12/255, under-brightens 9 by up to 3/255. The expansion now lives in
+  `renderer.rgb565_to_rgb8()` (5-bit red/blue `r<<3 | r>>2`, 6-bit green
+  `g<<2 | g>>4`) and is pinned by pixel tests; found by the new depth 16 vs 24
+  conformance harness.
+- `engine.render.unpack_rgb565` had the same over-brightened green (it feeds
+  `frame_to_rgba()`, i.e. every PNG the engine frame writes); now widened by bit
+  replication too, matching `renderer.rgb565_to_rgb8`.
+- `lomax-modern present` and `lomax-modern slice` no longer dump a traceback on
+  a `*.WLD` that is not a world container: the `WLDParseError` is caught and
+  reported as `error: cannot read <name>: offset …` with exit 1.
 
 ### Notes
 
@@ -130,9 +228,10 @@ Versioning: [Semantic Versioning](https://semver.org/).
   internals (cell order, flag semantics) remain documented or hypothetical.
 - The engine core (M3) is a Python reference simulation: a playable first world
   at the original 60 Hz, drawing a geometric frame from decoded `CELL`/`TTAB`/
-  `MAP` data. The tile-art blit, palette transparency and scaling are the M4
-  renderer card; entity and spawn placement wait on the `GNMY` semantics (Q23)
-  and the map→tile link (Q20).
+  `MAP` data. The tile-art blit, palette transparency and the fade rule ship in
+  `renderer.py` (+ C99 `native/`); scaling and filters stay in `scaler.py`.
+  Composing them into the engine frame, entity/spawn placement (Q23) and the
+  map→tile link (Q20) remain for the synthesis card.
 
 ## [0.1.0] - 2026-11-16
 

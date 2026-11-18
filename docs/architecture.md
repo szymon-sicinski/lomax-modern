@@ -10,9 +10,11 @@ This repository has two deliverables with a strict separation:
 | **Read-only tooling** | `src/lomax_modern/` | the user's machine, against the user's own copy |
 
 There is deliberately no C/loader layer yet. The engine core (M3) is a
-dependency-free Python reference simulation in this package; the C/Win32
-renderer/presenter (M4) will be a separate `native/` component with its own
-build, because this package stays dependency-free Python.
+dependency-free Python reference simulation in this package; the renderer (M4)
+ships the same way — a Python reference (`renderer.py`, the oracle) plus a
+C99 core in `native/` that reproduces it bit-for-bit and is built in CI only.
+The C/Win32 *presenter* (window + surface) is still a separate future
+component, because this package stays dependency-free Python.
 
 ## 2. The clean-room boundary
 
@@ -46,7 +48,7 @@ it will be written from public API documentation, and the file will say so.
 ```
 src/lomax_modern/
   __init__.py     version
-  cli.py          argparse entry point (doctor, wldscan, measure, export, wld, slice)
+  cli.py          argparse entry point (doctor, wldscan, measure, export, wld, slice, present)
   doctor.py       install inventory: presence, counts, sizes, SHA-256
   wld.py          .WLD chunk parser/writer (byte-exact round trip)
   wldscan.py      chunk/tag scanner with hypothesis ranking
@@ -54,15 +56,25 @@ src/lomax_modern/
   art.py          TTAB/CELL/MAP decode + palette + PNG sheets (data layer)
   png.py          stdlib-only PNG writer
   scaler.py       integer scalers, pixel-art filter, integer fit + padding
+  renderer.py     M4 renderer: 16-bit B5G6R5 blit, palette, transparency, fade
+  config.py       presenter settings + the JSON config written on first run
+  install.py      P5 install gate: file-by-file manifest, nested-root resolution
+  presenter.py    engine frame -> plan -> scaler.present (fit, filter, surface)
+  conformance.py  headless harness: depth 16 vs 24, transparency, integer scale
   engine/         engine core (M3): map/collision, 60 Hz tick, entities, frame
     level.py      Level + CollisionModel + load_level
     entities.py   Player, Input, Collectible, Exit, physics constants
     state.py      GameState, tick, save-state Snapshot, capture/restore
     render.py     16-bit B5G6R5 Frame, camera, collision-layer frame
     run.py        headless vertical-slice runner + report
+native/           the C99 hot-path port of renderer.py (CI-only, not at install)
+  renderer.c/.h   B5G6R5 palette/blit/fade, bit-for-bit vs renderer.py
+  smoke.c         headless golden smoke test (same words test_renderer.py grades)
+  Makefile        builds and runs the smoke binary
 tests/
   fixtures/synth.py     synthetic chunk containers (no game data)
-  unit/                 scanner, inventory, probe, scaler, art, engine
+  unit/                 scanner, inventory, probe, scaler, renderer,
+                        conformance, art, engine
   integration/          opt-in, needs LOMAX_GAME_DIR
 ```
 
@@ -98,6 +110,57 @@ not re-derived from a source we can cite, so neither was copied. Swapping in a
 bit-exact xBRZ or MMPX later is a drop-in behind `Filter`, with
 `tests/unit/test_scaler.py` as the contract.
 
+### The presenter resolves settings; it does not invent art
+
+`present` is the M4 seam: `install.py` proves the directory is an unpacked
+retail copy, `config.py` holds the persisted look, `presenter.py` turns the
+engine frame into the padded surface, and `cli.py` prints the exact geometry it
+used. Three rules keep it honest:
+
+- **Modern is the default; authentic is a profile, not a boolean.** The toggle
+  swaps the whole package (surface and filter together), and an explicit
+  `--filter`/`--surface`/`--scale` afterwards is a reported mix. Command-line
+  flags are per-run; only `--save` rewrites the config, so a one-off experiment
+  cannot silently become the permanent default.
+- **A pinned scale must fit.** `plan_presentation` raises with the largest
+  integer fit instead of letting `fit_scale` shrink the request silently; the
+  numbers in the report are the numbers that produced the image.
+- **No window is claimed.** The Python package has no display dependency, so
+  `present` computes the surface and can write it to PNG (`--frame`); the
+  Win32/C presenter remains future work (§5). The rendered frame is the
+  engine's *geometric* frame — composing decoded tile art into a world view
+  still needs the unresolved `MAP` cell -> `TTAB` record link (Q20), which the
+  presenter does not invent to look finished.
+
+The P5 gate is deliberately split into required and expected entries:
+`LOMAX.EXE` plus `WORLDS/` with at least one `*.WLD` is "the game"; missing
+`SFX/`, `AMBIENT/`, `JINGLES/` or `DEMOS/` is printed as incomplete but still
+runs. Name case is ignored and exactly one level of nesting is resolved, so a
+retail folder copied inside the directory the user points at is not reported as
+a missing file.
+### Conformance is graded offscreen, at two depths
+
+`conformance.py` is the M4 exit criterion as a command:
+`python -m lomax_modern.conformance` renders synthetic scenes (our own cells,
+our own palettes, deliberate index-0 holes) through `renderer.py` at depth 16
+(`B5G6R5`) and at depth 24 (`RGB888`, an independent reference that shares no
+blit code — it places cells itself, so a geometry or transparency divergence is
+a pixel mismatch rather than a silent pass) and asserts the output pixels.
+
+The colour tolerance is **measured, not chosen**: it enumerates all 32,768
+15-bit words and reports the worst per-channel difference the two arithmetics
+can produce — `(0, 2, 0)`, i.e. red and blue agree exactly and green's
+5 -> 6 -> 5 round trip costs at most 2/255. Transparency is asserted twice
+(every index-0 source pixel still shows the background, and the key *colour*
+appears nowhere) and integer scaling is asserted on pixels (uniform `k x k`
+blocks, and a one-source-pixel scroll moves the output by exactly `k`), which is
+where "no shimmer" stops being an adjective. No display, window, GPU or game
+data is involved, so it runs under a bare `python` in CI. Every `check_*` takes
+the render call as a parameter, so `tests/unit/test_conformance.py` can hand it
+a broken renderer and require a failure — a checker that cannot fail is a
+tautology. (It earned that keep immediately: the depth-16 -> 24 green expansion
+was widening 6-bit green with `g >> 2` instead of `g >> 4`, which changes 55 of the 64 green values — over-brightens 46 by up to 12/255, under-brightens 9 by up to 3/255.)
+
 ### Why the scanner ranks hypotheses instead of assuming one
 
 `docs/file-formats.md` §2.2 lists four unknowns in an 8-byte header (tag order,
@@ -120,6 +183,7 @@ written into `GAME.TXT` never appears in the report.
 user's install ──> doctor ──> inventory report (sizes, hashes, completeness)
                  └> wldscan ─> chunk table (tags, offsets) ──> research docs
                  └> wld/art ─> decoded TTAB/CELL/MAP ──> engine ──> 16-bit frame
+                 └> present ─> P5 manifest + config ──> engine ──> scaler ──> PNG
 ```
 
 All paths are read-only; none writes to the game folder. Fixtures used in
@@ -136,8 +200,11 @@ tick (input, gravity, axis-separated collision, collect, exit) to a 16-bit
   0-vs-non-zero rule, flags it `[H]` in its report, and preserves every byte
   verbatim — a future decode plugs in without losing data.
 - **The frame is geometric.** It draws the collision grid and entity markers at
-  native 320x240; the tile-art blit, palette transparency, scaling and filters
-  are the M4 renderer card's job, and `scaler.py` remains that card's oracle.
+  native 320x240. The tile-art blit, palette transparency and the fade rule
+  are the M4 renderer card's job, and they now ship in `renderer.py` (oracle)
+  + `native/` (C99); scaling and filters stay in `scaler.py`. Composing the
+  art blit into the engine frame — and resolving the map→tile link (Q20) — is
+  the synthesis card's job, not invented here.
 - **Entity placement is deferred.** Spawn, collectibles and exit are explicit
   (placeholder) in the slice; the real placements live in `GNMY`, whose record
   semantics are unresolved (Q23). The map→tile link (Q20) is likewise flagged,
@@ -150,7 +217,8 @@ tick (input, gravity, axis-separated collision, collect, exit) to a 16-bit
 | `WLD` reader/writer (LMX-5) | Python | shipped in `lomax_modern.wld`, byte-exact round trip verified |
 | Exporter (LMX-6) | Python | shipped in `lomax_modern.art` + `lomax-modern export` |
 | **Engine core (M3)** | Python | shipped in `lomax_modern.engine`; reference simulation, not the presenter |
-| **Renderer (M4)** | C (Win32) | separate `native/` tree, built in CI only; `scaler.py` is its test oracle |
+| **Renderer (M4)** | Python reference + C core | `renderer.py` is the oracle; `native/` (C99) reproduces it bit-for-bit and is built in CI only; `scaler.py` grades the presentation half; `conformance.py` grades colour at depth 16 vs 24, transparency and integer scale offscreen |
+| **Presenter CLI (M4)** | Python | shipped as `lomax-modern present` (`config.py`, `install.py`, `presenter.py`): P5 manifest, persisted modern/authentic profile, integer fit and runtime filter; writes a PNG, no window — the Win32/C presenter stays future |
 | Upscaler (LMX-8) | Python + NumPy | index-space only; output is never committed |
 | 2x render spike (LMX-10) | C (Win32) | separate spike branch, may be abandoned |
 

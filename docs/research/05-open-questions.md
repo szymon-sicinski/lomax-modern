@@ -25,6 +25,14 @@ these can be answered from public documentation alone.
 > `lomax-modern anim-nmy` (ANIM 566/566, NMY 9/9); the framings and
 > addresses are in [`../file-formats.md`](../file-formats.md) §2.5/§2.6.
 
+> **Revision v4** (LMX-10/M7 runbook, 2026-11-18). Q17 is marked **out of
+> scope**: the project's only input is an unpacked game directory, so nothing
+> here mounts a disc image or describes making one
+> ([`../roadmap/15-strategy-report.md`](../roadmap/15-strategy-report.md) §8).
+> The question stays listed — unanswered, not answered by omission — and the
+> image-mounting probe was removed from
+> [`07-wp4-runtime-distribution.md`](07-wp4-runtime-distribution.md).
+
 | # | Question | Why it matters | How to resolve |
 |---|---|---|---|
 | Q1 | What is the exact chunk header layout of a `.WLD`? | Every parser depends on it | ✅ **answered** — tag[4] space-padded + `u32` **BE** payload size, payload-only; 9/9 files reach EOF (`06-measurements-and-improvements.md`) |
@@ -43,7 +51,7 @@ these can be answered from public documentation alone.
 | Q14 | What is the full SHA-256 of the retail `LOMAX.EXE`? | Pins the baseline locally | ✅ **answered** — prefix `04cc4dfd260037ba…` matches the VOGONS retail hash; the full value stays out of the repo |
 | Q15 | Does Wine 11.x still pass B1 (colour gate) with a 16-bpp X server, or has something in 12 years broken it? | The first-run recipe's linchpin | probe P1 (`ddrawprobe` at depth 16 vs 24 on a real host with Wine) |
 | Q16 | Do the 2013 glitches (invisible platforms, one-frame sprite zoom) persist on Wine 11, and does dgVoodoo 2 remove them? | Whether the conformance oracle is trustworthy | play test on Wine 11 |
-| Q17 | Does a CDEmu-backed CD-DA device satisfy both the disc check and `open cdaudio`? | Whether disc owners can use an image instead of the physical disc | probe P3 (`cdemu load 0 your.cue` then `wine LOMAX.EXE`) |
+| Q17 | Does a CD-DA-capable device backed by a disc image satisfy both the disc check and `open cdaudio`? | Whether disc owners could avoid a physical disc | ⛔ **out of scope** (2026-11-18) — this project mounts no disc images and gives no instructions for making one; its only input is an unpacked game directory ([`../roadmap/15-strategy-report.md`](../roadmap/15-strategy-report.md) §8). The question stays listed for anyone who pursues it independently |
 | Q18 | Does `EmulateModeset=Y` change what B1 sees (the gate runs before any mode set)? | Whether a software-only Wine knob helps at all | probe P2 (same probe with `EmulateModeset=Y` at depth 32) |
 | Q19 | Are 16-bpp X screens still usable under Mesa/XWayland on modern GPUs, or is Xvfb+VNC the only reliable depth-16 vehicle? | Whether the depth-16 route survives on current hardware | run Xephyr at depth 16 on the target GPU; fall back to Xvfb |
 | Q20 | How does a `MAP` cell name its `TTAB` tile record? | Unblocks "unique tiles per level" and a correct exporter | three disagreeing counts (43,612 distinct map words vs 75,122 records vs 14,862 distinct indices; `byte0 & 0x7F` saturates at 127) — find the map→tile lookup in the EXE. Until then, print `map cell → tile record: unresolved` |

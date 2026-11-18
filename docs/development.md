@@ -4,6 +4,8 @@
 
 - Python 3.10+ (CI runs 3.10–3.13)
 - No runtime dependencies. `pytest` is the only dev requirement.
+- A C99 compiler (`cc`) is needed only to build `native/` (CI-only; the Python
+  package installs and tests without one).
 - Optional: a copy of your own Lomax installation for the integration tests.
 
 ## Setup
@@ -29,6 +31,7 @@ lomax-modern wldscan /path/to/Lomax/WORLDS/MAIN.WLD
 LOMAX_GAME_DIR=/path/to/Lomax python -m lomax_modern wld roundtrip --check
 lomax-modern probe-anim-nmy /path/to/Lomax        # structural probe, report only
 lomax-modern anim-nmy /path/to/Lomax              # decode the recovered framings
+make -C native test                            # build + run the C renderer smoke
 ```
 
 ## Testing rules
@@ -66,9 +69,14 @@ $HOME/projects/
 ├── lomax-modern/            the repository (this)
 └── game-files/              not a repo, not publishable
     └── lomax-modern/        one folder per repository
-        ├── pc-retail/       LOMAX.EXE, WORLDS/, SFX/, DEMOS/, ...
-        └── pc-disc/         optional .bin/.cue image
+        └── pc-retail/       LOMAX.EXE, WORLDS/, SFX/, AMBIENT/, JINGLES/,
+                             DEMOS/, GAME.TXT  (an unpacked install)
 ```
+
+One slot, because the project has one input: an unpacked directory. A disc image
+is not an input anywhere in this project — there is no image slot, no mounting
+step and no extraction step (see the [runbook](runbook.md) §3 and
+`docs/roadmap/15-strategy-report.md` §8).
 
 Create a slot for a new project (never inside a checkout):
 
