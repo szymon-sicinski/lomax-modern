@@ -173,43 +173,54 @@ def test_decode_cells_rejects_partial_record() -> None:
 # ---------------------------------------------------------------------------
 
 
-def test_decode_tiles_reads_big_endian_words() -> None:
-    payload = ttab_payload([(0x0102, 0x0003, 0x2004, 0x4005)])
+def test_decode_tiles_reads_big_endian_records() -> None:
+    # A 16-byte record = four [index word, flag word] cells, big-endian.
+    payload = ttab_payload(
+        [(0x0102, 0x0000, 0x0003, 0x2000, 0x0004, 0x4000, 0x0005, 0x0100)]
+    )
     records = art.decode_tiles(chunk("TTAB", payload))
 
     assert len(records) == 1
-    assert records[0].cell_indices == (0x0102, 0x0003, 0x2004 & 0x1FFF, 0x4005 & 0x1FFF)
+    assert records[0].cell_indices == (0x0102, 0x0003, 0x0004, 0x0005)
+    assert records[0].slots[0].flags == 0x0000
+    assert records[0].slots[1].flip == art.FLIP_H
+    assert records[0].slots[2].flip == art.FLIP_V
+    assert records[0].slots[3].palette == 1
     assert records[0].to_bytes() == payload
 
 
-def test_ttab_flags_are_preserved_and_index_masked() -> None:
-    record = art.decode_tiles(chunk("TTAB", ttab_payload([(0x2000 | 300, 0x4000, 0x6000, 7)])))[0]
+def test_ttab_flags_decode_as_flip_and_palette() -> None:
+    record = art.decode_tiles(
+        chunk("TTAB", ttab_payload([(300, 0x2000, 0, 0x4000, 0, 0x6000, 7, 0x0F00)]))
+    )[0]
 
-    assert record.words[0].index == 300
-    assert record.words[0].has_flag(0x2000) and not record.words[0].has_flag(0x4000)
-    assert record.words[1].has_flag(0x4000)
-    assert record.words[2].has_flag(0x2000) and record.words[2].has_flag(0x4000)
-    assert record.words[0].reserved == 0x2000
+    assert record.slots[0].index == 300
+    assert record.slots[0].flip == art.FLIP_H
+    assert record.slots[1].flip == art.FLIP_V
+    assert record.slots[2].flip == art.FLIP_MASK
+    assert record.slots[3].palette == 15
 
 
-def test_out_of_bank_index_is_preserved_never_repaired() -> None:
-    # BONUS.WLD references index 256 with a 251-record bank (Q22).  256 must
-    # survive decoding and re-emission unchanged.
-    payload = ttab_payload([(256, 256, 250, 3)])
+def test_tile_slot_preserves_index_and_flag_verbatim() -> None:
+    # A flag word is not a cell index: 0x0100 (palette slot 1) round-trips.
+    payload = ttab_payload([(256, 0x0100, 250, 0x0000, 3, 0x0000, 0, 0x0000)])
     record = art.decode_tiles(chunk("TTAB", payload))[0]
 
-    assert record.cell_indices[0] == 256
+    assert record.slots[0].index == 256
+    assert record.slots[0].flags == 0x0100
+    assert record.slots[0].palette == 1
     assert record.to_bytes() == payload
 
 
-def test_tile_word_rejects_unknown_flag_bits() -> None:
-    word = art.TileWord(raw=0x2000)
-    with pytest.raises(ArtError, match="unknown TTAB flag"):
-        word.has_flag(0x1000)
+def test_tile_slot_rejects_out_of_range_words() -> None:
+    with pytest.raises(ArtError, match="does not fit in a u16"):
+        art.TileSlot(index=0x10000, flags=0)
+    with pytest.raises(ArtError, match="does not fit in a u16"):
+        art.TileSlot(index=0, flags=0x10000)
 
 
 def test_decode_tiles_rejects_partial_record() -> None:
-    with pytest.raises(ArtError, match="not a multiple of 8"):
+    with pytest.raises(ArtError, match="not a multiple of 16"):
         art.decode_tiles(chunk("TTAB", b"\x00" * 12))
     with pytest.raises(ArtError, match="needs a TTAB chunk"):
         art.decode_tiles(chunk("MAP", b"\x00" * 4))
@@ -266,11 +277,14 @@ def test_planes_pairs_each_head_with_its_ttab_and_map() -> None:
     world = World(
         chunks=[
             chunk("HEAD", head_payload(8, 4)),
-            chunk("TTAB", ttab_payload([(1, 2, 3, 4)])),
+            chunk("TTAB", ttab_payload([(1, 0, 2, 0, 3, 0, 4, 0)])),
             chunk("MAP", map_payload(8, 4)),
             chunk("GNMY", b"\x00" * 4),
             chunk("HEAD", head_payload(4, 2)),
-            chunk("TTAB", ttab_payload([(5, 6, 7, 8), (9, 10, 11, 12)])),
+            chunk(
+                "TTAB",
+                ttab_payload([(5, 0, 6, 0, 7, 0, 8, 0), (9, 0, 10, 0, 11, 0, 12, 0)]),
+            ),
             chunk("MAP", map_payload(4, 2)),
         ]
     )
@@ -288,7 +302,7 @@ def test_planes_rejects_incomplete_plane() -> None:
             World(
                 chunks=[
                     chunk("HEAD", head_payload(8, 4)),
-                    chunk("TTAB", ttab_payload([(0, 0, 0, 0)])),
+                    chunk("TTAB", ttab_payload([(0, 0, 0, 0, 0, 0, 0, 0)])),
                     chunk("HEAD", head_payload(8, 4)),
                     chunk("TTAB", b""),
                     chunk("MAP", map_payload(8, 4)),
@@ -341,7 +355,7 @@ def test_tile_sheet_strip_keeps_stored_order() -> None:
         chunk("CELL", cell_payload([bytes([1] * 64), bytes([2] * 64),
                                     bytes([1] * 64), bytes([2] * 64)]))
     )
-    record = art.decode_tiles(chunk("TTAB", ttab_payload([(0, 1, 2, 3)])))[0]
+    record = art.decode_tiles(chunk("TTAB", ttab_payload([(0, 0, 1, 0, 2, 0, 3, 0)])))[0]
 
     strip = art.tile_sheet((record,), cells, palette(), layout="strip", columns=1)
     assert (strip.width, strip.height) == (32, 8)
@@ -353,19 +367,32 @@ def test_tile_sheet_strip_keeps_stored_order() -> None:
     assert (assembled.width, assembled.height) == (16, 16)
 
 
+def test_tile_sheet_honours_the_flag_word_flips() -> None:
+    # A cell with a single opaque pixel in its top-left corner: an H flip moves
+    # it to the top-right, so the sheet is not a plain unflipped paste.
+    cells = art.decode_cells(chunk("CELL", cell_payload([bytes([1] + [0] * 63)])))
+    record = art.decode_tiles(
+        chunk("TTAB", ttab_payload([(0, art.FLIP_H, 0, 0, 0, 0, 0, 0)]))
+    )[0]
+    sheet = art.tile_sheet((record,), cells, palette(), layout="strip", columns=1)
+    # Slot 0 (H-flipped): the red pixel is at column 7, not column 0.
+    assert sheet.pixels[0:4] == bytes((0, 0, 0, 0))
+    assert sheet.pixels[7 * 4 : 7 * 4 + 4] == bytes((255, 0, 0, 255))
+
+
 def test_tile_sheet_leaves_out_of_bank_cells_empty() -> None:
     cells = art.decode_cells(chunk("CELL", cell_payload([bytes([1] * 64)])))
-    record = art.decode_tiles(chunk("TTAB", ttab_payload([(0, 256, 0, 0)])))[0]
+    record = art.decode_tiles(chunk("TTAB", ttab_payload([(0, 0, 256, 0, 0, 0, 0, 0)])))[0]
 
     image = art.tile_sheet((record,), cells, palette(), layout="strip")
-    # Slot 1 is out of bank: nothing is drawn there (no invented pixels).
+    # Slot 1 indexes outside the 1-cell bank: nothing is drawn there.
     offset = (8) * 4
     assert image.pixels[offset : offset + 4] == bytes((0, 0, 0, 0))
 
 
 def test_tile_sheet_validates_layout_and_scale() -> None:
     cells = art.decode_cells(chunk("CELL", cell_payload([bytes(64)])))
-    record = art.decode_tiles(chunk("TTAB", ttab_payload([(0, 0, 0, 0)])))[0]
+    record = art.decode_tiles(chunk("TTAB", ttab_payload([(0, 0, 0, 0, 0, 0, 0, 0)])))[0]
     with pytest.raises(ArtError, match="layout"):
         art.tile_sheet((record,), cells, palette(), layout="quad")
     with pytest.raises(ArtError, match="at least one record"):
@@ -397,7 +424,7 @@ def test_map_field_image_draws_raw_bytes_as_grey() -> None:
 # ---------------------------------------------------------------------------
 
 
-def build_world_file(tmp_path, *, tile_words=(0, 1, 2, 3), cells=4):
+def build_world_file(tmp_path, *, tile_words=(0, 0, 1, 0, 2, 0, 3, 0), cells=4):
     """A complete synthetic world with one plane, written to ``tmp_path``."""
     palettes = [[0] * 256 for _ in range(2)]
     palettes[1] = [0x0001 * (i % 31) for i in range(256)]  # a non-empty slot 1
@@ -421,7 +448,7 @@ def build_world_file(tmp_path, *, tile_words=(0, 1, 2, 3), cells=4):
     return path
 
 
-def test_export_world_writes_sheets_and_reports_unresolved_links(tmp_path) -> None:
+def test_export_world_writes_sheets_and_reports_resolved_links(tmp_path) -> None:
     world_path = build_world_file(tmp_path)
     out = tmp_path / "art"
     report = art.export_world(world_path, out)
@@ -437,36 +464,51 @@ def test_export_world_writes_sheets_and_reports_unresolved_links(tmp_path) -> No
         assert path.is_file()
         assert path.read_bytes().startswith(png.SIGNATURE)
 
-    # The map -> tile link is unknown, and must say so (Q20).
-    assert "map cell -> tile record: unresolved (Q20)" in text
+    # The map -> tile link is known: a map word is a direct TTAB record index.
+    assert "map cell -> tile record: resolved" in text
+    assert "direct TTAB record index (Q20)" in text
     assert "sprite frames: unresolved (Q24" in text
-    # No invented per-level tile count.
-    assert all("unique" not in line or "no unique-tile count" in line for line in report.lines)
-    # The palette slot choice is labelled a hypothesis, not a fact.
-    assert "hypothesis H" in text and "Q8" in text
+    # The corrected 16-byte TTAB framing, not the retired 8-byte stride.
+    assert "records of 16 B" in text
+    # The palette slot choice now points at the flag word's bits 8-11 (Q8).
+    assert "flag words name slots in bits 8-11" in text
     # Nothing that looks like a file digest.
     assert not re.search(r"[0-9a-f]{64}", text)
 
 
-def test_export_world_preserves_out_of_bank_index_and_flags(tmp_path) -> None:
-    # Bank of 4 cells, index 256 plus both flags: all must be reported, not fixed.
+def test_export_world_reports_flips_palette_and_resolved_link(tmp_path) -> None:
+    # Four cells: H flip, V flip, both, and palette slot 3 — all reported.
     world_path = build_world_file(
-        tmp_path, tile_words=(0x2000 | 256, 0x4000 | 1, 2, 3), cells=4
+        tmp_path,
+        tile_words=(0, 0x2000, 1, 0x4000, 2, 0x6000, 3, 0x0300),
+        cells=4,
     )
     report = art.export_world(world_path, tmp_path / "art")
     text = report.format()
 
-    assert "out-of-bank indices preserved verbatim, not repaired: index 256" in text
-    assert "CELL bank holds 4 records" in text
-    assert "0x2000 on 1 words" in text
-    assert "0x4000 on 1 words" in text
-    assert "0x8000 on 0 words" in text
-    assert "distinct TTAB cell indices referenced: 3 of 4 records" in text
+    assert "flip H on 1 cells, V on 1, both on 1, none on 1" in text
+    assert "slot 3: 1" in text
+    assert "TTAB out-of-bank CELL indices: none" in text
+    assert "map cell -> tile record: resolved" in text
+
+
+def test_export_world_flag_word_is_palette_not_an_index(tmp_path) -> None:
+    # The flag word 0x0100 (palette slot 1) must not surface as an out-of-bank
+    # index: the index words are 0,1,2,3, all in a 4-cell bank (the Q22 fix).
+    world_path = build_world_file(
+        tmp_path, tile_words=(0, 0x0100, 1, 0x0000, 2, 0x0000, 3, 0x0000), cells=4
+    )
+    report = art.export_world(world_path, tmp_path / "art")
+    text = report.format()
+
+    assert "palette (bits 8-11) slot 0: 3, slot 1: 1" in text
+    assert "TTAB out-of-bank CELL indices: none" in text
 
 
 def test_export_world_requires_cells_and_planes(tmp_path) -> None:
     no_cells = build_container(
-        [("HEAD", head_payload(8, 4)), ("TTAB", ttab_payload([(0, 0, 0, 0)]))], endian=">"
+        [("HEAD", head_payload(8, 4)), ("TTAB", ttab_payload([(0, 0, 0, 0, 0, 0, 0, 0)]))],
+        endian=">",
     )
     path = tmp_path / "NOCELL.WLD"
     path.write_bytes(no_cells)
@@ -504,7 +546,7 @@ def test_export_refuses_to_write_into_the_game_folder(tmp_path) -> None:
 # ---------------------------------------------------------------------------
 
 
-def test_cli_export_writes_sheets_and_prints_unresolved(tmp_path, capsys) -> None:
+def test_cli_export_writes_sheets_and_prints_resolved(tmp_path, capsys) -> None:
     from lomax_modern.cli import main
 
     world_path = build_world_file(tmp_path)
@@ -513,7 +555,7 @@ def test_cli_export_writes_sheets_and_prints_unresolved(tmp_path, capsys) -> Non
 
     assert code == 0
     printed = capsys.readouterr().out
-    assert "map cell -> tile record: unresolved (Q20)" in printed
+    assert "map cell -> tile record: resolved" in printed
     assert (out / "synth_cells.png").is_file()
 
 

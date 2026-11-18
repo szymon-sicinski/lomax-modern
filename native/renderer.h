@@ -25,6 +25,10 @@ typedef struct {
     uint16_t *pixels; /* width * height words, caller-allocated */
 } framebuffer_t;
 
+/* Flip bits of a TTAB *flag* word (bits 13-14): mirror a cell about its axis. */
+#define FLIP_H 0x2000u /* horizontal flip */
+#define FLIP_V 0x4000u /* vertical flip */
+
 /* Widen a 15-bit little-endian colour (blue 0-4, green 5-9, red 10-14) to
  * B5G6R5.  Green widens 5->6 by bit replication, the round-trip-preserving
  * expansion ([H], see renderer.py). */
@@ -45,14 +49,18 @@ void fb_init(framebuffer_t *fb, int width, int height, uint16_t fill);
 void fb_set(framebuffer_t *fb, int x, int y, uint16_t value);
 
 /* Draw one 8x8 cell (64 palette indices, row-major) at (x0, y0); the
- * transparent index is skipped, leaving the destination untouched. */
+ * transparent index is skipped, leaving the destination untouched.  `flip`
+ * is FLIP_H/FLIP_V (or both) and mirrors the cell about its own axis. */
 void blit_cell(framebuffer_t *fb, const uint8_t *cell,
-               const uint16_t *palette, int x0, int y0, uint8_t transparent);
+               const uint16_t *palette, int x0, int y0,
+               uint16_t flip, uint8_t transparent);
 
-/* Draw a TTAB record (four cell indices) as four 8x8 cells.  `cells` is a
- * flat bank of `cell_count` cells, 64 bytes each.  `layout_2x2` selects the
- * documented 16x16 2x2 assembly ([H]) over the stored-order strip.  A cell
- * index outside the bank is skipped, never repaired. */
+/* Draw a TTAB record (16 bytes = four [index, flag] cells) as four 8x8
+ * cells.  `record` is 8 u16 words: for slot 0..3, index = record[2*slot],
+ * flags = record[2*slot+1].  `cells` is a flat bank of `cell_count` cells,
+ * 64 bytes each.  `layout_2x2` selects the documented 16x16 2x2 assembly
+ * ([H]) over the stored-order strip.  Each cell honours its flag word's flip;
+ * an index outside the bank is skipped, never repaired. */
 void blit_tile(framebuffer_t *fb, const uint16_t *record,
                const uint8_t *cells, int cell_count, const uint16_t *palette,
                int x0, int y0, int layout_2x2, uint8_t transparent);

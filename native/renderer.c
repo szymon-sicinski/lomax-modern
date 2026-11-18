@@ -44,11 +44,14 @@ void fb_set(framebuffer_t *fb, int x, int y, uint16_t value) {
 }
 
 void blit_cell(framebuffer_t *fb, const uint8_t *cell,
-               const uint16_t *palette, int x0, int y0, uint8_t transparent) {
+               const uint16_t *palette, int x0, int y0,
+               uint16_t flip, uint8_t transparent) {
     int x, y;
     for (y = 0; y < 8; y++) {
         for (x = 0; x < 8; x++) {
-            uint8_t index = cell[y * 8 + x];
+            int sx = (flip & FLIP_H) ? (7 - x) : x;
+            int sy = (flip & FLIP_V) ? (7 - y) : y;
+            uint8_t index = cell[sy * 8 + sx];
             if (index == transparent) {
                 continue;
             }
@@ -62,7 +65,8 @@ void blit_tile(framebuffer_t *fb, const uint16_t *record,
                int x0, int y0, int layout_2x2, uint8_t transparent) {
     int slot;
     for (slot = 0; slot < 4; slot++) {
-        int index = (int)record[slot];
+        int index = (int)record[2 * slot];
+        uint16_t flags = record[2 * slot + 1];
         int dx, dy;
         if (index < 0 || index >= cell_count) {
             continue;
@@ -75,6 +79,6 @@ void blit_tile(framebuffer_t *fb, const uint16_t *record,
             dy = 0;
         }
         blit_cell(fb, cells + index * 64, palette, x0 + dx, y0 + dy,
-                  transparent);
+                  flags & (FLIP_H | FLIP_V), transparent);
     }
 }

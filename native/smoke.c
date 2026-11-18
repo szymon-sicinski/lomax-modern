@@ -90,7 +90,7 @@ static void test_cell_blit(void) {
     }
     fb.pixels = pixels;
     fb_init(&fb, 8, 8, 0x0000);
-    blit_cell(&fb, scene, palette, 0, 0, 0);
+    blit_cell(&fb, scene, palette, 0, 0, 0, 0);
 
     printf("cell blit (palette + transparency, golden frame):\n");
     CHECK(memcmp(pixels, golden, sizeof(golden)) == 0,
@@ -101,8 +101,8 @@ static void test_cell_blit(void) {
 static void test_tile_blit(void) {
     uint16_t palette[256];
     uint8_t cells[4][64];
-    uint16_t record[4] = {0, 1, 2, 3};
-    uint16_t out_of_bank[4] = {0, 99, 1, 2};
+    uint16_t record[8] = {0, 0, 1, 0, 2, 0, 3, 0};
+    uint16_t out_of_bank[8] = {0, 0, 99, 0, 1, 0, 2, 0};
     uint16_t pixels[32 * 8];
     uint16_t pixels16[16 * 16];
     framebuffer_t fb;
@@ -141,11 +141,49 @@ static void test_tile_blit(void) {
           "out-of-bank index is skipped, not repaired");
 }
 
+static void test_tile_flip(void) {
+    uint16_t palette[256];
+    uint8_t corner[64];
+    uint16_t pixels[8 * 8];
+    framebuffer_t fb;
+    int i;
+
+    for (i = 0; i < 256; i++) {
+        palette[i] = rgb15_to_rgb565(palette15[i]);
+    }
+    memset(corner, 0, sizeof(corner));
+    corner[0] = 1; /* red, top-left only */
+
+    printf("tile flip (H / V / both mirror the cell):\n");
+
+    fb.pixels = pixels;
+    fb_init(&fb, 8, 8, 0x0000);
+    blit_cell(&fb, corner, palette, 0, 0, 0, 0);
+    CHECK(pixels[0] == 0xF800 && pixels[7] == 0x0000,
+          "unflipped: red stays top-left");
+
+    fb_init(&fb, 8, 8, 0x0000);
+    blit_cell(&fb, corner, palette, 0, 0, FLIP_H, 0);
+    CHECK(pixels[7] == 0xF800 && pixels[0] == 0x0000,
+          "H flip: red moves to top-right");
+
+    fb_init(&fb, 8, 8, 0x0000);
+    blit_cell(&fb, corner, palette, 0, 0, FLIP_V, 0);
+    CHECK(pixels[7 * 8] == 0xF800 && pixels[0] == 0x0000,
+          "V flip: red moves to bottom-left");
+
+    fb_init(&fb, 8, 8, 0x0000);
+    blit_cell(&fb, corner, palette, 0, 0, FLIP_H | FLIP_V, 0);
+    CHECK(pixels[7 * 8 + 7] == 0xF800 && pixels[0] == 0x0000,
+          "both: red moves to bottom-right");
+}
+
 int main(void) {
     test_palette_conversion();
     test_fade_rule();
     test_cell_blit();
     test_tile_blit();
+    test_tile_flip();
 
     if (failures == 0) {
         printf("PASS: renderer smoke (all golden checks passed)\n");

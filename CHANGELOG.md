@@ -69,6 +69,15 @@ Versioning: [Semantic Versioning](https://semver.org/).
 - `anim-nmy` refuses a `*.WLD` that is not a world container the way `slice`
   and `present` already did: one `error: cannot read …` line and exit 1,
   instead of a `WLDParseError` traceback.
+- `export` and the M4 renderer now decode the corrected `MAP`/`TTAB` layouts
+  (port of the map→tile pipeline findings, `docs/file-formats.md` §2.4): a
+  `MAP` is `N` big-endian `u16` tile words — each a **direct `TTAB` record
+  index** — then `N` collision bytes, and a `TTAB` record is 16 bytes of four
+  `[index word, flag word]` cells, the flag word carrying an H/V flip (bits
+  13-14) and a palette (bits 8-11). The exporter reports the resolved map→tile
+  link (no longer "unresolved (Q20)") and the corrected counts (16-byte
+  framing, 0 out-of-bank), and `renderer.blit_tile` honours the flips. The
+  `native/renderer.c` port stays bit-for-bit with the Python oracle.
 
 ## [0.4.0-alpha.1] — 2026-11-18
 

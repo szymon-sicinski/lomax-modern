@@ -389,9 +389,8 @@ def _plane_geometry(head, map_chunk) -> tuple[int, int, bytes]:
     pass — the reader at VA ``0x415430`` byte-swaps exactly ``2·N`` bytes and
     stores the collision pointer at ``payload + 2·N``); ``N = width_cells *
     height_cells`` and the ``HEAD`` dimensions are big-endian ``u32`` in
-    8-pixel units (§2.3).  Read directly here, not through ``art.decode_map``,
-    which still carries the superseded interleaved layout (port tracked
-    separately).
+    8-pixel units (§2.3).  Read directly here rather than through
+    ``art.decode_map`` to keep this module free of the art layer.
     """
     width_units, height_units = struct.unpack(">II", head.payload[0:8])
     width_cells = width_units * 8 // 16

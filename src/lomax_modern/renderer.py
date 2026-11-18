@@ -22,8 +22,12 @@ Confidence, per claim (see ``docs/file-formats.md``):
 **Verified against the retail install (V)**
 
 * A ``CELL`` record is 8x8 palette indices (whole 64-byte records).
-* A ``TTAB`` record is four big-endian ``u16`` cell indices; a ``MAP`` cell is
-  a 16-bit tile word plus one collision byte, 3 bytes per 16x16 cell.
+* A ``TTAB`` record is 16 bytes = four ``[index word, flag word]`` cells; the
+  index word is a full 16-bit ``CELL`` index and the flag word carries a flip
+  in bits 13-14 (``0x2000`` H, ``0x4000`` V, ``0x6000`` both) and a palette in
+  bits 8-11.  A ``MAP`` cell is one big-endian ``u16`` tile word (a direct
+  ``TTAB`` record index) plus one collision byte — ``N`` words then ``N``
+  collision bytes, padded to a multiple of 4.
 * The ``HEAD`` palette block is 10 x 256 little-endian 15-bit words.
 
 **Design choice, stated so a test can pin it (H)**
@@ -43,12 +47,20 @@ Confidence, per claim (see ``docs/file-formats.md``):
   (``"strip"``) by default; the documented 16x16 2x2 assembly is an explicit
   ``"2x2"`` option and is labelled ``[H]`` (the seam test failed, see
   ``art``).
+* *Flip.*  The flag bits 13-14 mirror the cell about its own axis: ``0x2000``
+  horizontal, ``0x4000`` vertical, ``0x6000`` both.  A flipped cell occupies
+  the same 8x8 destination box as its unflipped form.
 
-**Unresolved, and reported as unresolved**
+**Kept explicit so a test can pin it**
 
-* How a ``MAP`` cell names a ``TTAB`` record (Q20).  There is therefore **no
-  map->tile art blit**: :func:`blit_map_field` draws the raw ``MAP`` byte as
-  greyscale, exactly what is measured, and never invents the link.
+* *Palette selection.*  A flag word names a palette slot in bits 8-11, but
+  :func:`Framebuffer.blit_tile` takes a single :class:`Palette565` (the
+  exporter's default slot) and does not switch slots per cell; multi-slot
+  selection is out of the M4 blit contract.
+* *Map->tile art blit.*  A ``MAP`` word is a direct ``TTAB`` record index
+  (Q20), so the link is known — but :func:`blit_map_field` still draws the raw
+  ``MAP`` byte as greyscale rather than assembling tile art; the art blit is
+  left to a later milestone.
 
 The fade rule
 -------------
@@ -68,6 +80,9 @@ from typing import Sequence
 
 from . import art
 from .art import (
+    FLIP_H,
+    FLIP_MASK,
+    FLIP_V,
     PALETTE_BLOCK_OFFSET,
     PALETTE_BLOCK_SIZE,
     PALETTE_ENTRY_COUNT,
@@ -249,15 +264,23 @@ class Framebuffer:
         x0: int,
         y0: int,
         *,
+        flip: int = 0,
         transparent_index: int = TRANSPARENT_INDEX,
     ) -> None:
-        """Draw one 8x8 cell at ``(x0, y0)``; index ``transparent_index`` is skipped."""
-        for y in range(CELL_PIXELS):
-            row = cell.pixels[y * CELL_PIXELS : (y + 1) * CELL_PIXELS]
-            for x, index in enumerate(row):
+        """Draw one 8x8 cell at ``(x0, y0)``; index ``transparent_index`` is skipped.
+
+        ``flip`` is ``FLIP_H``/``FLIP_V`` (or both) from a tile flag word; the
+        cell is mirrored about its own axis so it still occupies the same 8x8
+        destination box.
+        """
+        for dy in range(CELL_PIXELS):
+            for dx in range(CELL_PIXELS):
+                sx = (CELL_PIXELS - 1 - dx) if flip & FLIP_H else dx
+                sy = (CELL_PIXELS - 1 - dy) if flip & FLIP_V else dy
+                index = cell.pixels[sy * CELL_PIXELS + sx]
                 if index == transparent_index:
                     continue
-                self.set(x0 + x, y0 + y, palette.word(index))
+                self.set(x0 + dx, y0 + dy, palette.word(index))
 
     def blit_tile(
         self,
@@ -273,14 +296,14 @@ class Framebuffer:
         """Draw a ``TTAB`` record as its four cells, in ``layout`` order.
 
         ``"strip"`` places the four cells side by side (stored order, 32x8);
-        ``"2x2"`` assembles the documented 16x16 tile (cell order ``[H]``).  A
-        cell index outside the bank is left empty (background), never repaired
-        — the Q22 out-of-bank anomaly is preserved, not hidden.
+        ``"2x2"`` assembles the documented 16x16 tile (cell order ``[H]``).
+        Each cell honours its flag word's flip; a cell index outside the bank
+        is left empty (background), never repaired.
         """
         if layout not in TILE_LAYOUTS:
             raise ArtError(f"layout must be {TILE_LAYOUTS}, got {layout!r}")
-        for slot, index in enumerate(record.cell_indices):
-            if not 0 <= index < len(cells):
+        for slot, cell_slot in enumerate(record.slots):
+            if not 0 <= cell_slot.index < len(cells):
                 continue
             if layout == "strip":
                 dx, dy = slot * CELL_PIXELS, 0
@@ -288,7 +311,12 @@ class Framebuffer:
                 dx = (slot % 2) * CELL_PIXELS
                 dy = (slot // 2) * CELL_PIXELS
             self.blit_cell(
-                cells[index], palette, x0 + dx, y0 + dy, transparent_index=transparent_index
+                cells[cell_slot.index],
+                palette,
+                x0 + dx,
+                y0 + dy,
+                flip=cell_slot.flip,
+                transparent_index=transparent_index,
             )
 
     def blit_map_field(
@@ -302,10 +330,10 @@ class Framebuffer:
     ) -> None:
         """Draw one raw ``MAP`` byte per cell as greyscale (no invented art).
 
-        ``channel`` picks the collision byte or one byte of the tile word; the
-        value is drawn verbatim as greyscale, so the field's *meaning* (Q20) is
-        made visible, never decoded.  Value 0 (empty) is skipped.  The map->tile
-        art link is unresolved, so this is the only honest ``MAP`` blit.
+        ``channel`` picks the collision byte or one byte of the tile word (a
+        direct ``TTAB`` record index); the value is drawn verbatim as greyscale,
+        so the field is made visible, never re-derived.  Value 0 (empty) is
+        skipped.  This is a field visualisation, not the map->tile art blit.
         """
         if channel not in MAP_CHANNELS:
             raise ArtError(f"channel must be {MAP_CHANNELS}, got {channel!r}")

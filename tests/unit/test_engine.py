@@ -61,7 +61,7 @@ def _world_bytes(
         ("NMY", b"\0" * 16),
         ("PARA", b"\0" * 8),
         ("HEAD", head_payload(width_units, height_units)),
-        ("TTAB", ttab_payload([[0, 0, 0, 0]])),
+        ("TTAB", ttab_payload([[0, 0, 0, 0, 0, 0, 0, 0]])),
         ("MAP", map_payload(width_units, height_units, cells=cells)),
         ("GNMY", gnmy_payload((0,))),
         ("MACR", b"\0" * 8),
@@ -425,5 +425,5 @@ def test_run_slice_reports_ticks_and_clean_exit(tmp_path) -> None:
     assert report.clean_exit
     assert report.world == "VILLAGE"
     assert frame.width == 320 and frame.height == 240
-    assert "unresolved (Q20)" in report.format()
+    assert "resolved (Q20)" in report.format()
     assert "retracted" in report.format()
