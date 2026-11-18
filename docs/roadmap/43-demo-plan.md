@@ -48,7 +48,7 @@ data layer and headless engine — not yet a playable game.
 |---|---|---|---|
 | **A. Tooling demo** | data plumbing + one static frame + harness PASS | none | a research tool |
 | **B. Engine demo** | the slice **animating** at 60 Hz, scaled | one small feature | a game waking up |
-| **C. Playable demo** | window + input + a playable first world | a milestone (M5 + more) | the game itself |
+| **C. Playable demo** | window + tile art + input + a playable first world | now staged: animated slice ≈$0.99–$1.49, playable gated on Q32 | the game itself |
 
 - **A** is available *today*. `doctor` → `present` → `conformance` → `export`
   all run on the current alpha (outputs reproduced in §5). The only work is the
@@ -58,10 +58,14 @@ data layer and headless engine — not yet a playable game.
   (MP4 via the viewer's own `ffmpeg`, a script line, not our code). This is the
   one genuinely new feature.
 - **C** is M5 (input) plus a window presenter plus finishing M3's
-  "first world playable end to end" — which is blocked on unresolved formats
-  (`Q20` map cell → tile, and the still-unidentified `GNMY` entry semantics —
-  note that `Q23`/`Q24`, the `NMY`/`ANIM` framings, are **answered** and
-  validated 9/9 and 566/566). Weeks, not hours.
+  "first world playable end to end". Two of the three blockers are now closed:
+  `Q20`/`Q21`/`Q22` (map cell → tile) are resolved (V) and the window presenter
+  is scoped and measured (ctypes+SDL2, V), so the *animated* slice is costed at
+  ≈$0.99–$1.49 (§6.1). The one remaining blocker is `GNMY` entry *semantics*
+  (which entry is the spawn/collectable/exit) — the layout is recovered (V) but
+  the meaning is still H, recorded as `Q32` — so a *playable* slice is a
+  milestone with a priced first step (§6.2), not an open "weeks". (`Q23`/`Q24`,
+  the `NMY`/`ANIM` framings, are **answered** and validated 9/9 and 566/566.)
 
 ## 3. The measured unit rate
 
@@ -103,8 +107,9 @@ record per-card numbers (§3.1).
 - **What moves it:** (1) provider repricing moves every dollar figure while
   leaving token figures intact (40-budget §7); (2) a card that retries across
   sessions re-pays the spawn floor, pushing it above the average; (3) a
-  milestone built on *unfamiliar* territory (like M3) runs far above the board
-  average — which is why option C is not costed at this unit rate (§6).
+  milestone built on *unfamiliar* territory (like M3's spawn/collect/exit loop)
+  runs far above the board average — which is why option C's *playable* loop is
+  not costed at this unit rate (§6.2), while C's animated slice is (§6.1).
 
 ### 3.1 Wall-clock, from `task_runs`
 
@@ -203,50 +208,112 @@ recording shows Lomax walking and jumping rather than one static pose.
 
 ## 6. Option C — the playable demo
 
-C is **not costable at the §3 per-card rate**, and pretending otherwise would
-violate the "verified vs hypothesis" rule. It spans work with no measured
-precedent in this repo: the window presenter (`docs/architecture.md` §5 marks
-the Win32 presenter as "future"), plus finishing M3's
-spawn → move → collide → collect → exit → next-level loop, which is blocked on
-unresolved formats (`Q20` map cell → tile, and what a `GNMY` entry means;
-`Q23`/`Q24` are answered).
-`40-budget.md` §7 already flags M3 as **order-of-magnitude** — "a tick-for-tick
-reimplementation has no measured precedent … treat the $4.28 @pro M3 row as
-order-of-magnitude."
+C is no longer "unbudgeted." The old §6 refused to price it on two grounds —
+the map→tile format was unresolved and the window presenter was unscoped. Both
+now have measured answers, and the third blocker (what a `GNMY` entry *means*)
+is half-answered: enough to price an **animated** slice, not enough to price a
+**playable** one. The honest result is that **C has split into two things**, and
+only one is a demo we can price today.
 
-The nearest *measured* anchors are the `40-budget.md` Revision re-forecasts:
-
-| piece | cards | wall-clock | token figure |
+| old blocker | research card | outcome | grade |
 |---|---|---|---|
-| M5 controller & input | ~7 (3 specialist + 3 review + 1 lead synthesis) | ~1.2–1.9 h | §4 estimate 420 k/240 k exp, *not* measured |
-| M6 audio (if SFX is wanted) | ~2 (1 specialist + 1 review) | ~0.3–0.5 h | §4 estimate 100 k/55 k exp, *not* measured |
-| window presenter (presentation half) | **3–4** (2–3 specialist + 1 review) | **0.53–1.38 h** | ≈126–168 k output · ≈307–410 k fresh · ≈11.2–14.9 M cached |
-| M3 completion (engine/input) | unbudgeted here — folded by the successor card | weeks | outside the measured M2–M4 spread |
+| map cell → tile (`Q20`/`Q21`/`Q22`) | `t_830f4d0d` | resolved — `MAP` = N big-endian `u16` `TTAB` indices + N collision bytes; `TTAB` = 16 B records of four `[index, flag]` cells; **0 / 523,229 out-of-bank** | **V** |
+| window presenter (unscoped) | `t_5bc2f4cf` | scoped + measured — ctypes+SDL2 blits at 847 fps (~14× headroom) | **V** |
+| `GNMY` entry meaning | `t_050db875` | layout recovered (`x`/`y` are pixel coords, V); *spawn/collectable/exit* semantics not a unique type (0/74 once-per-world) | **V layout / H meaning** |
 
-The **presentation half is now costed** — the window is no longer the blank
-`architecture.md` §5 left: [`44-presenter-options.md`](44-presenter-options.md)
-scopes the minimum window, ranks the four presenter options (default **ctypes +
-SDL2**, ≈$0.50 for 3 cards, ≈$0.66 for 4 with `epx-aa` parity), records the
-blit spike that settled "can SDL2 do it" (yes, 847 fps, ~14× headroom), and
-splits what is presentation work from what is engine/input work. The window is
-the cheapest third of C; the engine loop (GNMY population, map→tile art
-composition) and M5 input remain the unbudgeted parts.
+### 6.1 The costable part — C-animated
 
-So C is a **milestone decision**, not a demo decision: it is the v0.5/v0.7
-ladder already in `20-releases.md`, and it is weeks not hours. The honest cost
-number is "M3 at order-of-magnitude uncertainty plus M5 re-forecast above, plus
-a now-costed presentation half of ≈$0.50–$0.66," not a dollar figure off a
-per-card average.
+**C-animated** is a live window showing the real world animating at 60 Hz with
+correctly-composed tile art and the correct population density, driven by the
+scripted walk-right/jump input that already exists (`engine/run.py`, V). No
+keyboard, no player, no collect/exit — motion, not play. It is costable now:
 
-## 7. Recommendation — do **B**, at ~$0.50
+| piece | cards (profiles) | money (off-peak) | wall-clock | evidence |
+|---|---|---|---:|---:|---|
+| window presenter (ctypes+SDL2) | 3–4 (2–3 specialist + 1 reviewer) | ≈$0.50–$0.66 | 0.53–1.38 h | V — `44-presenter-options.md`, blit spike |
+| tile-art composition (Q20 port) | 2–3 (1–2 specialist + 1 reviewer) | ≈$0.33–$0.50 | 0.31–0.96 h | V — `t_830f4d0d`, 104/104 planes |
+| GNMY population density | 1–2 (specialist [+ reviewer]) | ≈$0.17–$0.33 | 0.22–0.54 h | V — `t_050db875`, pixel coords |
+| **C-animated total** | **6–9** | **≈$0.99–$1.49** | **~1.1–2.9 h** | |
 
-**B** is the only option that shows the project *doing the thing it exists to
-do* — running the game's own data at the original 60 Hz, scaled to a modern
-screen — for **~$0.50 off-peak** (3 cards, ~0.35–0.57 h wall-clock, ~126 k
-output / ~307 k fresh / ~11.2 M cached tokens). It converts the demo from "a
-research tool reads some files" into "the engine is alive," which is the claim a
-stranger needs to see, for the price of one small feature plus its review. A is
-$0.33 and C is weeks; B is the entire emotional payoff for $0.17 more than A.
+*Derived:* each row is its card count × the §3 unit (~42.0 k output / ~102 k
+fresh / ≈$0.165 off-peak); the total is ≈252–378 k output · ≈612–918 k fresh ·
+≈22.3–33.5 M cached. Wall-clock is specialist 13–25 min + reviewer 5.5–7.5 min
+per card (§3.1). The low end assumes nearest scaling for both profiles (no
+`epx-aa` port) and the population card folded into the tile-port PR; the high
+end adds the `epx-aa` parity card and a separate population card.
+
+**What the research bought.** The old §6 folded this whole loop into "M3 —
+unbudgeted, weeks, order-of-magnitude" (`40-budget.md` §7's ≈$4.28 @pro row).
+Two of its three blockers are now closed, so the price fell from "weeks" to
+two concrete ports: the map→tile half is now a **≈$0.33–$0.50 port** (was an
+unresolved format) and the window is **≈$0.50–$0.66** (was "future"). Only the
+third — `GNMY` *semantics* — stays open, and it is now one named experiment,
+not a blank.
+
+### 6.2 The part that still cannot be closed — C-playable
+
+A *playable* slice additionally needs the player to **spawn** somewhere, to
+**collect** items, to **exit** a level and **advance** to the next. All four
+read the same thing: which `GNMY` entries are the spawn, the collectables and
+the exit. That is `Q32`, and `t_050db875` left it **unresolved** — the layout
+is V but the meaning is H, and the obvious hypothesis ("the unique entry is the
+spawn") is **falsified** on retail data. So C-playable is a **milestone with a
+known first step, not a demo**, and no total is invented for it.
+
+The first step is the **Q32 experiment**: trace the consumer of the `GNMY`
+flags' 2-bit field (stored to `obj+0x12`) and the bit-15 extra word (`obj+0x4`)
+in `LOMAX.EXE` to learn how the game itself decides spawn/collectable/exit.
+That is **1–2 specialist cards, ≈$0.17–$0.33 off-peak**. Only its result prices
+the loop: if the 2-bit field is a clean spawn/collectable/exit enum, the
+playable loop is 2–3 more cards; if it needs a runtime probe under Wine or
+per-world special-casing, it is more. Both are milestones, priced *after* the
+experiment, not before.
+
+The other known addition is **M5 input** (keyboard → `Input`), already
+re-forecast at **~7 cards / ≈$1.16 off-peak / ~1.2–1.9 h** (3 specialist + 3
+review + 1 lead synthesis — a re-forecast, not a measurement; the old §6 and
+the `40-budget.md` Revision). M6 audio stays optional and out of C's core.
+
+So the honest number for C-playable is **≈$2.32–$2.98** for everything *except*
+the playable loop itself — C-animated (≈$0.99–$1.49) + M5 (≈$1.16) + the Q32
+experiment (≈$0.17–$0.33) — and the loop is priced after the experiment. To
+approve something *today*, approve C-animated, or approve the experiment and
+let the loop price itself.
+
+### 6.3 The V/D/H rule, restated
+
+Every figure above carries a grade, and a number resting on an **H** is labelled
+as one. The map→tile and window rows rest on **V** measurements (validated on
+all 104 retail planes; a blit spike run on this machine). The population row
+rests on **V** coordinates, but the coordinate→walkability link stays **H**
+(`t_050db875`: placements skew toward solid ~7.6×, a correlation, not a proof).
+The playable loop rests on **H** until `Q32` is measured. Do not let "6–9
+cards" harden into certainty: the two ends exist because the `epx-aa` parity
+card and the population card are decisions, and because `Q32`'s answer is not in
+yet.
+
+## 7. Recommendation — do **B** now, then **C-animated** as v0.5, and price C-playable after the Q32 experiment
+
+**B (~$0.50)** is still the right first dollar: it shows the project *doing the
+thing it exists to do* — running the game's own data at 60 Hz — for three cards
+and ~0.35–0.57 h, and it is the entire emotional payoff ("the engine is alive")
+for $0.17 more than A. What changed since the old §7 is what comes *after* B:
+C stopped being "weeks" and became a ladder with a number on every rung except
+the last.
+
+- **C-animated ≈$0.99–$1.49 (6–9 cards)** — a live window with correct tile art
+  and population density. This is the "the game is coming back" shot B cannot
+  deliver: B is a recording, C-animated is a window. That is the v0.5 target.
+- **Q32 experiment ≈$0.17–$0.33 (1–2 cards)** — the one open question left
+  (which `GNMY` entry is the spawn/collectable/exit). Cheap, and it is the
+  *gate*: run it and the playable loop stops being an H and gets a price.
+- **C-playable** — C-animated + M5 input (≈$1.16) + the experiment + the loop
+  the experiment prices. A milestone (v0.6/v0.7), not a demo.
+
+So the recommendation is **B now**; if B lands well, **C-animated next** (v0.5)
+with the **Q32 experiment bought alongside it** so the step after that is a
+priced milestone rather than another blank. Do *not* approve "C" as a single
+number yet — approve C-animated, or approve the experiment.
 
 ### If you want the cheaper one, do A
 
