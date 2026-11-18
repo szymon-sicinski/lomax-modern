@@ -41,6 +41,9 @@ MUSIC/
 *.log
 LOADER.LOG
 .scratch/
+# Default output of examples/demo.sh: engine renders of the viewer's own copy,
+# produced locally and never committed.
+demo-out/
 
 # Local game-data slots (docs/development.md). Kept outside the repository in
 # practice; ignored anyway so a copy can never be committed by accident.
