@@ -104,12 +104,15 @@ It refuses anything else with a file-by-file manifest instead of a traceback.
 "Expected" means the run reports an incomplete copy and continues; "required"
 means the run refuses the path.
 
-**`present` is the lenient one.** It matches names case-insensitively and
-resolves a retail root nested one level down (`slot/LOMAX/WORLDS/...`).
-`doctor`, `measure` and `slice` match the retail names exactly and expect the
-folder you name to *be* the root — on a lowercased or nested copy they report
-`MISSING` while `present` still runs. If `doctor` disagrees with `present`,
-believe `present`.
+**Leniency differs per command, and it is the usual source of confusion.**
+`present` matches names case-insensitively and resolves a retail root nested one
+level down (`slot/LOMAX/WORLDS/...`). `doctor` matches the retail names exactly
+and prints `MISSING` rows for anything else. `measure` finds `*.WLD` in either
+case at any depth, but its folder probes (`SFX/`, `AMBIENT/`, `JINGLES/`,
+`DEMOS/`, `GAME.TXT`) are root-exact — a lowercased `sfx/` reports `SFX: 0
+files` while the worlds are still listed. `slice` expects `WORLDS/VILLAGE.WLD`
+literally and stops with `error: no world file at …`. If `doctor` disagrees with
+`present`, believe `present`.
 
 ## Launch it
 
@@ -121,7 +124,7 @@ lomax-modern doctor "/path/to/Lomax"
 ```
 
 Expect `verdict: looks like a complete PC install`. If entries are missing, it
-names them. (`present` runs a stricter gate and prints its own manifest —
+names them. (`present` is stricter about what it will accept, and prints its own manifest —
 `verdict: complete unpacked install (retail layout)` — before it renders.)
 
 **Step 2 — present a frame.**
@@ -250,8 +253,8 @@ written) · `2` usage error or a refused install.
 |---|---|---|
 | `error: not a directory: /path` | Typo, or a relative path from another shell | Use the absolute path to the folder that contains `WORLDS/` |
 | `present`: `verdict: not an unpacked Lomax game directory -- missing: …` | Not an unpacked retail copy; the list names what is absent | Point at the folder holding `LOMAX.EXE` and `WORLDS/`; an ISO or mounted disc image is not accepted |
-| `doctor`: `verdict: incomplete install, missing: …` | `doctor` is stricter than `present` about names and nesting | `doctor` still inventories the folder; if `present` accepts the same folder, the `MISSING` rows are the naming difference, not missing files |
-| `no *.WLD found under …` | `WORLDS/` is empty or named differently | Check the case-insensitive name and that at least one `.WLD` is present |
+| `doctor`: `verdict: incomplete install, missing: …` | `doctor` matches retail names exactly; `present` and `measure` are more forgiving | `doctor` still inventories the folder; if `present` accepts the same folder, the `MISSING` rows are the naming difference, not missing files |
+| `error: no *.WLD found under …` (from `wld roundtrip` / `anim-nmy`) | No `.WLD`/`.wld` exists anywhere under the path — the search is recursive and case-insensitive, so an oddly named folder is *not* the cause | Point at the install root, or pass a single world file |
 | `unsupported config version N` | The config was written by a newer build | Delete the config file (it is recreated) or point `--config` elsewhere |
 | `surface must be WIDTHxHEIGHT` | Malformed `--surface` | `1920x1080`, `1920*1080` and `1920,1080` are accepted |
 | `frame: none written` | No `--frame` given | This build has no window; pass `--frame PATH` to get a PNG |

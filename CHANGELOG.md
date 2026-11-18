@@ -11,8 +11,10 @@ Versioning: [Semantic Versioning](https://semver.org/).
 - README rewritten as an alpha install/launch/configure guide: what works and what
   does not, three install paths, the config file and its five keys, a command
   reference with exit codes, and a troubleshooting table keyed on the strings the
-  CLI prints. Documents that `present` alone is case-insensitive and resolves one
-  level of nesting, while `doctor`/`measure`/`slice` expect the retail root.
+  CLI prints. Documents the per-command leniency: `present` ignores name case and
+  resolves one level of nesting, `doctor` matches retail names exactly,
+  `measure` globs worlds recursively but probes folders at the root, `slice`
+  expects `WORLDS/VILLAGE.WLD` literally.
 
 ## [0.4.0-alpha.1] — 2026-11-18
 
