@@ -92,14 +92,35 @@ def _cmd_wldscan(args: argparse.Namespace) -> int:
     return 0 if result.chunks else 1
 
 
+def _checked_json_path(path: str | None) -> Path | None:
+    """Validate a ``--json`` destination the way ``--out``/``--frame`` are.
+
+    ``measure`` and ``probe-anim-nmy`` write a report file, so the rule every
+    other writer follows applies to them too: refuse a destination that resolves
+    inside a tree holding ``LOMAX.EXE``
+    (:func:`lomax_modern.art.refuse_into_game_folder`). Raises :class:`ArtError`
+    so both callers print the shared message and exit 2.
+    """
+    if not path:
+        return None
+    destination = Path(path)
+    refuse_into_game_folder(destination.parent)
+    return destination
+
+
 def _cmd_measure(args: argparse.Namespace) -> int:
     try:
         report = measure_install(args.game_dir)
     except NotADirectoryError as exc:
         print(f"error: {exc}", file=sys.stderr)
         return 2
-    if args.json:
-        Path(args.json).write_text(to_json(report), encoding="utf-8")
+    try:
+        json_path = _checked_json_path(args.json)
+    except ArtError as exc:
+        print(f"error: {exc}", file=sys.stderr)
+        return 2
+    if json_path is not None:
+        json_path.write_text(to_json(report), encoding="utf-8")
     print(to_json(report) if args.quiet else summarise(report))
     return 0
 
@@ -109,8 +130,13 @@ def _cmd_probe_anim_nmy(args: argparse.Namespace) -> int:
         print(f"error: not a directory: {args.game_dir}", file=sys.stderr)
         return 2
     report = probe_anim_nmy(args.game_dir)
-    if args.json:
-        Path(args.json).write_text(to_json(report), encoding="utf-8")
+    try:
+        json_path = _checked_json_path(args.json)
+    except ArtError as exc:
+        print(f"error: {exc}", file=sys.stderr)
+        return 2
+    if json_path is not None:
+        json_path.write_text(to_json(report), encoding="utf-8")
     print(to_json(report) if args.quiet else format_probe_report(report))
     return 0
 
@@ -610,7 +636,11 @@ def build_parser() -> argparse.ArgumentParser:
         help="measure an install: chunk sequence, plane widths, audio formats (read-only)",
     )
     p_meas.add_argument("game_dir", help="folder containing LOMAX.EXE")
-    p_meas.add_argument("--json", metavar="PATH", help="also write the raw report here")
+    p_meas.add_argument(
+        "--json",
+        metavar="PATH",
+        help="also write the raw report here (outside the game folder)",
+    )
     p_meas.add_argument("--quiet", action="store_true", help="print JSON instead of the digest")
     p_meas.set_defaults(func=_cmd_measure)
 
@@ -762,7 +792,11 @@ def build_parser() -> argparse.ArgumentParser:
         ),
     )
     p_probe.add_argument("game_dir", help="folder containing LOMAX.EXE")
-    p_probe.add_argument("--json", metavar="PATH", help="also write the raw report here")
+    p_probe.add_argument(
+        "--json",
+        metavar="PATH",
+        help="also write the raw report here (outside the game folder)",
+    )
     p_probe.add_argument("--quiet", action="store_true", help="print JSON instead of the digest")
     p_probe.set_defaults(func=_cmd_probe_anim_nmy)
 
