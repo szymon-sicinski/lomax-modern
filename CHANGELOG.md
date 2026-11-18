@@ -6,6 +6,14 @@ Versioning: [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+Nothing yet.
+
+## [0.4.0-alpha.1] — 2026-11-18
+
+The M2–M4 vertical slice: decoded data layer, headless engine, 16-bit
+renderer with a C99 hot path, a presenter you can look at, and the runbook
+that ties them together. Everything below under *Added* since 0.1.0.
+
 ### Added
 
 - Research report: platform assessment (Win32/MFC/DirectDraw 7, not DOS),
