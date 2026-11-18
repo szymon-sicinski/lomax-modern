@@ -178,6 +178,9 @@ def _cmd_slice(args: argparse.Namespace) -> int:
             max_ticks=args.ticks,
             playfield=args.playfield,
         )
+    except WLDError as exc:
+        print(f"error: cannot read {args.world}.WLD: {exc}", file=sys.stderr)
+        return 1
     except (OSError, ValueError) as exc:
         print(f"error: {exc}", file=sys.stderr)
         return 1
@@ -321,6 +324,9 @@ def _cmd_present(args: argparse.Namespace) -> int:
     except PresentationError as exc:
         print(f"error: {exc}", file=sys.stderr)
         return 2
+    except WLDError as exc:
+        print(f"error: cannot read {world_path.name}: {exc}", file=sys.stderr)
+        return 1
     except (OSError, ValueError) as exc:
         print(f"error: {exc}", file=sys.stderr)
         return 1

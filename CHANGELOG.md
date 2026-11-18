@@ -204,6 +204,12 @@ Versioning: [Semantic Versioning](https://semver.org/).
   `renderer.rgb565_to_rgb8()` (5-bit red/blue `r<<3 | r>>2`, 6-bit green
   `g<<2 | g>>4`) and is pinned by pixel tests; found by the new depth 16 vs 24
   conformance harness.
+- `engine.render.unpack_rgb565` had the same over-brightened green (it feeds
+  `frame_to_rgba()`, i.e. every PNG the engine frame writes); now widened by bit
+  replication too, matching `renderer.rgb565_to_rgb8`.
+- `lomax-modern present` and `lomax-modern slice` no longer dump a traceback on
+  a `*.WLD` that is not a world container: the `WLDParseError` is caught and
+  reported as `error: cannot read <name>: offset …` with exit 1.
 
 ### Notes
 

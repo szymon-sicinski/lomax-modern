@@ -453,3 +453,17 @@ def test_bad_surface_syntax_is_an_argparse_error(tmp_path: Path) -> None:
         )
 
     assert caught.value.code == 2
+
+
+def test_corrupt_world_reports_a_clean_error(tmp_path: Path, capsys) -> None:
+    root = _game(tmp_path)
+    (root / "WORLDS" / "VILLAGE.WLD").write_bytes(b"")  # not a world container
+
+    code, out, err = _run(
+        capsys,
+        ["present", str(root), "--config", str(tmp_path / "config.json")],
+    )
+
+    assert code == 1
+    assert "error: cannot read VILLAGE.WLD" in err
+    assert "Traceback" not in err
