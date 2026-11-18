@@ -66,6 +66,17 @@ Versioning: [Semantic Versioning](https://semver.org/).
   every other tag (`TTAB`, `ANIM`, `NMY`, `MACR`, `PAGE`, ...) round-trips as
   opaque bytes. Round-trip is proven against all 9 retail world files
   (SHA-256 in == out).
+- `lomax-modern probe-anim-nmy` — a structural probe for the `ANIM`/`NMY`/`GNMY`
+  chunks that reports offsets, sizes and token-stream diagnostics, then scores
+  candidate record framings by how cleanly each consumes the chunks. Every
+  framing is labelled a hypothesis (or `retracted` for the two falsified `[S2]`
+  claims); the group prints `unresolved` when no framing wins. No layout is
+  asserted and no payload is decoded. Run against the retail install it shows:
+  `ANIM` only **44/566** chunk sizes are multiples of 0x38 (so the "array of
+  0x38-byte records" claim stays retracted), `NMY`'s "`u16` size + NUL name"
+  walk consumes **0/9** chunks, and `GNMY`'s `u16` size + `u16` type walk holds
+  on **104/104** chunks (3,593 entries). `docs/file-formats.md` §2.5–2.6 and the
+  Q23/Q24 open questions were corrected to these numbers.
 - `lomax-modern wld roundtrip [--check]` — re-parses every `WORLDS/*.WLD` file
   (a single file, or the whole folder via `LOMAX_GAME_DIR`/`--game-dir`),
   re-emits it in memory and reports per-file `identical`/`DIFFERENT` without

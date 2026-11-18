@@ -32,8 +32,10 @@ to L3.
 4. **Tiles are 16x16, assembled from 8x8 cells** (`TTAB` references `CELL`),
    and a plane can carry a zoom of 750 per-mille, i.e. 12x12 pre-shrunk tiles
    `[S2]`.
-5. **Sprites are surfaces with a 0x38-byte `SpriteFrame` descriptor**, 256
-   banks per world, mirrored left/right through `DDBLTFX` blocks `[S2]`.
+5. **Sprites are surfaces with a 0x38-byte `SpriteFrame` descriptor** (an
+   in-memory struct `[S2]`; the `ANIM` *file-chunk* record framing is retracted —
+   see `file-formats.md` §2.6), 256 banks per world, mirrored left/right through
+   `DDBLTFX` blocks `[S2]`.
 6. **The frame is presented with a DirectDraw `Blt` to the primary surface**;
    the Direct3D 3 path emits quads from a fixed 0x5624-byte execute buffer that
    has room for **128 quads** `[S2]`.
@@ -180,10 +182,11 @@ What stands in the way:
    needs 32x32 tiles over 16x16 cells. `CELL`/`TTAB` payloads are counted in
    bytes, so the container can hold them, but the engine's blit sizes, tile
    strides and cell indexing are hard-coded alongside the 199 width sites.
-2. **Sprites.** `SpriteFrame` is a fixed 0x38-byte record `[S2]`; 2x art doubles
-   pixel dimensions (a size field change, not a record-layout change), but every
-   consumer that assumes "sprite is at most 64 px wide" (e.g. edge-extension
-   logic in the presenter `[S3]`) must be re-derived.
+2. **Sprites.** `SpriteFrame` is a 0x38-byte *in-memory* descriptor `[S2]` (the
+   `ANIM` *file-chunk* record framing is retracted — see `file-formats.md` §2.6);
+   2x art doubles pixel dimensions (a size field change, not a record-layout
+   change), but every consumer that assumes "sprite is at most 64 px wide"
+   (e.g. edge-extension logic in the presenter `[S3]`) must be re-derived.
 3. **UI and fonts.** HUD glyphs, banners, the password screen and the menus are
    1x art; they need 2x equivalents or clean vector/text rendering.
 4. **Presenter.** The fade system, the z-buffer/viewport and the 128-quad

@@ -157,9 +157,10 @@ the earlier figure is annotated where it was recorded
 
 - The documented framing — a list of `u16` size + NUL-terminated name — is
   **retracted**: it walks exactly **one record** per file (8–16 B of
-  2,352–19,292 B) in 9/9 worlds, and none of four conventional framings
-  (`u16`/`u32` size, name-only, 4-aligned) consumes a whole chunk (0/104; best
-  case one name recovered). What the payload does contain is 58–212 printable
+  2,352–19,292 B) in 9/9 worlds, and none of the conventional framings
+  (`u16`/`u32` size, name-only, 4-aligned, plus the `u16`-size walkers scored
+  by `lomax-modern probe-anim-nmy`) consumes a whole chunk (0/9; best case one
+  name recovered). What the payload does contain is 58–212 printable
   runs of 4–14 characters at even offsets, pitch 12–18 with jumps of 36/38, each
   run followed by `00 00` in 70–85 % of cases — a variable-length record table
   carrying a name *plus* a binary tail. Framing graded **H**
@@ -169,13 +170,15 @@ the earlier figure is annotated where it was recorded
 ### 2.6 `ANIM` / sprites **[H]**
 
 `SpriteFrame` records being 0x38 bytes `[S2]` is **retracted as a chunk-level
-unit**: of 566 measured `ANIM` chunks every payload size is a multiple of 4 and
-**none** is a multiple of 0x38 (e.g. 2,700 and 27,176 bytes; remainders 0–52,
-spread uniformly), so a chunk is not an array of 0x38-byte records. A
+unit**: of 566 measured `ANIM` chunks every payload size is a multiple of 4, but
+only **44 of 566** are multiples of 0x38 (56 B) — the other 522 have remainders
+4, 8, …, 52, spread uniformly over the fourteen 4-aligned residues — so a chunk
+is not a bare array of 0x38-byte records. A
 "width, height, then w·h pixels" header tested at eight offsets under both
-endiannesses matches **0 of 566**, and `u16`-token walkers reach at best 339/566
-exact consumption, which is not proof. The chunk layout is therefore **H**:
-treat `ANIM` as an opaque blob until the reader in `LOMAX.EXE` is read
+endiannesses matches **0 of 566**, and the size-prefixed framings scored by
+`lomax-modern probe-anim-nmy` (`u16`/`u32`, both endiannesses) consume at most
+**1 of 566** chunks exactly, which is not proof. The chunk layout is therefore
+**H**: treat `ANIM` as an opaque blob until the reader in `LOMAX.EXE` is read
 ([`research/07-wp3-asset-pipeline.md`](research/07-wp3-asset-pipeline.md) G7).
 Whether a 0x38-byte *in-memory* descriptor exists inside that stream is a
 separate claim that nothing here has tested.

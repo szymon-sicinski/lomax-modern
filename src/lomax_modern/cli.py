@@ -14,6 +14,8 @@ from .doctor import find_world_files, format_report, inventory
 from .engine.render import frame_to_rgba
 from .engine.run import run_slice
 from .measure import measure_install, summarise, to_json
+from .probe_anim_nmy import format_report as format_probe_report
+from .probe_anim_nmy import probe_anim_nmy
 from .wld import WLDError, parse_file
 from .wldscan import format_report as format_wld_report
 from .wldscan import scan_file
@@ -72,6 +74,17 @@ def _cmd_measure(args: argparse.Namespace) -> int:
     if args.json:
         Path(args.json).write_text(to_json(report), encoding="utf-8")
     print(to_json(report) if args.quiet else summarise(report))
+    return 0
+
+
+def _cmd_probe_anim_nmy(args: argparse.Namespace) -> int:
+    if not Path(args.game_dir).is_dir():
+        print(f"error: not a directory: {args.game_dir}", file=sys.stderr)
+        return 2
+    report = probe_anim_nmy(args.game_dir)
+    if args.json:
+        Path(args.json).write_text(to_json(report), encoding="utf-8")
+    print(to_json(report) if args.quiet else format_probe_report(report))
     return 0
 
 
@@ -274,6 +287,18 @@ def build_parser() -> argparse.ArgumentParser:
         help="also write the final frame as PNG here (outside the game folder)",
     )
     p_slice.set_defaults(func=_cmd_slice)
+
+    p_probe = sub.add_parser(
+        "probe-anim-nmy",
+        help=(
+            "structural probe for ANIM/NMY/GNMY chunks: offsets, token streams "
+            "and record hypotheses scored by coverage (report, not parse)"
+        ),
+    )
+    p_probe.add_argument("game_dir", help="folder containing LOMAX.EXE")
+    p_probe.add_argument("--json", metavar="PATH", help="also write the raw report here")
+    p_probe.add_argument("--quiet", action="store_true", help="print JSON instead of the digest")
+    p_probe.set_defaults(func=_cmd_probe_anim_nmy)
 
     return parser
 
