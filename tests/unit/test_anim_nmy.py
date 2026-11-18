@@ -4,8 +4,14 @@ from __future__ import annotations
 
 import struct
 
-from lomax_modern.anim_nmy import decode_anim, decode_nmy, probe_anim_nmy
-from tests.fixtures.synth import anim_payload, build_container, nmy_payload
+from lomax_modern.anim_nmy import decode_anim, decode_gnmy, decode_nmy, probe_anim_nmy, probe_gnmy
+from tests.fixtures.synth import (
+    anim_payload,
+    build_container,
+    gnmy_entries_payload,
+    head_payload,
+    nmy_payload,
+)
 
 
 # ---------------------------------------------------------------------------
@@ -121,3 +127,106 @@ def test_probe_counts_anim_and_nmy(tmp_path) -> None:
     assert report.nmy_chunks == 1
     assert report.nmy_clean == 1
     assert report.worlds[0]["nmy_records"] == 1
+
+
+# ---------------------------------------------------------------------------
+# GNMY
+# ---------------------------------------------------------------------------
+
+
+def test_gnmy_entry_round_trips() -> None:
+    payload = gnmy_entries_payload([(0, 320, 240, 0x0000, (1, 2, 3), None)])
+    entries, consumed = decode_gnmy(payload, {0: 3})
+    assert entries is not None
+    assert len(entries) == 1
+    entry = entries[0]
+    assert entry.type_index == 0
+    assert entry.x == 320 and entry.y == 240
+    assert entry.flags == 0x0000
+    assert entry.params == (1, 2, 3)
+    assert entry.extra is None
+    assert entry.size == entry.structural_size == 16
+    assert len(payload) - consumed == 2  # u16 terminator consumed, 2 pad bytes
+
+
+def test_gnmy_size_field_equals_structural_length() -> None:
+    payload = gnmy_entries_payload(
+        [
+            (0, 1, 2, 0x0000, (), None),
+            (1, 3, 4, 0x8000, (7,), 99),
+        ],
+    )
+    entries, _ = decode_gnmy(payload, {0: 0, 1: 1})
+    assert entries is not None and len(entries) == 2
+    for entry in entries:
+        assert entry.size == entry.structural_size
+
+
+def test_gnmy_extra_present_only_on_bit15() -> None:
+    payload = gnmy_entries_payload(
+        [
+            (0, 1, 2, 0x8000, (5,), 42),
+            (1, 3, 4, 0x0000, (6,), None),
+        ],
+    )
+    entries, _ = decode_gnmy(payload, {0: 1, 1: 1})
+    assert entries[0].extra == 42
+    assert entries[1].extra is None
+
+
+def test_gnmy_type_index_out_of_table_rejected() -> None:
+    payload = gnmy_entries_payload([(0, 1, 2, 0, (), None)])
+    assert decode_gnmy(payload, {}) is None
+
+
+def test_gnmy_truncated_rejected() -> None:
+    payload = gnmy_entries_payload([(0, 1, 2, 0, (1, 2), None)])  # 14-byte entry
+    # keep only size + type + x + y (8 bytes): the flags word and params are cut
+    assert decode_gnmy(payload[:8], {0: 2}) is None
+
+
+def test_gnmy_missing_terminator_rejected() -> None:
+    payload = gnmy_entries_payload([(0, 1, 2, 0, (), None)], trailer=0)
+    assert decode_gnmy(payload[:-2], {0: 0}) is None
+
+
+def test_gnmy_empty_list() -> None:
+    entries, consumed = decode_gnmy(b"\x00\x00", {})
+    assert entries == []
+    assert consumed == 2
+
+
+def test_probe_gnmy_correlates_coordinates(tmp_path) -> None:
+    # Corrected MAP layout (docs §2.4): N big-endian u16 tile words, then N
+    # collision bytes.  A 16x16 (8-px) plane is 8x8 = 64 cells.
+    n = 64
+    collision = bytearray(n)
+    collision[1 * 8 + 1] = 1  # cell (1,1) solid; all else passable (0)
+    map_bytes = b"\x00" * (2 * n) + bytes(collision)
+    world = build_container(
+        [
+            ("WRLD", b"PS-X" + b"\x00" * 4),
+            ("NMY", nmy_payload([("T", 0)], trailer=2)),  # W_A=0x10 -> K=1
+            ("HEAD", head_payload(16, 16, endian=">")),
+            ("TTAB", b"\x00" * 24),
+            ("MAP", map_bytes),
+            (
+                "GNMY",
+                gnmy_entries_payload(
+                    [
+                        (0, 0, 0, 0x0000, (0,), None),  # cell (0,0) passable
+                        (0, 16, 16, 0x0000, (0,), None),  # cell (1,1) solid
+                    ]
+                ),
+            ),
+            ("END", b""),
+        ],
+        endian=">",
+    )
+    (tmp_path / "T.WLD").write_bytes(world)
+    report = probe_gnmy([tmp_path / "T.WLD"])
+    assert report.entries == 2
+    assert report.on_map == 2
+    assert report.walkable == 1  # only the cell-(0,0) entry is on passable
+    assert report.total_cells == 64
+    assert report.walkable_cells == 63

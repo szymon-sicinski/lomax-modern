@@ -8,6 +8,12 @@ Versioning: [Semantic Versioning](https://semver.org/).
 
 ### Added
 
+- `gnmy` command: decodes the recovered `GNMY` entry layout (`u16 size/type/x/y/
+  flags` + `K` params + optional extra) and reports the placement correlation —
+  3,593 entries, `size == structural length` on 3,593/3,593, `x`/`y` as pixel
+  coordinates (3,584/3,593 on-map) — recovered from the reader at VA `0x414D16`
+  (file offset `0x14116`) in `LOMAX.EXE` and validated on all 104 retail chunks
+  (`docs/file-formats.md` §2.5). Read-only; accepts `$LOMAX_GAME_DIR`.
 - `examples/demo.sh` and [`docs/demo.md`](docs/demo.md): the alpha's capability
   as one runnable walkthrough — `doctor` → `present --modern` →
   `present --authentic` → `slice --frames` → `gif` → `conformance` → `export` —
