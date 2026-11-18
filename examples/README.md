@@ -20,5 +20,16 @@
   python examples/scale_demo.py --scale 6 --png /tmp/scale_demo.png
   ```
 
+- `demo.sh` — the whole alpha in one run: `doctor` → `present --modern` →
+  `present --authentic` → `slice --frames` → `gif` → `conformance` → `export`,
+  against your own unpacked copy, printing each command before it runs. Fails at
+  the first refusal and writes only to `./demo-out` (or `--out DIR`). The
+  transcript is reproduced command by command in
+  [`docs/demo.md`](../docs/demo.md):
+
+  ```bash
+  bash examples/demo.sh "<install>"
+  ```
+
 More examples will land with the `WLD` toolkit (LMX-5/LMX-6): a chunk dump, a
 tile export, and a round-trip check.

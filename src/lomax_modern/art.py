@@ -566,6 +566,22 @@ class ExportReport:
         return "\n".join(self.lines)
 
 
+def refuse_into_game_folder(directory: str | Path) -> None:
+    """Refuse a destination directory inside a tree that holds ``LOMAX.EXE``.
+
+    Shared by every writer: ``check_output_dir`` uses it for art, and the GIF
+    command uses it for its ``--out`` file, so a derived artifact can never land
+    inside the user's install.
+    """
+    target = Path(directory).resolve()
+    for candidate in (target, *target.parents):
+        if (candidate / "LOMAX.EXE").is_file():
+            raise ArtError(
+                f"refusing to write inside the game folder ({candidate}); "
+                "choose an output directory outside it"
+            )
+
+
 def check_output_dir(out_dir: str | Path, world_path: str | Path) -> None:
     """Refuse to write art into a game folder (the repository is read-only there).
 
@@ -580,12 +596,7 @@ def check_output_dir(out_dir: str | Path, world_path: str | Path) -> None:
             f"refusing to write into the game folder ({source.parent}); "
             "choose an output directory outside it"
         )
-    for directory in (out, *out.parents):
-        if (directory / "LOMAX.EXE").is_file():
-            raise ArtError(
-                f"refusing to write inside the game folder ({directory}); "
-                "choose an output directory outside it"
-            )
+    refuse_into_game_folder(out)
 
 
 def _count_out_of_bank(
