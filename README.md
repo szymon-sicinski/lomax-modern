@@ -55,6 +55,9 @@ lomax-modern doctor "/path/to/Lomax"
 # Walk the chunk chain of a world file
 lomax-modern wldscan "/path/to/Lomax/WORLDS/MAIN.WLD"
 
+# Prove the reader/writer round-trips every world file byte-for-byte (read-only)
+LOMAX_GAME_DIR="/path/to/Lomax" python -m lomax_modern wld roundtrip --check
+
 # Measure the install: chunk sequence, plane widths per section, audio formats
 lomax-modern measure "/path/to/Lomax" --json /tmp/lomax-report.json
 ```
