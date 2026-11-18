@@ -14,6 +14,13 @@ Versioning: [Semantic Versioning](https://semver.org/).
   coordinates (3,584/3,593 on-map) — recovered from the reader at VA `0x414D16`
   (file offset `0x14116`) in `LOMAX.EXE` and validated on all 104 retail chunks
   (`docs/file-formats.md` §2.5). Read-only; accepts `$LOMAX_GAME_DIR`.
+- `docs/roadmap/44-presenter-options.md` scopes the window presenter for demo
+  option C: the minimum window, a ranked option table (default **ctypes + SDL2**,
+  ≈$0.50 for 3 cards / ≈$0.66 for 4 with `epx-aa` parity), and the blit spike
+  that settled the choice (SDL2 software renderer 847 fps, ~14× headroom).
+  `docs/architecture.md` §1/§3/§5 now point at it in addition to still calling
+  the presenter future at §1/§3, and `43-demo-plan.md` §6 links the now-costed
+  presentation half.
 - `examples/demo.sh` and [`docs/demo.md`](docs/demo.md): the alpha's capability
   as one runnable walkthrough — `doctor` → `present --modern` →
   `present --authentic` → `slice --frames` → `gif` → `conformance` → `export` —
