@@ -129,7 +129,8 @@ lomax-modern present "/path/to/Lomax" --frame /tmp/lomax-modern.png
 lomax-modern present "/path/to/Lomax" --authentic --frame /tmp/lomax-native.png
 ```
 
-You get a summary on stdout and a PNG where you asked for it:
+You get a summary on stdout — excerpted below; `present` first prints the install
+manifest, the config path and the world it picked — and a PNG where you asked for it:
 
 ```
 engine: 300 ticks at 60 Hz (fixed by the engine core), 300 frames, exit reached: no
@@ -192,8 +193,8 @@ your game folder**.
 | `surface` | `[width, height]` | Presentation surface; content is centred with integer padding. |
 | `scale` | `null` or a positive integer | `null` = the largest integer that fits (the CLI spells this `--scale auto`); a number pins that factor. |
 
-An unknown key, a corrupt file, or a `version` from the future is an error with
-the line and column — never a silent fallback.
+An unknown key, a corrupt file, or a `version` from the future is an error —
+never a silent fallback — and invalid JSON is reported with its line and column.
 
 ### Precedence
 
@@ -243,7 +244,8 @@ written) · `2` usage error or a refused install.
 | Symptom | Cause | Fix |
 |---|---|---|
 | `error: not a directory: /path` | Typo, or a relative path from another shell | Use the absolute path to the folder that contains `WORLDS/` |
-| `verdict: incomplete unpacked install` with `MISSING` rows | Not an unpacked retail copy | Point at the folder holding `LOMAX.EXE` and `WORLDS/`; an ISO or mounted disc image is not accepted |
+| `present`: `verdict: not an unpacked Lomax game directory -- missing: WORLDS/*.WLD` | Not an unpacked retail copy | Point at the folder holding `LOMAX.EXE` and `WORLDS/`; an ISO or mounted disc image is not accepted |
+| `doctor`: `verdict: incomplete install, missing: …` | Same condition, lighter gate | `doctor` still inventories the folder; `present` will refuse it until the missing required entries exist |
 | `no *.WLD found under …` | `WORLDS/` is empty or named differently | Check the case-insensitive name and that at least one `.WLD` is present |
 | `unsupported config version N` | The config was written by a newer build | Delete the config file (it is recreated) or point `--config` elsewhere |
 | `surface must be WIDTHxHEIGHT` | Malformed `--surface` | `1920x1080`, `1920*1080` and `1920,1080` are accepted |
@@ -261,7 +263,7 @@ pip install -e ".[dev]"
 python -m pytest tests -m "not realgame"                  # synthetic fixtures only
 LOMAX_GAME_DIR="/path/to/Lomax" python -m pytest tests    # + real-install checks
 
-make -C native && ./native/smoke                          # C99 renderer, 23 golden checks
+make -C native && ./native/smoke                          # C99 renderer, 20 golden checks
 python -m lomax_modern.conformance                        # M4 exit criterion, PASS 10/10
 ```
 
@@ -277,7 +279,7 @@ it is what caught a green-channel bug in three separate copies.
 docs/runbook.md        the long-form guide: manifest, config, examples, exit codes
 docs/architecture.md   layering, the windowed-presenter plan, clean-room boundary
 docs/file-formats.md   what is known about .WLD / CELL / TTAB / MAP / ANIM / NMY
-docs/roadmap/          milestones, releases, risks, budget, measured cost
+docs/roadmap/          milestones, releases, risks, budget
 docs/research/         the research deliverables (read in order)
 src/lomax_modern/      CLI, engine core, renderer, scaler, presenter, config,
                        install gate, conformance harness
