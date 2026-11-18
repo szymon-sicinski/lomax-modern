@@ -1,9 +1,9 @@
 # lomax-modern
 
 Research and read-only tooling for **The Adventures of Lomax** (Psygnosis,
-1996/97, Windows 95). Status: **research plus read-only tooling** — no engine
-work yet, no game data in this repository; the measured state of the retail
-install is in
+1996/97, Windows 95). Status: **research + read-only tooling + an engine-core
+vertical slice** — no game data in this repository; the measured state of the
+retail install is in
 [`docs/research/06-measurements-and-improvements.md`](docs/research/06-measurements-and-improvements.md).
 
 The question this project starts from: *what can actually be improved in Lomax
@@ -32,9 +32,14 @@ is in [`docs/research/02-resolution.md`](docs/research/02-resolution.md):
 - A citation-backed research report on the game's platform, file formats and
   improvement options.
 - Read-only Python tooling that inspects **your own** copy of the game:
-  `doctor` (install inventory), `wldscan` (chunk scanner for `.WLD` files) and
+  `doctor` (install inventory), `wldscan` (chunk scanner for `.WLD` files),
   `measure` (install measurement: chunk sequence, per-section plane widths,
-  audio formats).
+  audio formats), `export` (decode `CELL`/`TTAB`/`MAP` into PNG sheets) and
+  `wld roundtrip` (byte-exact round-trip proof).
+- A **reference engine core** (`lomax_modern.engine` + `lomax-modern slice`):
+  a headless vertical slice that loads the first world, ticks at the original
+  60 Hz, collides against the decoded `MAP`, and draws a 16-bit `B5G6R5` frame —
+  with every unresolved format field flagged, not guessed.
 
 ## What this repository is not
 
@@ -60,6 +65,12 @@ LOMAX_GAME_DIR="/path/to/Lomax" python -m lomax_modern wld roundtrip --check
 
 # Measure the install: chunk sequence, plane widths per section, audio formats
 lomax-modern measure "/path/to/Lomax" --json /tmp/lomax-report.json
+
+# Decode one world's CELL/TTAB/MAP into PNG sheets (read-only on the source)
+lomax-modern export "/path/to/Lomax/WORLDS/VILLAGE.WLD" --out /tmp/art
+
+# Run the headless vertical slice of the first world (no display, no LOMAX.EXE)
+LOMAX_GAME_DIR="/path/to/Lomax" python -m lomax_modern slice --world VILLAGE --ticks 300
 ```
 
 Run the tests with `python -m pytest tests -m "not realgame"`. The integration
@@ -70,7 +81,8 @@ tests are opt-in: `LOMAX_GAME_DIR=/path/to/Lomax python -m pytest tests`.
 ```
 docs/research/     the research deliverables (read in order)
 docs/file-formats.md   what is known about .WLD / SFX / DEMOS / registry
-src/lomax_modern/  read-only CLI (doctor, wldscan, measure)
+src/lomax_modern/  read-only CLI (doctor, wldscan, measure, export, wld, slice)
+                   + engine core (engine/: map/collision, 60 Hz tick, frame)
 tests/             unit tests on synthetic fixtures + opt-in real-install tests
 ```
 

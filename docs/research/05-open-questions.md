@@ -14,6 +14,12 @@ these can be answered from public documentation alone.
 > strategy report ([`../roadmap/15-strategy-report.md`](../roadmap/15-strategy-report.md)):
 > input is an unpacked game directory (no ISO, no ripping); music is ambient +
 > jingles + SFX (no CD-DA content in the data).
+>
+> **Revision v3** (LMX-10/M3, 2026-11-18). Q31 added: the `MAP` collision
+> byte's per-value semantics are unresolved and the documented `[D]` bit-field
+> is retracted (near-uniform byte histogram across all 104 planes,
+> [`../file-formats.md`](../file-formats.md) §2.4). The engine core ships only
+> the 0-vs-non-zero solidity rule as a labelled hypothesis.
 
 | # | Question | Why it matters | How to resolve |
 |---|---|---|---|
@@ -47,6 +53,7 @@ these can be answered from public documentation alone.
 | Q28 | Does M2 serve **disc owners only** (ddraw proxy over the retail exe), or also **disc-less users** (own engine + presenter over the MIT data layer)? | A scope and budget fork, not a mechanism change | ✅ **resolved** — disc-less: own engine + presenter over the MIT data layer (human decision, 2026-11-18); the `ddraw.dll` proxy is demoted to an optional disc-owner appendix ([`../roadmap/15-strategy-report.md`](../roadmap/15-strategy-report.md)) |
 | Q29 | What is the input a disc-less user supplies, and is anything the engine references absent from a plain data-only copy? | "Disc-less" still means the user supplies data; the engine must name its inputs and the repo must never contain them | ✅ **answered** — an unpacked game directory in the retail layout (`WORLDS/`, `SFX/`, `AMBIENT/`, `JINGLES/`, `DEMOS/`, `LOMAX.EXE` present but unused); the engine takes a path. **No ISO handling, no ripping instructions** (2026-11-18) |
 | Q30 | What is the licence-clean source for the soundtrack once the CD is out of the picture? | The PC build's music is CD-DA only (MCI `cdaudio`), so the own engine has no music | ✅ **answered** — measured: 82 WAVs (67 SFX, 12 ambient loops = 6 worlds × stereo `_L`/`_R`, 3 jingles); no CD-DA/MP3/OGG/MOD in the data. Plan: ambient L/R pair as the per-world bed, jingles on transitions, SFX as-is; no ripping, no bundled audio. An optional user-supplied music folder is a later possibility, not v0.1 (2026-11-18) |
+| Q31 | What do the individual `MAP` collision-byte values mean? | The engine's collision (solid vs passable, one-way, hazards) needs per-value semantics, not a flat "non-zero = solid" guess | the documented `[D]` bit-field (`0x80` solid, `0xC0` one-way, `0x08`/`0x10`/`0x20` directional) is **retracted** — the byte is near-uniform over all 256 values (measured 2026-11-18, `file-formats.md` §2.4). Read the collision lookup in the EXE, or correlate each byte value with observed solidity in a playtest. Until then the engine ships 0-vs-non-zero `[H]` and preserves the byte verbatim |
 
 **Opened by the LMX-7 reports (2026-11-17).** `TTAB` is now framed — 8 bytes per
 16×16 tile, four big-endian `u16`, 13-bit index plus `0x2000`/`0x4000` flags —
