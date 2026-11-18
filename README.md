@@ -240,7 +240,11 @@ missing-data paths and the platform/packaging status:
 
 ## Command reference
 
-Every command is read-only with respect to your game folder.
+Every command is read-only with respect to your game folder, with one exception:
+the `--json` report written by `measure` and `probe-anim-nmy` goes to whatever
+path you give it, with no install-folder guard. Point it outside the install —
+the other writers (`present --frame`, `slice --frame/--frames`, `export --out`,
+`--config`) refuse a path inside it.
 
 | Command | What it does |
 |---|---|
@@ -264,7 +268,7 @@ written) · `2` usage error or a refused install.
 | `error: not a directory: /path` | Typo, or a relative path from another shell | Use the absolute path to the folder that contains `WORLDS/` |
 | `present`: `verdict: not an unpacked Lomax game directory -- missing: …` | Not an unpacked retail copy; the list names what is absent | Point at the folder holding `LOMAX.EXE` and `WORLDS/`; an ISO or mounted disc image is not accepted |
 | `doctor`: `verdict: incomplete install, missing: …` | `doctor` matches retail names exactly; `present` and `measure` are more forgiving | `doctor` still inventories the folder; if `present` accepts the same folder, the `MISSING` rows are the naming difference, not missing files |
-| `error: no *.WLD found under …` (from `wld roundtrip` / `anim-nmy`) | No `.WLD`/`.wld` exists anywhere under the path — the search is recursive and case-insensitive, so an oddly named folder is *not* the cause | Point at the install root, or pass a single world file |
+| `error: no *.WLD found under …` (from `wld roundtrip` / `anim-nmy`) | No `.WLD`/`.wld` exists anywhere under the path — the search is recursive and case-insensitive, so an oddly named folder is *not* the cause | Point at the install root — both search it recursively; `wld roundtrip` also takes a single world file |
 | `unsupported config version N` | The config was written by a newer build | Delete the config file (it is recreated) or point `--config` elsewhere |
 | `surface must be WIDTHxHEIGHT` | Malformed `--surface` | `1920x1080`, `1920*1080` and `1920,1080` are accepted |
 | `frame: none written` | No `--frame` given | This build has no window; pass `--frame PATH` to get a PNG |
