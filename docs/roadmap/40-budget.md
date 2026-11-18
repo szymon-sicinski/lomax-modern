@@ -12,6 +12,12 @@ document exists so the human can decide *whether* to start a milestone, not just
 > surviving tooling). **The own engine is not a shim**: at *expected* it is
 > ~1.5× the old ~$8–9 natural-mix figure, and the engine-core milestone carries a
 > band wide enough to push the whole plan toward ~3× if scope explodes (§5).
+>
+> **Revision v3** (2026-11-18). Reconciled with the measured M2–M4 run. The board
+> database records **wall-clock and card/review counts but not token counts**, so
+> the estimate-vs-measured table in [Revision](#revision) reports tokens as *not
+> recorded* rather than inventing a number, and re-forecasts M5/M6 from measured
+> per-card wall-clock.
 
 ## Table of contents
 
@@ -22,6 +28,7 @@ document exists so the human can decide *whether* to start a milestone, not just
 5. [Cumulative by release](#5-cumulative-by-release)
 6. [Spend reporting (no ceiling)](#6-spend-reporting-no-ceiling)
 7. [What this cannot estimate](#7-what-this-cannot-estimate)
+8. [Revision](#revision)
 
 ---
 
@@ -173,3 +180,109 @@ stop and publish findings.
   leaving token numbers intact.
 - **The `default` profile's 41 flash sessions** skew a naive blended flash rate;
   the rates here come from a least-squares fit over all six calibration rows.
+
+## Revision
+
+**v3 — reconcile with the measured M2–M4 cost (2026-11-18).** The M2–M4 vertical
+slice has run, so §4's estimates can be checked against the board instead of
+intuition. The check surfaced two corrections: **(1)** the board database
+records **wall-clock and card/review counts**, not token counts — so the
+token-axis comparison below is *not recorded*, not zero; and **(2)** on the axis
+that *is* measured, the dominant variance is rework, and it is concentrated in
+M4.
+
+### Estimate vs measured, per milestone
+
+§4's expected-scenario token figures are shown for reference; the measured
+column is wall-clock, because token spend for M2–M4 was never recorded on the
+board (see [Source query](#source-query)).
+
+| Milestone | §4 exp in/out | measured tokens | measured wall-clock | cards | review verdicts |
+|---|---|---|---|---|---|
+| M2 data layer | 960k / 520k | not recorded | 83.5 min | 12 | 4 approve / 3 changes |
+| M3 engine core | 1,800k / 1,020k | not recorded | 41.9 min | 4 | 1 / 1 |
+| M4 presenter | 840k / 480k | not recorded | 131.3 min | 20 | 6 / 5 |
+| M7 packaging | 240k / 135k | not recorded | 12.1 min | 2 | 1 / 0 |
+| research & M0–M1 (incurred) | — | not recorded | 184.7 min (+22 wasted runs) | 28 | 6 / 4 |
+
+"Cards" counts distinct cards with at least one completed run; "wall-clock" sums
+completed runs' `ended_at − started_at`. Card ids per milestone are in
+[Card inventory](#card-inventory); the query that reproduces the table is in
+[Source query](#source-query).
+
+### Drivers of the variance
+
+The single largest driver was one bit-replication bug: the 6-bit green channel
+was widened with `(g << 2) | (g >> 2)` instead of `(g << 2) | (g >> 4)`, and
+because the same formula lived in three modules (`engine/render.py`,
+`renderer.py`, `presenter.py`) it forced changes-required re-reviews of PRs #21,
+#22, #23 and #25 before the fix (t_63fa35db, t_2c68fd71, t_42448bbe). M4's
+integration did not save review cost: the five leaf PRs (#21 renderer, #22
+present CLI, #23 conformance, #24 runbook, #25 green fix) were each reviewed
+independently — several with changes-required, two rebased (t_740f5aa0,
+t_bea18a7b) — and then the synthesis card (t_9d241cef) assembled them into one
+integration PR #26 that received two further reviews before merge, leaving M4
+with 20 cards of which 12 were reviewer passes. The 22 non-completed runs in the
+research phase (a misconfigured `deepseek-pro` model name, an unmounted git
+worktree, a missing GitHub token) are real wall-clock but sit in M0/M1, which §4
+marks "incurred" without capturing that waste.
+
+### Re-forecast for M5/M6
+
+Measured per-card wall-clock (completed runs) is the only per-card cost the
+board records, so it replaces the per-milestone guess; token spend stays
+unmeasurable from the board (not recorded).
+
+| profile | measured wall-clock per card (M2–M4) |
+|---|---|
+| specialist (implementation) | ~13–25 min |
+| builder (implementation) | ~2–7 min |
+| reviewer (one pass) | ~5.5–7.5 min |
+| lead (synthesis/merge) | ~8–16 min |
+
+- **M5 controller & input** (§4: 420k / 240k exp). Decomposed as ~3
+  implementation cards + ~3 review passes + 1 lead synthesis, the measured rates
+  give **~1.0–1.3 h wall-clock across ~7 cards**.
+- **M6 audio** (§4: 100k / 55k exp). ~1 implementation card + 1 review gives
+  **~0.2 h wall-clock across 2 cards**.
+
+**Does the integration approach change the forecast?** Yes, and not in the
+direction §4 assumed. The "one review instead of five" only materialised in M4
+*after* the five leaf PRs had already been reviewed and rebased, so the measured
+review load was the sum of the leaves plus the integration — roughly double the
+method's one-pass-per-card assumption. A milestone that integrates first and
+reviews the merged result once would approach the single-pass assumption; a
+milestone that reviews leaves first pays the M4 pattern. Until the process
+changes, treat §4's rework factors (2.0× for M2–M4, 1.5× for M5) as consistent
+with — or slightly optimistic against — the measured 38–50% changes-required
+rate.
+
+### Card inventory
+
+- **M2 (12):** t_d7e61628, t_9b2ba6ab, t_6aeaa5c4, t_c0e87352, t_1293fd33,
+  t_1365e154, t_6b6601f3, t_67905c08, t_41cbde19, t_4fd0f0ab, t_5f092437,
+  t_4bbddac9.
+- **M3 (4):** t_64c84629, t_63fa35db, t_7afb3f54, t_42448bbe.
+- **M4 (20):** t_c06b9a88, t_e78bf2b9, t_60957323, t_a1835193, t_9d241cef,
+  t_d225eaaf, t_740f5aa0, t_bea18a7b, t_3eee5fb9, t_d3f62935, t_14d7744f,
+  t_2c68fd71, t_233d2248, t_317b4d3c, t_ee91cc6d, t_fd036ee5, t_2a861d65,
+  t_77c54196, t_46009157, t_e190f112.
+- **M7 (2):** t_b25db0cf, t_c2b4c84a.
+- **research & M0–M1 (28):** t_ef9f28da, t_813193a6, t_c6963f52, t_abee9ea7,
+  t_c465a167, t_dce28ab7, t_9a019c4a, t_d5b45ed5, t_1be13ca0, t_f46072b8,
+  t_a8a3e64a, t_a2860e97, t_1025ab57, t_50f8aa85, t_1c414fa8, t_a37f3f36,
+  t_3493cb71, t_10e0211f, t_a206a709, t_37c2b249, t_cb2f724c, t_beed4320,
+  t_484c8080, t_da891848, t_0b888f1d, t_86bd51ab, t_19a527f3, t_bdfecee7.
+
+### Source query
+
+Measured from the retrolab board database
+(`/home/nwah/.hermes/kanban/boards/retrolab/kanban.db`). Wall-clock = sum of
+`task_runs.ended_at − task_runs.started_at` over rows with `outcome='completed'`;
+milestone assigned from the card title (`LMX-10 M2/M3/M4/M7` tags; review /
+rebase / merge cards keyed by PR number). **Tokens are not in this database**: a
+run's token count would be recovered by joining the `session_id` recorded in its
+`owner_admitted` event to the `session_model_usage` table of the profile's
+`state.db` (`/home/nwah/.hermes/profiles/<profile>/state.db`), a separate
+database that was not mounted in the worker environment — hence "not recorded"
+above.
