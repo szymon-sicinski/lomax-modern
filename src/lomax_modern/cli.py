@@ -7,13 +7,15 @@ import os
 import re
 import sys
 from pathlib import Path
+from typing import Callable
 
 from . import __version__
 from . import gif, png
-from .art import ArtError, export_world, refuse_into_game_folder
+from .art import ArtError, check_output_dir, export_world, refuse_into_game_folder
 from .config import (
     UNSET,
     ConfigError,
+    PresentSettings,
     default_config_path,
     load_or_create,
     resolve_settings,
@@ -22,7 +24,6 @@ from .config import (
 from .anim_nmy import format_anim_nmy_report
 from .anim_nmy import probe_anim_nmy as probe_recovered_framings
 from .doctor import find_world_files, format_report, inventory
-from .engine.render import frame_to_rgba
 from .engine.run import run_slice
 from .install import check_install, is_inside_tree, resolve_world
 from .measure import measure_install, summarise, to_json
@@ -31,14 +32,20 @@ from .probe_anim_nmy import probe_anim_nmy
 
 from .presenter import (
     PresentationError,
-    image_to_rgba,
     plan_presentation,
     present_frame,
+    write_presented_png,
+    write_presentation_png,
 )
 from .scaler import Filter
 from .wld import WLDError, parse_file
 from .wldscan import format_report as format_wld_report
 from .wldscan import scan_file
+
+#: ``slice`` has no presenter settings of its own, so its PNGs are exported
+#: through the authentic profile: native 320x240, nearest, no letterboxing --
+#: the same pixels its single-frame ``--frame`` export has always had.
+SLICE_CAPTURE_SETTINGS = PresentSettings(modern=False).with_profile(False)
 
 
 def _cmd_export(args: argparse.Namespace) -> int:
@@ -153,8 +160,54 @@ def _cmd_wld_roundtrip(args: argparse.Namespace) -> int:
     return 1 if (args.check and any_diff) else 0
 
 
+def _frame_filename(index: int) -> str:
+    """Deterministic per-tick name, 4 digits, so ``ffmpeg -i frame_%04d.png`` fits."""
+    return f"frame_{index:04d}.png"
+
+
+def _frame_sink(
+    out_dir: Path, settings: PresentSettings
+) -> Callable[[int, object], None]:
+    """Build the ``run_slice`` frame sink: one presented PNG per tick.
+
+    ``png.write`` creates the directory on the first frame, so an absent
+    ``--out`` needs no separate mkdir (and a bad path fails once, loudly).
+    """
+
+    def sink(index: int, frame: object) -> None:
+        write_presented_png(out_dir / _frame_filename(index), frame, settings)
+
+    return sink
+
+
+def _sequence_summary(out_dir: Path, count: int) -> str:
+    """One deterministic line describing a written frame sequence."""
+    if count:
+        span = f"{_frame_filename(0)} .. {_frame_filename(count - 1)}"
+    else:
+        span = "none (0 ticks)"
+    return f"frames: {count} PNGs in {out_dir} ({span})"
+
+
+def _check_capture_args(args: argparse.Namespace) -> int | None:
+    """Validate the ``--frames``/``--out`` pair; return an exit code when invalid."""
+    if args.frames is not None and args.out is None:
+        print(
+            "error: --frames N needs --out DIR (where the PNG sequence goes)",
+            file=sys.stderr,
+        )
+        return 2
+    if args.out is not None and args.frames is None:
+        print("error: --out DIR is only used with --frames N", file=sys.stderr)
+        return 2
+    return None
+
+
 def _cmd_slice(args: argparse.Namespace) -> int:
     """Run the headless vertical slice of the first world (read-only)."""
+    usage = _check_capture_args(args)
+    if usage is not None:
+        return usage
     game_dir = args.game_dir or os.environ.get("LOMAX_GAME_DIR")
     if not game_dir:
         print(
@@ -174,12 +227,25 @@ def _cmd_slice(args: argparse.Namespace) -> int:
                 file=sys.stderr,
             )
             return 2
+    out_dir: Path | None = None
+    if args.out is not None:
+        out_dir = Path(args.out).expanduser()
+        try:
+            check_output_dir(out_dir, Path(game_dir) / "WORLDS" / f"{args.world}.WLD")
+        except ArtError as exc:
+            print(f"error: {exc}", file=sys.stderr)
+            return 2
     try:
         report, frame = run_slice(
             game_dir,
             worlds=(args.world,),
-            max_ticks=args.ticks,
+            max_ticks=args.frames if args.frames is not None else args.ticks,
             playfield=args.playfield,
+            on_frame=(
+                _frame_sink(out_dir, SLICE_CAPTURE_SETTINGS)
+                if out_dir is not None
+                else None
+            ),
         )
     except WLDError as exc:
         print(f"error: cannot read {args.world}.WLD: {exc}", file=sys.stderr)
@@ -188,9 +254,15 @@ def _cmd_slice(args: argparse.Namespace) -> int:
         print(f"error: {exc}", file=sys.stderr)
         return 1
     print(report.format())
-    if args.frame:
-        png.write(Path(args.frame), frame.width, frame.height, frame_to_rgba(frame))
-        print(f"frame written: {args.frame}")
+    try:
+        if args.frame:
+            write_presented_png(Path(args.frame), frame, SLICE_CAPTURE_SETTINGS)
+            print(f"frame written: {args.frame}")
+        if out_dir is not None:
+            print(_sequence_summary(out_dir, report.ticks))
+    except (OSError, png.PNGError) as exc:
+        print(f"error: cannot write frame: {exc}", file=sys.stderr)
+        return 1
     return 0
 
 
@@ -351,9 +423,13 @@ def _cmd_present(args: argparse.Namespace) -> int:
     """Render the engine's frame through the configured presentation.
 
     Read-only on the game folder: the only writes are the config file (on first
-    run or with ``--save``) and an optional ``--frame`` PNG, both refused when
-    they would land inside the install.
+    run or with ``--save``) and the PNG export (``--frame``, or one PNG per tick
+    with ``--frames N --out DIR``), all refused when they would land inside the
+    install.
     """
+    usage = _check_capture_args(args)
+    if usage is not None:
+        return usage
     requested = Path(args.game_dir).expanduser()
     manifest = check_install(requested)
     if not manifest.ok:
@@ -414,13 +490,25 @@ def _cmd_present(args: argparse.Namespace) -> int:
         print(f"error: {exc}", file=sys.stderr)
         return 2
 
+    out_dir: Path | None = None
+    if args.out is not None:
+        out_dir = Path(args.out).expanduser()
+        try:
+            check_output_dir(out_dir, world_path)
+        except ArtError as exc:
+            print(f"error: {exc}", file=sys.stderr)
+            return 2
+
     try:
         report, frame = run_slice(
             manifest.root,
             worlds=(world_path.stem,),
             world_path=world_path,
-            max_ticks=args.ticks,
+            max_ticks=args.frames if args.frames is not None else args.ticks,
             playfield=args.playfield,
+            on_frame=(
+                _frame_sink(out_dir, settings) if out_dir is not None else None
+            ),
         )
         plan = plan_presentation(settings, frame.width, frame.height)
         presentation = present_frame(frame, plan)
@@ -454,16 +542,13 @@ def _cmd_present(args: argparse.Namespace) -> int:
     if frame_path is not None:
         surface = presentation.surface
         try:
-            png.write(
-                frame_path,
-                surface.width,
-                surface.height,
-                image_to_rgba(surface),
-            )
+            write_presentation_png(frame_path, presentation)
         except (OSError, png.PNGError) as exc:
             print(f"error: cannot write frame: {exc}", file=sys.stderr)
             return 1
         print(f"frame: {frame_path} ({surface.width}x{surface.height})")
+    elif out_dir is not None:
+        print(_sequence_summary(out_dir, report.ticks))
     else:
         print(
             "frame: none written (pass --frame PATH for a PNG; this build has no "
@@ -603,7 +688,7 @@ def build_parser() -> argparse.ArgumentParser:
         "--ticks",
         type=int,
         default=300,
-        help="maximum ticks to run (default: 300 = 5 s at 60 Hz)",
+        help="maximum ticks to run (default: 300 = 5 s at 60 Hz; --frames wins)",
     )
     p_slice.add_argument(
         "--playfield",
@@ -611,10 +696,25 @@ def build_parser() -> argparse.ArgumentParser:
         default=0,
         help="plane index used as the playable grid (default: 0)",
     )
-    p_slice.add_argument(
+    slice_capture = p_slice.add_mutually_exclusive_group()
+    slice_capture.add_argument(
         "--frame",
         metavar="PATH",
         help="also write the final frame as PNG here (outside the game folder)",
+    )
+    slice_capture.add_argument(
+        "--frames",
+        type=_positive_int,
+        metavar="N",
+        default=None,
+        help="write one PNG per 60 Hz tick for N ticks (needs --out)",
+    )
+    p_slice.add_argument(
+        "--out",
+        metavar="DIR",
+        default=None,
+        help="directory for the --frames sequence (frame_0000.png ...; "
+        "created if absent, refused inside the game folder)",
     )
     p_slice.set_defaults(func=_cmd_slice)
 
@@ -689,7 +789,8 @@ def build_parser() -> argparse.ArgumentParser:
         "--ticks",
         type=_non_negative_int,
         default=300,
-        help="maximum engine ticks to run (default: 300 = 5 s at 60 Hz)",
+        help="maximum engine ticks to run (default: 300 = 5 s at 60 Hz; "
+        "--frames wins)",
     )
     p_pres.add_argument(
         "--playfield",
@@ -737,10 +838,25 @@ def build_parser() -> argparse.ArgumentParser:
         action="store_true",
         help="persist the effective settings to the config file",
     )
-    p_pres.add_argument(
+    present_capture = p_pres.add_mutually_exclusive_group()
+    present_capture.add_argument(
         "--frame",
         metavar="PATH",
         help="also write the presented surface as PNG (outside the game folder)",
+    )
+    present_capture.add_argument(
+        "--frames",
+        type=_positive_int,
+        metavar="N",
+        default=None,
+        help="write one presented PNG per 60 Hz tick for N ticks (needs --out)",
+    )
+    p_pres.add_argument(
+        "--out",
+        metavar="DIR",
+        default=None,
+        help="directory for the --frames sequence (frame_0000.png ...; "
+        "created if absent, refused inside the game folder)",
     )
     p_pres.set_defaults(func=_cmd_present)
     p_anm = sub.add_parser(

@@ -5,7 +5,9 @@ and output tokens, with a 2× rework band and derived money rates. This file is
 the **measurement** that model is checked against, produced by
 [`scripts/token_cost_report.py`](../../scripts/token_cost_report.py).
 Read the two together: the estimate is what we planned to spend, this is what
-the board and the agent logs record.
+the board and the agent logs record. The measured rates are turned into a
+decision (a costed public-demo plan) in
+[`43-demo-plan.md`](43-demo-plan.md).
 
 ## Where the numbers come from
 

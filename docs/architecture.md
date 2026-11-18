@@ -127,7 +127,8 @@ used. Three rules keep it honest:
   integer fit instead of letting `fit_scale` shrink the request silently; the
   numbers in the report are the numbers that produced the image.
 - **No window is claimed.** The Python package has no display dependency, so
-  `present` computes the surface and can write it to PNG (`--frame`); the
+  `present` computes the surface and can write it to PNG (`--frame`, or one PNG
+  per 60 Hz tick with `--frames N --out DIR`); the
   Win32/C presenter remains future work (§5). The rendered frame is the
   engine's *geometric* frame — composing decoded tile art into a world view
   still needs the unresolved `MAP` cell -> `TTAB` record link (Q20), which the
