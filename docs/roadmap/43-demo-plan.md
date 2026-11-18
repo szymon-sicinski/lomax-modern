@@ -36,8 +36,8 @@ data layer and headless engine — not yet a playable game.
 4. **A conformance harness that cannot be faked**: `python -m lomax_modern.conformance`
    prints `verdict: PASS (10/10 cases)` without opening a window or reading game data.
 5. **Tile sheets decoded from a `.WLD`**: `export` writes the `CELL` sheet and
-   per-plane tile/collision sheets, with the unresolved questions (`Q20` map
-   cell → tile record, `Q24` sprite frames) stated rather than guessed.
+   per-plane tile/collision sheets, with the open questions (`Q20` map
+   cell → tile record) stated rather than guessed.
 6. **Reproducible by the viewer**: every command exists in the alpha and is
    quoted with its real output in the script, so a stranger can replay it
    against their own copy.
@@ -59,7 +59,9 @@ data layer and headless engine — not yet a playable game.
   one genuinely new feature.
 - **C** is M5 (input) plus a window presenter plus finishing M3's
   "first world playable end to end" — which is blocked on unresolved formats
-  (`Q23` GNMY spawn/collect, `Q20` map cell → tile). Weeks, not hours.
+  (`Q20` map cell → tile, and the still-unidentified `GNMY` entry semantics —
+  note that `Q23`/`Q24`, the `NMY`/`ANIM` framings, are **answered** and
+  validated 9/9 and 566/566). Weeks, not hours.
 
 ## 3. The measured unit rate
 
@@ -206,7 +208,8 @@ violate the "verified vs hypothesis" rule. It spans work with no measured
 precedent in this repo: the window presenter (`docs/architecture.md` §5 marks
 the Win32 presenter as "future"), plus finishing M3's
 spawn → move → collide → collect → exit → next-level loop, which is blocked on
-unresolved formats (`Q23` GNMY spawn/collect placement, `Q20` map cell → tile).
+unresolved formats (`Q20` map cell → tile, and what a `GNMY` entry means;
+`Q23`/`Q24` are answered).
 `40-budget.md` §7 already flags M3 as **order-of-magnitude** — "a tick-for-tick
 reimplementation has no measured precedent … treat the $4.28 @pro M3 row as
 order-of-magnitude."
