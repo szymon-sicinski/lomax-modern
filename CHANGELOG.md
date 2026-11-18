@@ -8,6 +8,12 @@ Versioning: [Semantic Versioning](https://semver.org/).
 
 ### Added
 
+- `docs/roadmap/44-presenter-options.md` scopes the window presenter for demo
+  option C: the minimum window, a ranked option table (default **ctypes + SDL2**,
+  ≈$0.50 for 3 cards / ≈$0.66 for 4 with `epx-aa` parity), and the blit spike
+  that settled the choice (SDL2 software renderer 847 fps, ~14× headroom).
+  `docs/architecture.md` §1/§5 now point at it instead of calling the presenter
+  "future", and `43-demo-plan.md` §6 links the now-costed presentation half.
 - `slice` and `present` accept `--frames N --out DIR`: one PNG per 60 Hz tick,
   written as `frame_0000.png` … (`ffmpeg -i frame_%04d.png` numbering) through
   the same scale/pad/PNG path as `--frame`. `--out` is created if absent and
