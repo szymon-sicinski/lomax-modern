@@ -102,9 +102,14 @@ It refuses anything else with a file-by-file manifest instead of a traceback.
 | `GAME.TXT` | expected | no (`measure` reads it as a diagnostic) |
 
 "Expected" means the run reports an incomplete copy and continues; "required"
-means the run refuses the path. Name case is ignored, and a retail folder copied
-one level inside the directory you name (`slot/LOMAX/WORLDS/...`) is resolved
-automatically.
+means the run refuses the path.
+
+**`present` is the lenient one.** It matches names case-insensitively and
+resolves a retail root nested one level down (`slot/LOMAX/WORLDS/...`).
+`doctor`, `measure` and `slice` match the retail names exactly and expect the
+folder you name to *be* the root — on a lowercased or nested copy they report
+`MISSING` while `present` still runs. If `doctor` disagrees with `present`,
+believe `present`.
 
 ## Launch it
 
@@ -168,7 +173,7 @@ your game folder**.
 | Platform | Path |
 |---|---|
 | Linux / BSD | `$XDG_CONFIG_HOME/lomax-modern/config.json` (default `~/.config/lomax-modern/config.json`) |
-| macOS | `~/Library/Application Support/lomax-modern/config.json` |
+| macOS | `~/Library/Application Support/lomax-modern/config.json` (path implemented, untested) |
 | Windows | `%APPDATA%\lomax-modern\config.json` |
 | Any | `$LOMAX_CONFIG=/path/to/file.json` wins outright |
 | Any | `--config /path/to/file.json` for one run |
@@ -244,8 +249,8 @@ written) · `2` usage error or a refused install.
 | Symptom | Cause | Fix |
 |---|---|---|
 | `error: not a directory: /path` | Typo, or a relative path from another shell | Use the absolute path to the folder that contains `WORLDS/` |
-| `present`: `verdict: not an unpacked Lomax game directory -- missing: WORLDS/*.WLD` | Not an unpacked retail copy | Point at the folder holding `LOMAX.EXE` and `WORLDS/`; an ISO or mounted disc image is not accepted |
-| `doctor`: `verdict: incomplete install, missing: …` | Same condition, lighter gate | `doctor` still inventories the folder; `present` will refuse it until the missing required entries exist |
+| `present`: `verdict: not an unpacked Lomax game directory -- missing: …` | Not an unpacked retail copy; the list names what is absent | Point at the folder holding `LOMAX.EXE` and `WORLDS/`; an ISO or mounted disc image is not accepted |
+| `doctor`: `verdict: incomplete install, missing: …` | `doctor` is stricter than `present` about names and nesting | `doctor` still inventories the folder; if `present` accepts the same folder, the `MISSING` rows are the naming difference, not missing files |
 | `no *.WLD found under …` | `WORLDS/` is empty or named differently | Check the case-insensitive name and that at least one `.WLD` is present |
 | `unsupported config version N` | The config was written by a newer build | Delete the config file (it is recreated) or point `--config` elsewhere |
 | `surface must be WIDTHxHEIGHT` | Malformed `--surface` | `1920x1080`, `1920*1080` and `1920,1080` are accepted |
