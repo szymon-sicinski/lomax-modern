@@ -47,6 +47,16 @@ Versioning: [Semantic Versioning](https://semver.org/).
   scanline filters, every chunk CRC verified, with the unsupported shapes
   (palettised, 16-bit, interlaced) refused by name.
 
+### Changed
+
+- README rewritten as an alpha install/launch/configure guide: what works and what
+  does not, three install paths, the config file and its five keys, a command
+  reference with exit codes, and a troubleshooting table keyed on the strings the
+  CLI prints. Documents the per-command leniency: `present` ignores name case and
+  resolves one level of nesting, `doctor` matches retail names exactly,
+  `measure` globs worlds recursively but probes folders at the root, `slice`
+  expects `WORLDS/VILLAGE.WLD` literally.
+
 ### Fixed
 
 - `anim-nmy` refuses a `*.WLD` that is not a world container the way `slice`
