@@ -10,11 +10,14 @@ from pathlib import Path
 from . import __version__
 from . import png
 from .art import ArtError, export_world
-from .anim_nmy import format_anim_nmy_report, probe_anim_nmy
+from .anim_nmy import format_anim_nmy_report
+from .anim_nmy import probe_anim_nmy as probe_recovered_framings
 from .doctor import find_world_files, format_report, inventory
 from .engine.render import frame_to_rgba
 from .engine.run import run_slice
 from .measure import measure_install, summarise, to_json
+from .probe_anim_nmy import format_report as format_probe_report
+from .probe_anim_nmy import probe_anim_nmy
 from .wld import WLDError, parse_file
 from .wldscan import format_report as format_wld_report
 from .wldscan import scan_file
@@ -73,6 +76,17 @@ def _cmd_measure(args: argparse.Namespace) -> int:
     if args.json:
         Path(args.json).write_text(to_json(report), encoding="utf-8")
     print(to_json(report) if args.quiet else summarise(report))
+    return 0
+
+
+def _cmd_probe_anim_nmy(args: argparse.Namespace) -> int:
+    if not Path(args.game_dir).is_dir():
+        print(f"error: not a directory: {args.game_dir}", file=sys.stderr)
+        return 2
+    report = probe_anim_nmy(args.game_dir)
+    if args.json:
+        Path(args.json).write_text(to_json(report), encoding="utf-8")
+    print(to_json(report) if args.quiet else format_probe_report(report))
     return 0
 
 
@@ -159,7 +173,8 @@ def _cmd_slice(args: argparse.Namespace) -> int:
     return 0
 
 
-def _cmd_probe_anim_nmy(args: argparse.Namespace) -> int:
+def _cmd_anim_nmy(args: argparse.Namespace) -> int:
+    """Decode the recovered ANIM/NMY framings and report per-world counts."""
     game_dir = args.game_dir or os.environ.get("LOMAX_GAME_DIR")
     if not game_dir:
         print(
@@ -171,7 +186,7 @@ def _cmd_probe_anim_nmy(args: argparse.Namespace) -> int:
     if not files:
         print(f"error: no *.WLD found under {game_dir}", file=sys.stderr)
         return 2
-    print(format_anim_nmy_report(probe_anim_nmy(files)))
+    print(format_anim_nmy_report(probe_recovered_framings(files)))
     return 0
 
 
@@ -292,17 +307,29 @@ def build_parser() -> argparse.ArgumentParser:
     )
     p_slice.set_defaults(func=_cmd_slice)
 
-    p_an = sub.add_parser(
+    p_probe = sub.add_parser(
         "probe-anim-nmy",
-        help="validate the recovered ANIM/NMY framings against a game folder (read-only)",
+        help=(
+            "structural probe for ANIM/NMY/GNMY chunks: offsets, token streams "
+            "and record hypotheses scored by coverage (report, not parse)"
+        ),
     )
-    p_an.add_argument(
+    p_probe.add_argument("game_dir", help="folder containing LOMAX.EXE")
+    p_probe.add_argument("--json", metavar="PATH", help="also write the raw report here")
+    p_probe.add_argument("--quiet", action="store_true", help="print JSON instead of the digest")
+    p_probe.set_defaults(func=_cmd_probe_anim_nmy)
+
+    p_anm = sub.add_parser(
+        "anim-nmy",
+        help="decode the recovered ANIM/NMY framings and report counts (read-only)",
+    )
+    p_anm.add_argument(
         "game_dir",
         nargs="?",
         default=None,
         help="folder containing WORLDS/*.WLD (default: $LOMAX_GAME_DIR)",
     )
-    p_an.set_defaults(func=_cmd_probe_anim_nmy)
+    p_anm.set_defaults(func=_cmd_anim_nmy)
 
     return parser
 

@@ -27,6 +27,8 @@ lomax-modern --version
 lomax-modern doctor /path/to/Lomax
 lomax-modern wldscan /path/to/Lomax/WORLDS/MAIN.WLD
 LOMAX_GAME_DIR=/path/to/Lomax python -m lomax_modern wld roundtrip --check
+lomax-modern probe-anim-nmy /path/to/Lomax        # structural probe, report only
+lomax-modern anim-nmy /path/to/Lomax              # decode the recovered framings
 ```
 
 ## Testing rules

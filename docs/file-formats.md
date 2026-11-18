@@ -11,7 +11,7 @@
   [`research/07-wp4-runtime-distribution.md`](research/07-wp4-runtime-distribution.md)),
   or in the LMX-11 static-analysis pass of 2026-11-18 (the `ANIM`/`NMY`/`GNMY`
   readers in `LOMAX.EXE`, §2.5/§2.6, validated with
-  `lomax-modern probe-anim-nmy`).
+  `lomax-modern anim-nmy`).
 - **D** — documented by a third party `[S2]` `[S3]`, not verified here.
 - **H** — hypothesis in this repository, untested against a real file.
 - **retracted** — stated here previously and contradicted by measurement. The

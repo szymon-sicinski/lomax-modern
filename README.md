@@ -35,8 +35,10 @@ is in [`docs/research/02-resolution.md`](docs/research/02-resolution.md):
   `doctor` (install inventory), `wldscan` (chunk scanner for `.WLD` files),
   `measure` (install measurement: chunk sequence, per-section plane widths,
   audio formats), `export` (decode `CELL`/`TTAB`/`MAP` into PNG sheets),
-  `wld roundtrip` (byte-exact round-trip proof) and `probe-anim-nmy` (validates
-  the recovered `ANIM`/`NMY` framings against your install).
+  `wld roundtrip` (byte-exact round-trip proof) and `probe-anim-nmy` (structural
+  probe for the `ANIM`/`NMY`/`GNMY` chunks: offsets and record hypotheses scored
+  by coverage) and `anim-nmy` (decodes the recovered `ANIM`/`NMY` framings and
+  reports per-world counts).
 - A **reference engine core** (`lomax_modern.engine` + `lomax-modern slice`):
   a headless vertical slice that loads the first world, ticks at the original
   60 Hz, collides against the decoded `MAP`, and draws a 16-bit `B5G6R5` frame —
@@ -73,7 +75,8 @@ lomax-modern export "/path/to/Lomax/WORLDS/VILLAGE.WLD" --out /tmp/art
 # Run the headless vertical slice of the first world (no display, no LOMAX.EXE)
 LOMAX_GAME_DIR="/path/to/Lomax" python -m lomax_modern slice --world VILLAGE --ticks 300
 
-# Validate the recovered ANIM/NMY framings against your install (counts only)
+# Structural probe for ANIM/NMY/GNMY: offsets and record hypotheses scored by
+# coverage (labels every framing a hypothesis; prints "unresolved" when none wins)
 lomax-modern probe-anim-nmy "/path/to/Lomax"
 ```
 
