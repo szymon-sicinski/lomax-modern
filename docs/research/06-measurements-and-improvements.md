@@ -11,10 +11,11 @@ with the reason.*
 ```bash
 # environment: Linux container, Python 3.14.10, game folder mounted read-only
 python3 -m venv .venv && . .venv/bin/pip install -e ".[dev]"
-lomax-modern doctor   "/game-files/LOMAX (1)/LOMAX"
-lomax-modern measure  "/game-files/LOMAX (1)/LOMAX" --json /tmp/lomax-report.json
+LOMAX_GAME_DIR="/path/to/Lomax"
+lomax-modern doctor   "$LOMAX_GAME_DIR"
+lomax-modern measure  "$LOMAX_GAME_DIR" --json /tmp/lomax-report.json
 python -m pytest tests -m "not realgame" -q      # 28 passed
-LOMAX_GAME_DIR="/game-files/LOMAX (1)/LOMAX" python -m pytest tests -m realgame -q
+python -m pytest tests -m realgame -q
 ```
 
 The install is the retail build: `LOMAX.EXE` hashes to `04cc4dfd260037ba…`,
@@ -51,6 +52,15 @@ full digest is deliberately not recorded in this repository.
 | `DEMOS/*.DAT` are fixed-size input recordings | 14 files: 8 × 2,048 B and 6 × 8,192 B; no ASCII framing | **verified sizes only** |
 | `GAME.TXT` is single-byte, marker-delimited | 19,532 B, 1,321 lines, 0 non-ASCII bytes, longest line 53; markers `#` 420, `@` 4, `&` 1 | **verified shape only** |
 | The PC build imports DirectInput | `LOMAX.EXE` import strings: `DDRAW.dll`, `DINPUT.dll`, `DSOUND.dll`, `WINMM.dll`, `COMCTL32.dll` | **verified** |
+
+**Corrections (2026-11-17).** Two rows above were re-measured during LMX-7 and are
+superseded, without rewriting what this run observed: the `GNMY` trailing
+remainder is 4 B in 63 chunks and **2 B in the other 41** (not 4 B in all 104),
+and `TTAB` is now framed as 8-byte records of four big-endian `u16`
+(`07-wp3-asset-pipeline.md` G1, independently reproduced by WP-5, card
+`t_50f8aa85`), so the "`TTAB` semantics unverified" reason behind Q8 above is
+narrower: no palette field exists in the tile word at all. The current grades
+are in [`../file-formats.md`](../file-formats.md) §2.4–2.5.
 
 ### 6.3 The cross-check that pins the HEAD layout
 
