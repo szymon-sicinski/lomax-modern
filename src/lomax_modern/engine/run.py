@@ -94,6 +94,7 @@ def run_slice(
     game_dir: str | Path,
     *,
     worlds: tuple[str, ...] = ("VILLAGE",),
+    world_path: str | Path | None = None,
     max_ticks: int = 300,
     playfield: int = 0,
     script: InputScript | None = None,
@@ -103,15 +104,24 @@ def run_slice(
     Returns ``(report, final_frame)``.  Only the first world is played here: a
     vertical slice is one level end to end before any second world, and the
     next-level transition is exercised by the unit tests on synthetic data.
+
+    ``world_path`` overrides the ``<game_dir>/WORLDS/<world>.WLD`` lookup.  The
+    presenter passes the path the install check resolved, so a lower-case
+    ``worlds/`` folder (or an install found one level down) runs without
+    renaming the user's files.
     """
     script = script or default_script
     root = Path(game_dir)
     world_name = worlds[0]
-    world_path = root / "WORLDS" / f"{world_name}.WLD"
-    if not world_path.is_file():
-        raise FileNotFoundError(f"no world file at {world_path}")
+    if world_path is not None:
+        resolved = Path(world_path)
+        world_name = resolved.stem
+    else:
+        resolved = root / "WORLDS" / f"{world_name}.WLD"
+    if not resolved.is_file():
+        raise FileNotFoundError(f"no world file at {resolved}")
 
-    level = load_level(world_path, playfield=playfield)
+    level = load_level(resolved, playfield=playfield)
     spawn_cell = first_passable_cell(level)
     exit_cell = _last_passable_cell(level)
     state = new_game_state(

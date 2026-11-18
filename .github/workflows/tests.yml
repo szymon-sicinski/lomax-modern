@@ -41,3 +41,15 @@ jobs:
           lomax-modern --version
           python -m lomax_modern.cli doctor /nonexistent || test $? -eq 2
           python -m lomax_modern wld roundtrip || test $? -eq 2
+
+  native:
+    # The M4 renderer core (native/) is C99, built here only — never at
+    # `pip install` time. The headless smoke binary renders synthetic scenes
+    # and asserts the same golden B5G6R5 words the Python oracle asserts.
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Build the C renderer
+        run: make -C native smoke
+      - name: Run the headless smoke test
+        run: ./native/smoke

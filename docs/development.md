@@ -4,6 +4,8 @@
 
 - Python 3.10+ (CI runs 3.10–3.13)
 - No runtime dependencies. `pytest` is the only dev requirement.
+- A C99 compiler (`cc`) is needed only to build `native/` (CI-only; the Python
+  package installs and tests without one).
 - Optional: a copy of your own Lomax installation for the integration tests.
 
 ## Setup
@@ -28,6 +30,7 @@ lomax-modern doctor /path/to/Lomax
 lomax-modern wldscan /path/to/Lomax/WORLDS/MAIN.WLD
 LOMAX_GAME_DIR=/path/to/Lomax python -m lomax_modern wld roundtrip --check
 lomax-modern probe-anim-nmy /path/to/Lomax
+make -C native test                            # build + run the C renderer smoke
 ```
 
 ## Testing rules
