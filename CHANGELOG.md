@@ -42,6 +42,23 @@ Versioning: [Semantic Versioning](https://semver.org/).
   - `measure.py`'s first geometry heuristic was replaced by the `MAP`
     cross-check after it discarded 69 of 104 real planes.
 - Opt-in integration tests behind `LOMAX_GAME_DIR`.
+- **Presenter data layer (M4)**: `lomax_modern.scaler` — pure, dependency-free,
+  integer-only scaling for the 16-bit `B5G6R5` framebuffer:
+  - `nearest` (exact block replication, invents no colour) and `epx_aa` (Scale2x/
+    EPX corner rule with fractional edge anti-aliasing; index copies in
+    palettised mode, and the transparent key is never painted into a sprite);
+  - `fit_scale` / `present` — largest integer scale that fits, shared by both
+    axes so aspect is never stretched, explicit letterbox/pillarbox offsets and
+    per-side pads, optional `max_scale`;
+  - `Image` buffer type with explicit little-endian `B5G6R5` conversion, and
+    `pack_rgb565`/`unpack_rgb565` in the hardware's 5/6/5 units.
+  - 50 unit tests over synthetic buffers, including the negative cases (no
+    smear of 1-px dither, no erasure of 1-px detail, ≤50 % neighbour coverage,
+    no colour outside the 3x3 window, rejection of fractional/zero factors and
+    of surfaces too small for any integer fit).
+- `examples/scale_demo.py` — side-by-side demonstration of both filters on a
+  generated 16x16 sprite: ASCII in indexed mode (diffable) plus an optional
+  truecolour PNG written with `zlib` only.
 - `lomax_modern.wld` — a `.WLD` parser/writer that reads a world file into
   `Chunk`/`World` records and re-emits it byte-for-byte. Only the verified
   layout is interpreted (chunk header `tag[4]` + big-endian `u32` payload size,
