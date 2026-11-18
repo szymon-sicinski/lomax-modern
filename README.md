@@ -135,6 +135,12 @@ lomax-modern present "/path/to/Lomax" --frame /tmp/lomax-modern.png
 
 # Authentic: native 320x240, nearest-neighbour, no invented smoothing
 lomax-modern present "/path/to/Lomax" --authentic --frame /tmp/lomax-native.png
+
+# One PNG per 60 Hz tick: frame_0000.png ... (the numbering
+# `ffmpeg -i frame_%04d.png` expects); --out is created and must be outside
+# the game folder
+lomax-modern present "/path/to/Lomax" --authentic --surface 640x480 \
+    --frames 300 --out /tmp/lomax-frames
 ```
 
 You get a summary on stdout — excerpted below; `present` first prints the install
@@ -227,6 +233,10 @@ lomax-modern present "/path/to/Lomax" --modern --filter epx-aa --surface 1920x10
 `--authentic` and `--modern` are mutually exclusive; the rest combine freely.
 Deleting the config file is a safe reset — `present` writes a fresh one on the
 next run.
+
+Full runbook — config-file reference, example output, exit codes, the
+missing-data paths and the platform/packaging status:
+[`docs/runbook.md`](docs/runbook.md).
 
 ## Command reference
 

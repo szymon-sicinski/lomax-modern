@@ -109,6 +109,10 @@ lomax-modern present "$LOMAX_GAME_DIR" --authentic
 # Pin the surface / filter / scale for one run, and write the frame as a PNG
 lomax-modern present "$LOMAX_GAME_DIR" --surface 1280x720 --filter nearest \
     --scale 3 --frame /tmp/frame.png
+
+# Capture a frame sequence: one presented PNG per 60 Hz tick
+lomax-modern present "$LOMAX_GAME_DIR" --authentic --surface 640x480 \
+    --frames 300 --out /tmp/lomax-frames
 ```
 
 A run prints the data manifest, then the engine and presentation numbers. Real
@@ -153,9 +157,11 @@ How to read it:
 | `source` / `surface` | the engine frame is **always** 320x240; `surface` is the presentation size |
 | `scale` / `content` / `pads` | the integer factor actually used, the scaled content size, its offset, and the letterbox/pillarbox pads |
 | `frame` | the PNG written by `--frame`, if any |
+| `frames` | the `frame_NNNN.png` sequence written by `--frames N --out DIR`, and its size |
 
 **No window yet.** `present` computes the padded surface (and can write it as a
-PNG with `--frame`); the Win32 window is the native presenter that is still
+PNG with `--frame`, or one PNG per tick with `--frames N --out DIR`); the Win32
+window is the native presenter that is still
 future (`docs/architecture.md` §5). It is a presentation pipeline, not a game
 you can play with the keyboard — see §5.
 
@@ -278,7 +284,10 @@ Other cases:
 | Two sub-folders look like an install | refused as `ambiguous`, both names printed — point at one |
 | `--world` typo | `world 'X' not found; available: BONUS, ED, ...`, exit 2 |
 | Config or `--frame` inside the game folder | refused before writing, exit 2 |
-| A `*.WLD` that is not a world container | `error: cannot read VILLAGE.WLD: offset 0: empty input: no chunk header`, exit 1 — caught, no traceback |
+| `--out` inside the game folder (with `--frames`) | `error: refusing to write inside the game folder (...)`, exit 2, nothing created |
+| `--frames` without `--out`, or `--out` without `--frames` | usage error, exit 2 |
+| `--frames` together with `--frame` | usage error from the parser, exit 2 |
+| A `*.WLD` that is not a world container | `error: cannot read VILLAGE.WLD: offset 0: empty input: no chunk header`, exit 1 — caught, no traceback (also on `slice` and `anim-nmy`) |
 
 ## 9. Platforms and packaging
 

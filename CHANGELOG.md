@@ -6,6 +6,17 @@ Versioning: [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+### Added
+
+- `slice` and `present` accept `--frames N --out DIR`: one PNG per 60 Hz tick,
+  written as `frame_0000.png` … (`ffmpeg -i frame_%04d.png` numbering) through
+  the same scale/pad/PNG path as `--frame`. `--out` is created if absent and
+  refused inside the game folder (`art.check_output_dir`); `--frames` and
+  `--frame` are mutually exclusive, and `--frames` without `--out` is a usage
+  error (exit 2).
+- `engine.run.run_slice` gained an optional `on_frame(tick_index, frame)` sink,
+  so a capture writes each tick instead of holding the whole run in memory.
+
 ### Changed
 
 - README rewritten as an alpha install/launch/configure guide: what works and what
@@ -16,6 +27,12 @@ Versioning: [Semantic Versioning](https://semver.org/).
   `measure` globs worlds recursively but probes folders at the root, `slice`
   expects `WORLDS/VILLAGE.WLD` literally.
 
+### Fixed
+
+- `anim-nmy` refuses a `*.WLD` that is not a world container the way `slice`
+  and `present` already did: one `error: cannot read …` line and exit 1,
+  instead of a `WLDParseError` traceback.
+
 ## [0.4.0-alpha.1] — 2026-11-18
 
 The M2–M4 vertical slice: decoded data layer, headless engine, 16-bit
@@ -24,6 +41,14 @@ that ties them together. Everything below under *Added* since 0.1.0.
 
 ### Added
 
+- Token-cost measurement and reduction analysis: `scripts/token_cost_report.py`
+  joins the board's `worker_session_id` against per-call `logs/agent.log` lines
+  and now splits input into **cached vs fresh** (from the per-call `cache=`
+  field), so the processed-vs-billed split is reproducible
+  (`docs/roadmap/41-measured-cost.md`). `docs/roadmap/42-input-token-reduction.md`
+  shows the 91:1 input:output headline is a cache artifact — 2.4:1 fresh:output,
+  ~$10 off-peak rather than the ~$104 the raw number implies — and ranks the
+  measured levers on `calls × context`.
 - Research report: platform assessment (Win32/MFC/DirectDraw 7, not DOS),
   three-layer resolution analysis, prior-art and licence review, ranked
   improvement backlog, open questions, cited source list.

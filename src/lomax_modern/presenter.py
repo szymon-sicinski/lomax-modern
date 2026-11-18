@@ -30,8 +30,9 @@ look more finished would violate the repository's own rule.
 from __future__ import annotations
 
 from dataclasses import dataclass
+from pathlib import Path
 
-from . import scaler
+from . import png, scaler
 from .config import PresentSettings
 from .scaler import Filter, Fit, Image, Mode
 
@@ -42,6 +43,8 @@ __all__ = [
     "image_to_rgba",
     "plan_presentation",
     "present_frame",
+    "write_presented_png",
+    "write_presentation_png",
 ]
 
 
@@ -207,3 +210,32 @@ def image_to_rgba(image: Image) -> bytes:
         out[base + 2] = (blue << 3) | (blue >> 2)
         out[base + 3] = 255
     return bytes(out)
+
+
+def write_presentation_png(path: str | Path, presentation: scaler.Presentation) -> Path:
+    """Write an already-presented surface as an 8-bit RGBA PNG.
+
+    The single PNG-writing path for every command that exports what the
+    presenter produced; the caller owns ``path`` (nothing here decides whether
+    the destination is inside a game folder).
+    """
+    surface = presentation.surface
+    return png.write(path, surface.width, surface.height, image_to_rgba(surface))
+
+
+def write_presented_png(
+    path: str | Path,
+    frame: object,
+    settings: PresentSettings,
+) -> PresentPlan:
+    """Plan, scale, centre and write one engine frame as a PNG.
+
+    ``slice``/``present`` --frame and every PNG of a --frames sequence come
+    through here, so a captured frame is integer-scaled and letterboxed by the
+    same code as the single-frame export.  Returns the plan that was used: the
+    geometry in the report is the geometry that reached the file.
+    """
+    image = image_from_frame(frame)
+    plan = plan_presentation(settings, image.width, image.height)
+    write_presentation_png(path, present_frame(image, plan))
+    return plan
