@@ -337,6 +337,40 @@ def test_unpack_rgb565_roundtrip() -> None:
         assert unpack_rgb565(pack_rgb565(r, g, b)) == (r, g, b)
 
 
+def test_unpack_rgb565_widens_green_by_bit_replication() -> None:
+    """The 6->8 widening is ``g6 << 2 | g6 >> 4``, pinned at mid-range values.
+
+    The round trip above cannot see the difference: both ``g6 << 2 | g6 >> 4``
+    and the wrong ``g6 << 2 | g6 >> 2`` map 0 and 63 to 0 and 255, so they agree
+    on every primary.  They disagree on 55 of the 64 greens in between, by up to
+    10/255 — hence the explicit mid-range cases and the exhaustive loop.
+    """
+    # (g6, correct g8, g8 produced by the wrong `>> 2` widening)
+    for g6, expected, wrong in [(4, 16, 17), (16, 65, 68), (45, 182, 191)]:
+        assert unpack_rgb565(g6 << 5) == (0, expected, 0), (
+            f"g6={g6} must widen to {expected}, not {wrong}"
+        )
+    assert unpack_rgb565(0) == (0, 0, 0)
+    assert unpack_rgb565(63 << 5) == (0, 255, 0)
+    for g6 in range(64):
+        assert unpack_rgb565(g6 << 5)[1] == (g6 << 2) | (g6 >> 4)
+
+    # The pair still round-trips through the 6-bit green channel.
+    assert pack_rgb565(0, 182, 0) == 45 << 5
+    assert unpack_rgb565(pack_rgb565(0, 182, 0)) == (0, 182, 0)
+
+
+def test_frame_to_rgba_widens_green_like_the_renderer() -> None:
+    """The PNG export path (``frame_to_rgba``) must use the same widening."""
+    frame = Frame(3, 1)
+    frame.set(0, 0, pack_rgb565(0, 182, 0))
+    frame.set(1, 0, pack_rgb565(0, 16, 0))
+    frame.set(2, 0, pack_rgb565(0, 0, 0))
+    assert frame_to_rgba(frame) == bytes(
+        (0, 182, 0, 255, 0, 16, 0, 255, 0, 0, 0, 255)
+    )
+
+
 def test_frame_is_16_bit_and_serialises_little_endian() -> None:
     frame = Frame(2, 1)
     frame.set(0, 0, 0xF800)

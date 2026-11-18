@@ -31,11 +31,24 @@ def pack_rgb565(r: int, g: int, b: int) -> int:
 
 
 def unpack_rgb565(word: int) -> tuple[int, int, int]:
-    """Inverse of :func:`pack_rgb565`, returning 8-bit channel values."""
+    """Inverse of :func:`pack_rgb565`, returning 8-bit channel values.
+
+    Every channel is widened by *bit replication* — shift up and copy the top
+    bits back into the gap, so 0 stays 0 and full scale stays 255::
+
+        r8 = r5 << 3 | r5 >> 2      g8 = g6 << 2 | g6 >> 4      b8 = b5 << 3 | b5 >> 2
+
+    Green is the channel that is easy to get wrong: it has six bits, so the
+    replication shift is ``>> 4`` and not ``>> 2``.  ``g6 << 2 | g6 >> 2``
+    over-brightens 55 of the 64 green values, by up to 10/255.  Both formulas
+    agree on 0 and 255, which is why a primary-only round trip cannot see the
+    difference; ``test_unpack_rgb565_widens_green_by_bit_replication`` pins the
+    mid-range values instead.
+    """
     r = (word >> 11) & 0x1F
     g = (word >> 5) & 0x3F
     b = word & 0x1F
-    return ((r << 3) | (r >> 2), (g << 2) | (g >> 2), (b << 3) | (b >> 2))
+    return ((r << 3) | (r >> 2), (g << 2) | (g >> 4), (b << 3) | (b >> 2))
 
 
 #: Marker colours (B5G6R5) for the geometric frame.  Purely diagnostic.
