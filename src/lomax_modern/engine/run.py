@@ -78,11 +78,11 @@ class SliceReport:
                 f"{value:#04x}:{count}" for value, count in self.collision_histogram.items()
             ),
             f"spawn: ({self.spawn[0]:.1f}, {self.spawn[1]:.1f}) px "
-            "(placeholder -- the real spawn is a GNMY entry; framing "
-            "verified, entry meaning unverified)",
+            "(placeholder -- the real spawn is a GNMY entry; entry layout "
+            "verified, spawn/exit/collectable semantics unverified, Q32)",
             f"collect: {self.collected}/{self.collected_total} "
-            "(placeholder -- the real positions are GNMY entries; framing "
-            "verified, entry meaning unverified)",
+            "(placeholder -- the real positions are GNMY entries; entry layout "
+            "verified, spawn/exit/collectable semantics unverified, Q32)",
             f"result: {'reached exit' if self.complete else 'did not reach exit'} "
             f"after {self.ticks} ticks",
             f"frames: {self.frames} (fixed 60 Hz: one frame per tick)",
