@@ -8,6 +8,12 @@ these can be answered from public documentation alone.
 > (asset/tooling/password unknowns and the one open product decision). Two
 > documented format claims were falsified by measurement and are recorded at
 > their questions (Q23, Q24), not silently dropped.
+>
+> **Revision v2** (LMX-9/M2, 2026-11-18). The M2 target-host decision (Q28) is
+> resolved — disc-less, own engine — and Q29/Q30 are added and answered by the
+> strategy report ([`../roadmap/15-strategy-report.md`](../roadmap/15-strategy-report.md)):
+> input is an unpacked game directory (no ISO, no ripping); music is ambient +
+> jingles + SFX (no CD-DA content in the data).
 
 | # | Question | Why it matters | How to resolve |
 |---|---|---|---|
@@ -38,7 +44,9 @@ these can be answered from public documentation alone.
 | Q25 | What are the password checksum function, field bit order and gem alphabet? | The password tool can decode but not yet generate | read the password routine in the EXE, or verify two generated words in-game (LMX-7's stated falsifier) |
 | Q26 | What are the `MACR`/`PAGE` chunk layouts? | A level editor needs them decoded (7 each, 24–968 B / 1,092–40,344 B) | structural probe + the EXE's reader |
 | Q27 | Which `TTAB` counting units are authoritative? | The flag counts disagree between WP-3 (`0x2000` 15,787 / `0x4000` 1,783) and WP-5 (16,503 / 2,499), and distinct indices differ by 1 (14,861 vs 14,862) | agree a single unit (per-word vs per-record, `BONUS.WLD` included or not) before these numbers enter `file-formats.md` |
-| Q28 | Does M2 serve **disc owners only** (ddraw proxy over the retail exe), or also **disc-less users** (own engine + presenter over the MIT data layer)? | A scope and budget fork, not a mechanism change | human decision — see [`../roadmap/30-risks.md`](../roadmap/30-risks.md#open-decisions-for-the-human) |
+| Q28 | Does M2 serve **disc owners only** (ddraw proxy over the retail exe), or also **disc-less users** (own engine + presenter over the MIT data layer)? | A scope and budget fork, not a mechanism change | ✅ **resolved** — disc-less: own engine + presenter over the MIT data layer (human decision, 2026-11-18); the `ddraw.dll` proxy is demoted to an optional disc-owner appendix ([`../roadmap/15-strategy-report.md`](../roadmap/15-strategy-report.md)) |
+| Q29 | What is the input a disc-less user supplies, and is anything the engine references absent from a plain data-only copy? | "Disc-less" still means the user supplies data; the engine must name its inputs and the repo must never contain them | ✅ **answered** — an unpacked game directory in the retail layout (`WORLDS/`, `SFX/`, `AMBIENT/`, `JINGLES/`, `DEMOS/`, `LOMAX.EXE` present but unused); the engine takes a path. **No ISO handling, no ripping instructions** (2026-11-18) |
+| Q30 | What is the licence-clean source for the soundtrack once the CD is out of the picture? | The PC build's music is CD-DA only (MCI `cdaudio`), so the own engine has no music | ✅ **answered** — measured: 82 WAVs (67 SFX, 12 ambient loops = 6 worlds × stereo `_L`/`_R`, 3 jingles); no CD-DA/MP3/OGG/MOD in the data. Plan: ambient L/R pair as the per-world bed, jingles on transitions, SFX as-is; no ripping, no bundled audio. An optional user-supplied music folder is a later possibility, not v0.1 (2026-11-18) |
 
 **Opened by the LMX-7 reports (2026-11-17).** `TTAB` is now framed — 8 bytes per
 16×16 tile, four big-endian `u16`, 13-bit index plus `0x2000`/`0x4000` flags —
