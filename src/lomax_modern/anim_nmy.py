@@ -512,7 +512,7 @@ def format_gnmy_report(report: GnmyReport) -> str:
         for t, total in report.type_entries.items()
         if total == n_worlds and report.type_worlds.get(t, 0) == n_worlds
     ]
-    rarest = sorted(report.type_worlds.items(), key=lambda kv: kv[1])[:8]
+    rarest = sorted(report.type_worlds.items(), key=lambda kv: (kv[1], kv[0]))[:8]
     rarest_desc = ", ".join(
         f"{t}({report.type_entries[t]} in {w} world{'s' if w != 1 else ''})"
         for t, w in rarest
