@@ -90,14 +90,25 @@ What the 3 cards are:
    synthetic fixtures; no game data.
 3. **reviewer** — review the PR.
 
-**What breaks when SDL2 is absent** (the only open question the default
-candidate leaves): `ctypes.util.find_library("SDL2")` returns `None`, and the
+**1.1.2 What breaks when SDL2 is absent.** The only open question the default
+candidate leaves: `ctypes.util.find_library("SDL2")` returns `None`, and the
 command must print a one-line "install libsdl2" message and exit cleanly — no
-traceback. Distribution makes this a non-issue in practice: Linux and macOS
-desktops that run Steam already ship SDL2; the Windows package ships `SDL2.dll`
-beside the executable (SDL2 is zlib-licensed, so redistribution is permitted —
-**D**). The absence case is therefore a *graceful error message*, not a crash,
-and it is a small, known piece of card 2, not a hidden risk.
+traceback.
+
+Distribution does not make this a non-issue today, and this note must not lean on
+it: `pyproject.toml` builds a plain setuptools wheel with `dependencies = []` and
+no frozen-exe recipe, so **there is no Windows package** — the alpha installs with
+pip (**V** — this tree). Were one built later, it *would* ship `SDL2.dll` beside
+the executable, which the zlib licence permits (**D** for the licence, **H** for
+the packaging, which does not exist yet). Likewise a Steam-bundled SDL2 belongs to
+the Steam runtime, not to a system `libSDL2-2.0.so.0` that
+`ctypes.util.find_library` resolves from a non-Steam process, so it cannot be
+counted as coverage.
+
+What that means for the estimate: the missing-library path stays a real
+requirement — a one-line "install libsdl2" message and a clean exit — and it is
+carried in card 2 rather than being assumed away. It is small, but it is work, not
+a risk that distribution already removed.
 
 The remaining unmeasured claim is the ctypes marshalling cost: one
 `SDL_UpdateTexture` of a 150 KiB frame per tick. It is a single call with an

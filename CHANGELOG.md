@@ -12,8 +12,9 @@ Versioning: [Semantic Versioning](https://semver.org/).
   option C: the minimum window, a ranked option table (default **ctypes + SDL2**,
   ≈$0.50 for 3 cards / ≈$0.66 for 4 with `epx-aa` parity), and the blit spike
   that settled the choice (SDL2 software renderer 847 fps, ~14× headroom).
-  `docs/architecture.md` §1/§5 now point at it instead of calling the presenter
-  "future", and `43-demo-plan.md` §6 links the now-costed presentation half.
+  `docs/architecture.md` §1/§3/§5 now point at it in addition to still calling
+  the presenter future at §1/§3, and `43-demo-plan.md` §6 links the now-costed
+  presentation half.
 - `examples/demo.sh` and [`docs/demo.md`](docs/demo.md): the alpha's capability
   as one runnable walkthrough — `doctor` → `present --modern` →
   `present --authentic` → `slice --frames` → `gif` → `conformance` → `export` —
