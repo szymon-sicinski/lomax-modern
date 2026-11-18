@@ -40,7 +40,7 @@ def unpack_rgb565(word: int) -> tuple[int, int, int]:
 
     Green is the channel that is easy to get wrong: it has six bits, so the
     replication shift is ``>> 4`` and not ``>> 2``.  ``g6 << 2 | g6 >> 2``
-    over-brightens 55 of the 64 green values, by up to 10/255.  Both formulas
+    changes 55 of the 64 green values — over-brightens 46 by up to 12/255, under-brightens 9 by up to 3/255.  Both formulas
     agree on 0 and 255, which is why a primary-only round trip cannot see the
     difference; ``test_unpack_rgb565_widens_green_by_bit_replication`` pins the
     mid-range values instead.

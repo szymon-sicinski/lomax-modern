@@ -134,9 +134,8 @@ def rgb565_to_rgb8(word: int) -> tuple[int, int, int]:
     Bit replication is the only expansion that keeps full white at 255 and full
     black at 0 while making every 5/6-bit step the same width.  The tempting
     variant ``g6 << 2 | g6 >> 2`` (which the green channel used before the
-    conformance harness measured it) is not replication: it over-brightens 55 of
-    the 64 green values, by up to 10/255 — enough to fail a depth 16 vs 24
-    comparison.
+    conformance harness measured it) is not replication: it changes 55 of the 64 green values — over-brightens 46 by up to 12/255, under-brightens 9 by up to 3/255
+    — enough to fail a depth 16 vs 24 comparison.
     """
     if not 0 <= word < 0x10000:
         raise ValueError(f"not a 16-bit colour word: {word}")

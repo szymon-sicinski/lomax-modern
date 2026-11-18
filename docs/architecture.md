@@ -159,8 +159,7 @@ data is involved, so it runs under a bare `python` in CI. Every `check_*` takes
 the render call as a parameter, so `tests/unit/test_conformance.py` can hand it
 a broken renderer and require a failure — a checker that cannot fail is a
 tautology. (It earned that keep immediately: the depth-16 -> 24 green expansion
-was widening 6-bit green with `g >> 2` instead of `g >> 4`, which over-brightens
-55 of the 64 values by up to 10/255.)
+was widening 6-bit green with `g >> 2` instead of `g >> 4`, which changes 55 of the 64 green values — over-brightens 46 by up to 12/255, under-brightens 9 by up to 3/255.)
 
 ### Why the scanner ranks hypotheses instead of assuming one
 

@@ -342,8 +342,9 @@ def test_unpack_rgb565_widens_green_by_bit_replication() -> None:
 
     The round trip above cannot see the difference: both ``g6 << 2 | g6 >> 4``
     and the wrong ``g6 << 2 | g6 >> 2`` map 0 and 63 to 0 and 255, so they agree
-    on every primary.  They disagree on 55 of the 64 greens in between, by up to
-    10/255 — hence the explicit mid-range cases and the exhaustive loop.
+    on every primary.  In between they disagree on 55 of the 64 greens:
+    over-brightened 46 (by up to 12/255) and under-brightened 9 (by up to
+    3/255) — hence the explicit mid-range cases and the exhaustive loop.
     """
     # (g6, correct g8, g8 produced by the wrong `>> 2` widening)
     for g6, expected, wrong in [(4, 16, 17), (16, 65, 68), (45, 182, 191)]:

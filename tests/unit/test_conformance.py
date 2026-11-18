@@ -15,7 +15,7 @@ Two things are graded, and the second matters more than the first:
 
 The depth-16 -> depth-24 green expansion is also pinned here: it was found by
 this harness (`>>2` instead of `>>4` when widening 6-bit green to 8 bits, which
-under-expands 55 of the 64 values by up to 10/255).
+changes 55 of the 64 green values — over-brightens 46 by up to 12/255, under-brightens 9 by up to 3/255).
 """
 
 from __future__ import annotations
@@ -124,8 +124,12 @@ def test_depth_16_and_24_frames_differ_in_representation_not_structure() -> None
     assert len(frame24.to_bytes()) == 3 * frame24.width * frame24.height
 
 
-def _truncated_green(scene: Scene, depth: Depth, **_: int) -> Frame:
-    """A renderer with the old 6->8 green expansion: the harness must reject it."""
+def _broken_green(scene: Scene, depth: Depth, **_: int) -> Frame:
+    """A renderer with the old 6->8 green expansion: the harness must reject it.
+
+    Named for what it does — the old formula *over*-brightens most mid tones
+    (+12/255 at g=60), so "truncated" was the wrong verb.
+    """
     frame = render(scene, depth)
     if depth is Depth.BPP16:
         broken = []
@@ -139,8 +143,8 @@ def _truncated_green(scene: Scene, depth: Depth, **_: int) -> Frame:
     return frame
 
 
-def test_depth_check_rejects_a_truncated_green_channel() -> None:
-    report = check_depth(scenes()[0], render_fn=_truncated_green)
+def test_depth_check_rejects_a_broken_green_channel() -> None:
+    report = check_depth(scenes()[0], render_fn=_broken_green)
     assert not report.ok
     assert report.mismatch_count > 0
     assert report.mismatches[0].delta[1] > report.tolerance[1]
@@ -398,7 +402,7 @@ def test_harness_run_is_green_and_names_every_case() -> None:
 
 
 def test_harness_run_reports_failure_when_a_case_fails() -> None:
-    result = run(render_fn=_truncated_green)
+    result = run(render_fn=_broken_green)
     assert not result.ok
     assert result.failures
     assert "verdict: FAIL" in result.summary()

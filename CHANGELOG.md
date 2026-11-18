@@ -209,7 +209,7 @@ Versioning: [Semantic Versioning](https://semver.org/).
 
 - `renderer.Framebuffer.to_rgba()` over-brightened green: the 6-bit channel was
   widened with `g<<2 | g>>2` instead of the bit-replicating `g<<2 | g>>4`, which
-  is wrong for 55 of the 64 values by up to 10/255. The expansion now lives in
+  changes 55 of the 64 green values — over-brightens 46 by up to 12/255, under-brightens 9 by up to 3/255. The expansion now lives in
   `renderer.rgb565_to_rgb8()` (5-bit red/blue `r<<3 | r>>2`, 6-bit green
   `g<<2 | g>>4`) and is pinned by pixel tests; found by the new depth 16 vs 24
   conformance harness.
