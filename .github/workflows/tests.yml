@@ -36,6 +36,13 @@ jobs:
       - name: Unit tests
         run: python -m pytest tests -m "not realgame" -q
 
+      - name: Headless render conformance (depth 16 vs 24)
+        # Pure offscreen: no display, no X server, no game data, no LOMAX.EXE.
+        # Renders synthetic scenes through the renderer and asserts pixels at
+        # depth 16 against an independent RGB888 reference, plus transparency
+        # and no-shimmer-at-integer-scale. `xvfb-run` is deliberately not used.
+        run: python -m lomax_modern.conformance
+
       - name: CLI smoke test
         run: |
           lomax-modern --version
