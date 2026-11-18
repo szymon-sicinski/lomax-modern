@@ -333,6 +333,22 @@ def test_framebuffer_to_rgba_expands_channels() -> None:
     assert fb.to_rgba() == bytes((255, 0, 0, 255))
 
 
+def test_framebuffer_to_rgba_uses_bit_replication_for_green() -> None:
+    """Green is 6 bits, so 6->8 is ``(g << 2) | (g >> 4)``, not ``>> 2``.
+
+    White and pure red cannot see the difference: both formulas agree at the
+    extremes.  The old ``>> 2`` strayed from the canonical expansion by up to
+    +12/255 at mid-range greens, so pin an intermediate value and the whole
+    channel.
+    """
+    fb = Framebuffer(1, 1, fill=0x0640)  # green = 50 of 63
+    assert fb.to_rgba()[1] == (50 << 2) | (50 >> 4) == 203
+
+    for g6 in range(64):
+        fb.set(0, 0, g6 << 5)
+        assert fb.to_rgba()[1] == (g6 << 2) | (g6 >> 4), g6
+
+
 def test_framebuffer_rejects_bad_size() -> None:
     with pytest.raises(ValueError):
         Framebuffer(0, 8)
