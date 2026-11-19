@@ -123,3 +123,59 @@ def test_json_dash_is_a_literal_filename_not_a_stdout_sentinel(
     dash = workdir / "-"
     assert dash.is_file()
     assert "worlds" in json.loads(dash.read_text(encoding="utf-8"))
+
+
+# ---------------------------------------------------------------------------
+# ``probe-tiles`` -- the third ``--json`` writer, added by the tile-pipeline
+# research branch. It cannot use :func:`build_install` above: those worlds encode
+# the *superseded* 3-byte-per-cell ``TTAB`` layout, which this probe rejects by
+# design (``docs/file-formats.md`` §2.8). These cases only need the install
+# marker, so they build one directly.
+# ---------------------------------------------------------------------------
+
+
+def _marked_install(tmp_path: Path) -> Path:
+    """An install with the ``LOMAX.EXE`` marker and no worlds (zero planes)."""
+    root = tmp_path / "game"
+    (root / "WORLDS").mkdir(parents=True)
+    (root / "LOMAX.EXE").write_bytes(b"MZ" + b"\0" * 62)
+    return root
+
+
+def test_probe_tiles_json_inside_the_install_is_refused(
+    tmp_path: Path, capsys: pytest.CaptureFixture
+) -> None:
+    game = _marked_install(tmp_path)
+    target = game / "report.json"
+
+    assert main(["probe-tiles", str(game), "--json", str(target)]) == 2
+
+    err = capsys.readouterr().err
+    assert "refusing to write inside the game folder" in err
+    assert str(game.resolve()) in err
+    assert not target.exists()
+
+
+def test_probe_tiles_json_in_a_subfolder_of_the_install_is_refused(
+    tmp_path: Path, capsys: pytest.CaptureFixture
+) -> None:
+    game = _marked_install(tmp_path)
+    target = game / "WORLDS" / "report.json"
+
+    assert main(["probe-tiles", str(game), "--json", str(target)]) == 2
+    assert "refusing to write inside the game folder" in capsys.readouterr().err
+    assert not target.exists()
+
+
+def test_probe_tiles_json_outside_the_install_is_written(
+    tmp_path: Path, capsys: pytest.CaptureFixture
+) -> None:
+    game = _marked_install(tmp_path)
+    target = tmp_path / "probe-tiles.json"
+
+    assert main(["probe-tiles", str(game), "--json", str(target)]) == 0
+
+    report = json.loads(target.read_text(encoding="utf-8"))
+    assert "ttab" in report
+    assert report["game_dir"] == str(game)
+
