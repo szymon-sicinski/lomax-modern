@@ -24,8 +24,9 @@ Versioning: [Semantic Versioning](https://semver.org/).
   milestone, **one level fully playable** (C-playable): the scope table, a
   seven-card decomposition (NMY-name role classifier → Level semantics → input
   → `play` loop → sprite → physics → HUD, one reviewer pass each, one lead
-  synthesis), and the cost — **15 cards ≈ $2.48 off-peak** (high ≈$3.50, delta
-  ≈ +$0.99–$1.49 over the shipped C-animated). It prices the loop
+  synthesis), and the cost — **15 cards ≈ $2.48 off-peak** of *new* work (high ≈$3.50;
+  ≈$3.47–$3.97 end to end with the already-shipped C-animated). It replaces the
+  §6.2 M5 re-forecast rather than adding to it, and prices the loop
   `43-demo-plan.md` §6.2 had to leave open, now that Q32 is answered (the
   `GNMY` identity is the `NMY` name, not the flags).
 - `lomax_modern.sdl_window` — the SDL2 window backend, first half of demo
