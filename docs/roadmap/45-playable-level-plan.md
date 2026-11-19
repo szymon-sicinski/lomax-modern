@@ -65,10 +65,11 @@ The five things the request must pin down, each decided here.
 
 5. **Game rules that make it *playable*.** Three sub-decisions:
    - **Gravity/jump tuned to the original rates — in scope, research-gated.**
-     The current constants (`WALK_SPEED 2.0`, `GRAVITY 0.35`, `JUMP_SPEED −5.5`,
-     `MAX_FALL 8.0`) are explicitly "our own design, no claim to match". A
-     specialist card reads the original rates from the player-movement code; if
-     they are not cleanly readable, the placeholders stay and are marked `[H]`.
+     The constants were "our own design, no claim to match"; P6 read the
+     original rates from the player-movement code and they are cleanly
+     readable — `WALK_SPEED 2.0`, `GRAVITY 0.375`, `JUMP_SPEED −4.0`,
+     `MAX_FALL 6.0` (`docs/file-formats.md` §2.9), so `entities.py` now
+     carries those measured values with their virtual-address citations.
    - **Death/respawn / fail state — deferred.** There is no hazard semantics
      yet (Q31, per-value collision bytes, is unresolved), so a fail state has
      nothing to trigger on. Out of scope, named, not forgotten.
@@ -89,7 +90,7 @@ The five things the request must pin down, each decided here.
 | Sibling name-table types | out (classified only) | only `Moneybag` drives acceptance |
 | `Exit` → level complete | **in** | named requirement |
 | Next-level transition | out (defer) | level sequence is Q3, inside the executable |
-| Gravity/jump tuned to original rates | **in** (research-gated) | playable ≠ floaty; fallback is documented placeholders |
+| Gravity/jump tuned to original rates | **in** (delivered by P6) | measured, not floaty: `2.0`/`0.375`/`−4.0`/`6.0` (`docs/file-formats.md` §2.9) |
 | Death/respawn / fail state | out (defer) | no hazard semantics yet (Q31) |
 | HUD collectable count | **in** | progress must be visible |
 | Audio / music | out (M6) | separate milestone; data carries no music track |
@@ -176,13 +177,20 @@ matching log line, so the true per-card average is at least $0.165).
 | item | cards | money (off-peak) |
 |---|---:|---:|
 | C-animated (already shipped) | 6–9 | ≈$0.99–$1.49 ([`43-demo-plan.md`](43-demo-plan.md) §6.1) |
-| **one level fully playable** | **15** | **≈$2.48** (high ≈$3.50) |
-| **delta over C-animated** | **+6–9** | **≈+$0.99–$1.49** |
+| **this milestone — new work** | **15** | **≈$2.48** (high ≈$3.50) |
+| **C-playable end to end (cumulative)** | **21–24** | **≈$3.47–$3.97** |
 
-This is consistent with `43-demo-plan.md` §6.2, which priced C-playable at
-"≈$2.32–$2.98 for everything *except* the playable loop itself". The loop was
-the unpriced part because Q32 was open; now that it is answered, the loop is
-the ~$1.00–$1.16 in this plan, and the whole lands at ≈$2.48.
+None of the 15 cards is a C-animated card, so the new spend is the **whole
+$2.48**, not a delta over the shipped milestone. Adding the shipped C-animated
+band gives **21–24 cards ≈$3.47–$3.97** for one playable level end to end.
+
+This **supersedes** [`43-demo-plan.md`](43-demo-plan.md) §6.2 rather than adding
+to it. §6.2's "≈$2.32–$2.98 for everything *except* the playable loop" composes
+as C-animated ($0.99–1.49) + the M5 re-forecast ($1.16) + the Q32 experiment
+($0.17–0.33). This plan replaces that M5 re-forecast with an explicit 15-card
+graph and retires the Q32 experiment line entirely, because Q32 is answered
+([`05-open-questions.md`](../research/05-open-questions.md)). The loop is
+therefore inside the $2.48, not on top of it.
 
 ## 5. Risks and the cheapest experiment for each
 

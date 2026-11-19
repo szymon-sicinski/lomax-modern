@@ -1,9 +1,11 @@
 """Player, input and entity records for the engine core.
 
-All values here are *our own design* — a small, reasonable platformer physics
-model with no claim to match the original's exact tuning, which lives inside
-``LOMAX.EXE`` and is never read.  The constants are stated so a test can assert
-on them rather than on magic numbers.
+The four physics constants below are measured from the retail ``LOMAX.EXE``
+player-movement code (a read-only ``objdump`` pass, 2026-11-19), recorded in
+``docs/file-formats.md`` §2.9.  The original stores position and velocity as
+16.16 fixed point; the values here are the same rates in float pixels per
+60 Hz tick.  They are stated so a test can assert on them rather than on magic
+numbers, and each carries its measured virtual address next to the value.
 """
 
 from __future__ import annotations
@@ -18,16 +20,28 @@ TICK_RATE = 60
 TICK_SECONDS = 1.0 / float(TICK_RATE)
 
 #: Horizontal walk speed, pixels per tick (120 px/s at 60 Hz).
+#: Measured: ``mov ebp, 0x20000`` (2.0 in 16.16 fixed point) at VA ``0x426E28``,
+#: the terrain-0 max speed stored to the max-speed global ``0x49C4B4``
+#: (``docs/file-formats.md`` §2.9). Terrain type 1 (cell bits 0x30 >> 4 == 1)
+#: swaps it for a directional 1.5/2.5 instead.
 WALK_SPEED = 2.0
 
-#: Gravity, pixels per tick squared (1260 px/s^2 at 60 Hz).
-GRAVITY = 0.35
+#: Gravity, pixels per tick squared (1350 px/s^2 at 60 Hz).
+#: Measured: ``add eax, 0x6000`` (0.375 in 16.16 fixed point) added to ``vy``
+#: each airborne tick at VA ``0x410BB8`` (``docs/file-formats.md`` §2.9); a held
+#: slide/down input uses 0.125 (``0x2000``) instead.
+GRAVITY = 0.375
 
-#: Jump impulse, pixels per tick (an upward velocity of ~330 px/s at 60 Hz).
-JUMP_SPEED = -5.5
+#: Jump impulse, pixels per tick (an upward velocity of 240 px/s at 60 Hz).
+#: Measured: ``mov ds:0x59F250, 0xFFFC0000`` (−4.0 in 16.16 fixed point) at VA
+#: ``0x41083C`` (also ``0x4108B7``/``0x410929``/``0x4109D1``/``0x412DAB``/
+#: ``0x412EC2``) (``docs/file-formats.md`` §2.9). Stomps/springs use −5.0/−6.0.
+JUMP_SPEED = -4.0
 
-#: Terminal fall speed, pixels per tick.
-MAX_FALL = 8.0
+#: Terminal fall speed, pixels per tick (360 px/s at 60 Hz).
+#: Measured: ``vy`` is clamped to ``0x60000`` (6.0 in 16.16 fixed point) at VA
+#: ``0x410BC2`` (``docs/file-formats.md`` §2.9).
+MAX_FALL = 6.0
 
 
 @dataclass(frozen=True)
