@@ -141,11 +141,12 @@ output path.
 </table>
 
 Both images are this CLI's own output, produced by the two commands above from
-the author's unpacked copy — they are not screenshots of the original game. At
-this stage the engine draws the playfield as solid blocks and the player as a
-yellow box, because map cell → tile record is unresolved (`Q20`): the tiles are
-decoded, just not placed. So what you are comparing is the presenter, not the
-art.
+the author's unpacked copy — they are not screenshots of the original game.
+These two frames are the *geometric* debug render (collision grid + player
+marker), captured before the tile-art path shipped; `present --frame` and
+`slice --frames` now compose the real tile art (map cell → `TTAB` record →
+`CELL`, `HEAD` palette, index-0 transparency — see §4). So what these two
+images compare is the presenter, not the art.
 
 ## 4. `slice --frames 120` — two seconds of the engine, one PNG per tick
 
@@ -156,14 +157,14 @@ playfield: 305x24 cells (4880x384 px)
 collision: byte 0 = passable, non-zero = solid [H]; per-value semantics (material/one-way/hazard) unresolved (Q31); the documented [D] bit-field is retracted
 collision-byte histogram (value: count): 0x00:5364, 0x01:774, 0x02:2, ... 0xff:1
                                           (256 entries elided here; the script prints them all)
-spawn: (0.0, 0.0) px (placeholder -- real spawn lives in GNMY, Q23)
-collect: 0/0 (placement is placeholder -- GNMY semantics unresolved, Q23)
+spawn: (0.0, 0.0) px (placeholder -- the real spawn is a GNMY entry; entry layout verified, spawn/exit/collectable semantics unverified, Q32)
+collect: 0/0 (placeholder -- the real positions are GNMY entries; entry layout verified, spawn/exit/collectable semantics unverified, Q32)
 result: did not reach exit after 120 ticks
 frames: 120 (fixed 60 Hz: one frame per tick)
 final position: (180.0, 178.0) px
 next level: none (end of sequence or exit not reached)
 exit: clean
-tile art: decoded (CELL/TTAB) but not placed on the map -- map cell -> tile record unresolved (Q20)
+tile art: composed -- map cell -> tile record resolved (Q20), each record blitted as four CELLs (2x2 order [H], G1) with the HEAD palette (slot 1) and index-0 transparency; flip pairing [H] (Q33); the geometric collision grid stays on render() as a debug path
 frames: 120 PNGs in demo-out/frames (frame_0000.png .. frame_0119.png)
 ```
 

@@ -60,9 +60,10 @@ Confidence, per claim (see ``docs/file-formats.md``):
   exporter's default slot) and does not switch slots per cell; multi-slot
   selection is out of the M4 blit contract.
 * *Map->tile art blit.*  A ``MAP`` word is a direct ``TTAB`` record index
-  (Q20), so the link is known — but :func:`blit_map_field` still draws the raw
-  ``MAP`` byte as greyscale rather than assembling tile art; the art blit is
-  left to a later milestone.
+  (Q20).  :meth:`blit_map_field` still draws the raw ``MAP`` byte as greyscale
+  — a field visualisation — while the map->tile *art* assembly is the engine's
+  job and now lives in :func:`lomax_modern.engine.render_tiles`, which calls
+  :meth:`blit_tile` once per visible map cell.
 
 The fade rule
 -------------

@@ -15,7 +15,7 @@ from typing import Callable
 
 from .entities import Collectible, Exit, Input
 from .level import Level, load_level
-from .render import Frame, render
+from .render import Frame, render_tiles
 from .state import GameState, first_passable_cell, new_game_state
 
 #: A script turns the current tick and state into one tick of input.
@@ -89,9 +89,10 @@ class SliceReport:
             f"final position: ({self.final_position[0]:.1f}, {self.final_position[1]:.1f}) px",
             f"next level: {self.next_level or 'none (end of sequence or exit not reached)'}",
             f"exit: {'clean' if self.clean_exit else 'ERROR'}",
-            "tile art: decoded (CELL/TTAB) but not placed on the map -- "
-            "map cell -> tile record resolved (Q20); the engine draws the "
-            "collision layer",
+            "tile art: composed -- map cell -> tile record resolved (Q20), each "
+            "record blitted as four CELLs (2x2 order [H], G1) with the HEAD "
+            "palette (slot 1) and index-0 transparency; flip pairing [H] "
+            "(Q33); the geometric collision grid stays on render() as a debug path",
         ]
         return "\n".join(lines)
 
@@ -149,12 +150,12 @@ def run_slice(
         state.tick(script(tick, state))
         ticks += 1
         if on_frame is not None:
-            captured = render(level, state)
+            captured = render_tiles(level, state)
             on_frame(ticks - 1, captured)
         if state.complete:
             break
 
-    final_frame = captured if captured is not None else render(level, state)
+    final_frame = captured if captured is not None else render_tiles(level, state)
     next_level = worlds[1] if state.complete and len(worlds) > 1 else None
     report = SliceReport(
         world=world_name,
