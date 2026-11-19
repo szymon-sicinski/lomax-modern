@@ -235,7 +235,7 @@ plane 00: 305x24 cells = 7320, 1024 TTAB records, MAP pad 0 B -> village_tiles_p
 plane 01: 304x28 cells = 8512, 1042 TTAB records, MAP pad 0 B -> village_tiles_plane01.png, village_map_plane01_collision.png
 ...                       (one line per plane, 00 to 14; the script prints them all)
 plane 14: 24x16 cells = 384, 2 TTAB records, MAP pad 0 B -> village_tiles_plane14.png, village_map_plane14_collision.png
-tile sheet layout: strip (stored order, four cells per record -- the order inside a record is unresolved, G1)
+tile sheet layout: strip (stored order, four cells per record; the order inside a record is column-major [V], G1)
 MAP: 60509 cells (3 B each: 16-bit tile word + collision byte), 1186 distinct tile words; map sheet shows the raw collision byte as greyscale, no art
 distinct TTAB cell indices referenced: 1374 of 1374 records
 map cell -> tile record: unresolved (Q20)
