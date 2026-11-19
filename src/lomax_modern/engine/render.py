@@ -12,7 +12,7 @@ the report rather than painted.
 Two placements stay hypotheses and are rendered exactly as
 :mod:`lomax_modern.renderer` blits them, so a wrong assumption shows up in the
 output instead of hiding: the four cells of a ``TTAB`` record are assembled in
-the documented 2x2 order (``[H]``, G1) and the flip-axis pairing (``0x2000``
+the verified 2x2 column-major order (``[V]``, G1) and the flip-axis pairing (``0x2000``
 horizontal / ``0x4000`` vertical) is this decoder's convention (``[H]``, Q33).
 
 ``Frame`` is a genuine 16-bit buffer: pixels are packed ``B5G6R5`` and
@@ -174,7 +174,7 @@ def render_tiles(
 
     Walks the ``MAP`` cells visible under the camera and, for each, resolves
     its ``tile_word`` to the playfield's ``TTAB`` record and blits the record's
-    four ``CELL`` blocks in the documented 2x2 order with the ``HEAD`` palette
+    four ``CELL`` blocks in the verified 2x2 column-major order with the ``HEAD`` palette
     (slot 1) and index-0 transparency.  A ``tile_word`` outside the plane's
     ``TTAB`` bank leaves the backdrop untouched — it is never repaired.
 

@@ -130,9 +130,10 @@ static void test_tile_blit(void) {
     fb.pixels = pixels16;
     fb_init(&fb, 16, 16, 0x0000);
     blit_tile(&fb, record, &cells[0][0], 4, palette, 0, 0, 1, 0);
-    CHECK(pixels16[0] == 0xF800 && pixels16[8] == 0x07E0 &&
-              pixels16[8 * 16] == 0x001F && pixels16[8 * 16 + 8] == 0xFFFF,
-          "2x2 assembles the 16x16 tile (cell order [H])");
+    /* Column-major: slot 0 top-left, 1 bottom-left, 2 top-right, 3 bottom-right. */
+    CHECK(pixels16[0] == 0xF800 && pixels16[8 * 16] == 0x07E0 &&
+              pixels16[8] == 0x001F && pixels16[8 * 16 + 8] == 0xFFFF,
+          "2x2 assembles the 16x16 tile in column-major order [V]");
 
     fb.pixels = pixels;
     fb_init(&fb, 32, 8, 0x0000);

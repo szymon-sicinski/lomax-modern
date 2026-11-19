@@ -44,9 +44,9 @@ Confidence, per claim (see ``docs/file-formats.md``):
 * *Cell pixel order.*  Row-major 8x8, the same ``[H]`` reading the exporter
   uses.
 * *Tile cell order.*  A ``TTAB`` record's four cells are placed in stored order
-  (``"strip"``) by default; the documented 16x16 2x2 assembly is an explicit
-  ``"2x2"`` option and is labelled ``[H]`` (the seam test failed, see
-  ``art``).
+  (``"strip"``) by default; the 16x16 2x2 assembly is an explicit ``"2x2"``
+  option and is **column-major**, verified against a retail render (``[V]``,
+  G1 answered — see ``art``).
 * *Flip pairing.*  Bits 13-14 are the flip pair ``[V]`` (three combinations
   occur, Q21); that ``0x2000`` is the *horizontal* one and ``0x4000`` the
   vertical is this decoder's convention ``[H]`` — no render has been compared
@@ -103,7 +103,7 @@ TRANSPARENT_INDEX = 0
 #: Pixels per side of a ``CELL`` block (``docs/file-formats.md`` §2.4 ``[V]``).
 CELL_PIXELS = 8
 
-#: Tile cell-order layouts: stored order, or the documented (``[H]``) 2x2 tile.
+#: Tile cell-order layouts: stored order, or the verified (``[V]``) 2x2 tile.
 TILE_LAYOUTS = ("strip", "2x2")
 
 #: ``MAP`` raw-byte channels the field blit can visualise.

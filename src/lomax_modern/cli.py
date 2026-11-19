@@ -709,7 +709,7 @@ def build_parser() -> argparse.ArgumentParser:
         "--tile-layout",
         choices=("strip", "2x2"),
         default="strip",
-        help="tile sheet: four cells in stored order (default) or 2x2 (G1 hypothesis)",
+        help="tile sheet: four cells in stored order (default) or 2x2 (column-major, verified)",
     )
     p_exp.add_argument("--cell-columns", type=int, default=32, help="cells per sheet row")
     p_exp.add_argument("--tile-columns", type=int, default=16, help="records per sheet row")

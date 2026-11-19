@@ -209,9 +209,10 @@ tick (input, gravity, axis-separated collision, collect, exit) to a 16-bit
   320x240 — while `engine.render` keeps the geometric collision grid and
   entity markers as a debug path. The tile blit, palette transparency and the
   fade rule ship in `renderer.py` (oracle) + `native/` (C99); scaling and
-  filters stay in `scaler.py`. The tile cell order is the documented 2x2
-  assembly (`[H]`, G1) and the flip-axis pairing is this decoder's convention
-  (`[H]`, Q33) — both flagged, not invented.
+  filters stay in `scaler.py`. The tile cell order is the 2x2 **column-major**
+  assembly (`[V]`, G1 — verified against a retail render) and the flip-axis
+  pairing is this decoder's convention (`[H]`, Q33) — the first is measured,
+  the second is flagged, neither is invented.
 - **Entity placement is deferred.** Spawn, collectibles and exit are explicit
   (placeholder) in the slice; the real placements live in `GNMY`, whose entry
   layout is verified but whose spawn/exit/collectable *semantics* are

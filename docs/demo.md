@@ -164,7 +164,7 @@ frames: 120 (fixed 60 Hz: one frame per tick)
 final position: (180.0, 178.0) px
 next level: none (end of sequence or exit not reached)
 exit: clean
-tile art: composed -- map cell -> tile record resolved (Q20), each record blitted as four CELLs (2x2 order [H], G1) with the HEAD palette (slot 1) and index-0 transparency; flip pairing [H] (Q33); the geometric collision grid stays on render() as a debug path
+tile art: composed -- map cell -> tile record resolved (Q20), each record blitted as four CELLs in 2x2 column-major order (V, G1) with the HEAD palette (slot 1) and index-0 transparency; flip pairing [H] (Q33); the geometric collision grid stays on render() as a debug path
 frames: 120 PNGs in demo-out/frames (frame_0000.png .. frame_0119.png)
 ```
 
