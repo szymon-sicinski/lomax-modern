@@ -164,20 +164,34 @@ as a PNG with `--frame`, or one PNG per tick with `--frames N --out DIR`);
 engine frame and prints a HUD (`--seconds N`, `--world NAME`,
 `--modern`/`--authentic`). The native Win32/C presenter (packaging) is still
 future (`docs/architecture.md` §5). `present` is a presentation pipeline, not
-a game you can play with the keyboard — see §5.
+a game you can play with the keyboard — `play` is the interactive form (see §5).
 
 ## 5. Controls
 
-**This build has no interactive input.** `present` drives the engine with a
-scripted input (walk right, jump periodically) for `--ticks`, so the pipeline
-can be exercised end to end without a window. There are no key bindings to
-learn yet, and this runbook deliberately does not invent any.
+`lomax-modern play "<install>"` is the interactive form of the engine: it opens
+the same SDL2 window as `window` but reads the keyboard every tick, so you move
+and jump live at the engine's 60 Hz. `present`, `slice` and `window` remain
+scripted (walk right, jump periodically) — they never read the keyboard.
 
-The engine itself takes three actions per tick — **left**, **right**, **jump** —
-with gamepad support and rebinding in **M5**
-([`roadmap/10-milestones.md`](roadmap/10-milestones.md) §M5, release v0.7). When
-that lands, this section becomes a real table; until the mapping is decided and
-tested, any key list here would be fiction.
+The default mapping (arrow keys and WASD):
+
+| Action | Keys |
+|---|---|
+| Move left | ← or `A` |
+| Move right | → or `D` |
+| Jump | Space, ↑ or `W` |
+
+- **Left/right are level-triggered** — hold to move, and holding both sides at
+  once is neutral. **Jump is edge-triggered** — a fresh press jumps once; a
+  held jump key does not re-jump on landing.
+- **Esc** (or closing the window) quits.
+- `--seconds N` (default 60) bounds the run so the headless
+  `SDL_VIDEODRIVER=dummy` check exits cleanly; without the bound a real session
+  ends when you reach the exit or quit.
+- Gamepad support and rebinding remain **M5**
+  ([`roadmap/10-milestones.md`](roadmap/10-milestones.md) §M5, release v0.7);
+  the mapping above is the keyboard-only scope of the playable-level plan
+  (`docs/roadmap/45-playable-level-plan.md` §1.1).
 
 ## 6. Modern defaults and the authentic toggle
 

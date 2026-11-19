@@ -283,11 +283,12 @@ all, because the install gate runs before the config or the frame is written.
 
 ## What this demo is not
 
-Plainly: **there is no window, no input, no audio and no music.** You are
+Plainly: **this walkthrough has no window, no play and no audio.** You are
 watching a data layer, a headless engine and a presenter that writes PNG and
 GIF; the frame advances because the engine ticks, not because anyone is
-playing, and nothing is listening to the keyboard. Audio and input are the
-M5/M6 milestones, and the installed data carries no music track at all — the
+playing, and none of these commands listen to the keyboard. Interactive
+keyboard play ships separately as `lomax-modern play` (runbook §5); audio is
+the M6 milestone, and the installed data carries no music track at all — the
 presenter is silent and will stay silent until the audio layer exists. This is
 also not a shipped game, not a patched executable, and not a fork of any other
 project: it reads your unpacked copy, writes its own output, and stops.

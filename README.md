@@ -18,8 +18,8 @@ the game's own data on a modern screen.
 | Present the frame at an integer scale, modern or authentic profile | **works**, writes a PNG (`present`) |
 | Fold a frame sequence into one looping animated GIF | **works** (`gif`) |
 | Conformance harness: depth 16 vs 24, transparency, integer scale | **works**, `PASS 10/10` |
-| A window you can watch | **not yet** — `present` renders and writes a PNG; the windowed presenter is the next milestone |
-| Keyboard or gamepad input | **not yet** (M5 / v0.7) |
+| A window you can watch | **works** (`window`) — a live SDL2 window that letterboxes the 60 Hz frame with a HUD |
+| Keyboard input | **works** (`play`) — arrows/WASD + Space to move/jump live; gamepad and rebinding are still M5 / v0.7 |
 | Audio playback (ambience, jingles, SFX) | **not yet** (M6) — decoded, not played |
 | Music | **never** — the PC build's soundtrack was CD audio, absent from a disc-less install |
 
@@ -168,10 +168,12 @@ The pads are the letterbox: 4× of 320×240 is 1280×960, centred in 1920×1080.
 `--playfield N` picks which map plane is treated as the playable grid;
 `--ticks N` sets how long the headless engine runs (300 = 5 s at 60 Hz).
 
-**Controls: none in this build.** `present` runs the engine's scripted input and
-has no window yet ([`docs/architecture.md`](docs/architecture.md) §5); keyboard
-and gamepad are M5. The engine's actions are left, right and jump — no bindings
-are invented here.
+**Controls.** `lomax-modern play "<install>"` opens the same window as `window`
+and reads the keyboard every tick: arrows or WASD to move, Space / ↑ / `W` to
+jump, Esc to quit (see the runbook, §5). `present`, `slice` and `window` stay
+scripted — they run the engine's built-in walk-right input and never read the
+keyboard. Gamepad support and rebinding remain M5; the engine's actions are
+left, right and jump.
 
 **There is no music track.** The PC soundtrack was CD audio and a disc-less
 install has none: ambience, jingles and SFX only. Nothing is bundled, downloaded
@@ -266,6 +268,8 @@ the other writers (`present --frame`, `slice --frame/--frames`, `export --out`,
 | `export <file.wld> --out DIR` | Decode `CELL`/`TTAB`/`MAP` into PNG sheets. |
 | `slice <dir>` | Headless vertical slice: map, collision, 60 Hz tick, 16-bit frame. |
 | `present <dir>` | Present the frame at an integer scale; writes a PNG. |
+| `window <dir>` | Run the 60 Hz slice in a live SDL2 window (letterboxed, HUD, scripted input). |
+| `play <dir>` | Play a level live: the keyboard drives the 60 Hz tick (arrows/WASD to move, Space to jump, Esc to quit). |
 | `gif <frame-dir> --out PATH` | Fold a directory of frame PNGs into one looping animated GIF89a; `--fps` sets the delay, `--max-frames` samples evenly. |
 | `probe-anim-nmy <dir>` | Structural probe of `ANIM`/`NMY`/`GNMY`: offsets and hypotheses scored by coverage, never a claimed parse. |
 | `anim-nmy <dir>` | Decode the recovered `ANIM`/`NMY` framings; report per-world counts. |
@@ -283,11 +287,13 @@ written) · `2` usage error or a refused install.
 | `error: no *.WLD found under …` (from `wld roundtrip` / `anim-nmy`) | No `.WLD`/`.wld` exists anywhere under the path — the search is recursive and case-insensitive, so an oddly named folder is *not* the cause | Point at the install root — both search it recursively; `wld roundtrip` also takes a single world file |
 | `unsupported config version N` | The config was written by a newer build | Delete the config file (it is recreated) or point `--config` elsewhere |
 | `surface must be WIDTHxHEIGHT` | Malformed `--surface` | `1920x1080`, `1920*1080` and `1920,1080` are accepted |
-| `frame: none written` | No `--frame` given | This build has no window; pass `--frame PATH` to get a PNG |
+| `frame: none written` | No `--frame` given | Pass `--frame PATH` for a PNG; for a live view use `lomax-modern window` or `play` |
 | Colours look brighter than the original | A build before `0.4.0-alpha.1` | The 6→8-bit green expansion was wrong in three places; fixed in `0.4.0-alpha.1` |
 | `lomax-modern: command not found` | The venv is not active | `. .venv/bin/activate`, or use `python -m lomax_modern` |
 
-Nothing in this build needs a display: it runs headless, in CI, and over SSH.
+Only `window` and `play` need a display — they open it through SDL2 (a system
+library) or run headless under `SDL_VIDEODRIVER=dummy`; every other command runs
+headless, in CI, and over SSH.
 
 ## Develop
 

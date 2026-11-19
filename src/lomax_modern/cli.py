@@ -27,8 +27,10 @@ from .anim_nmy import format_gnmy_report
 from .anim_nmy import probe_anim_nmy as probe_recovered_framings
 from .anim_nmy import probe_gnmy
 from .doctor import find_world_files, format_report, inventory
+from .engine.entities import Input
 from .engine.render import VIEWPORT_HEIGHT, VIEWPORT_WIDTH, camera
 from .engine.run import default_script, run_slice
+from .input import DEFAULT_KEYMAP
 from .install import check_install, is_inside_tree, resolve_world
 from .measure import measure_install, summarise, to_json
 from .probe_anim_nmy import format_report as format_probe_report
@@ -758,6 +760,133 @@ def _cmd_window(args: argparse.Namespace) -> int:
     return 0
 
 
+def _cmd_play(args: argparse.Namespace) -> int:
+    """Play a level live: the keyboard drives the engine's 60 Hz tick (P4).
+
+    Mirrors ``_cmd_window``'s setup (install gate, world resolve, SDL2 window,
+    HUD and 60 Hz pacing), but the ``run_slice`` input script is a
+    :class:`lomax_modern.input.Keymap` over ``Window.poll_input`` instead of
+    ``default_script``: once per tick it polls the keyboard (held keys plus the
+    press edge) and folds them into one ``Input`` fed to the tick, so a human
+    moves and jumps live.  Esc or window-close quits; ``--seconds N`` bounds
+    the run so ``SDL_VIDEODRIVER=dummy`` exits cleanly headless.
+    """
+    requested = Path(args.game_dir).expanduser()
+    manifest = check_install(requested)
+    if not manifest.ok:
+        print(manifest.format(), file=sys.stderr)
+        print(f"error: not an unpacked Lomax game directory: {requested}", file=sys.stderr)
+        print(
+            "hint: play expects the retail layout (WORLDS/ with *.WLD, SFX/, "
+            "AMBIENT/, JINGLES/, DEMOS/, LOMAX.EXE). It never reads a disc image.",
+            file=sys.stderr,
+        )
+        return 2
+    print(manifest.format())
+
+    try:
+        world_path = resolve_world(manifest, args.world)
+    except LookupError as exc:
+        print(f"error: {exc}", file=sys.stderr)
+        return 2
+
+    modern = True if args.modern is None else args.modern
+    settings = PresentSettings().with_profile(modern)
+    source_size = (VIEWPORT_WIDTH, VIEWPORT_HEIGHT)
+    surface_size = settings.surface
+
+    keymap = DEFAULT_KEYMAP
+    # The per-tick poll result and live state reference, shared between the
+    # pre-tick script and the post-tick sink without copying the window's key
+    # state or the whole game state every frame.
+    poll_cell: dict = {"quit": False}
+    state_cell: list = [None]
+    frame_count = 0
+    started: float | None = None
+    last_hud: float | None = None
+
+    def keyboard_script(tick: int, state) -> Input:
+        held, pressed, quit_ = window.poll_input()
+        poll_cell["quit"] = quit_
+        state_cell[0] = state
+        return keymap.update(held, pressed)
+
+    def on_frame(tick_index: int, frame) -> None:
+        nonlocal frame_count, started, last_hud
+        now = time.monotonic()
+        if started is None:
+            started = now
+            last_hud = now
+        window.present(frame)
+        if poll_cell["quit"]:
+            raise _WindowQuit()
+        frame_count += 1
+        if last_hud is not None and now - last_hud >= _WINDOW_HUD_INTERVAL:
+            state = state_cell[0]
+            if state is not None:
+                cam_x, cam_y = camera(
+                    state.level, state.player, frame.width, frame.height
+                )
+                tiles = (
+                    state.level.plane.width_cells
+                    * state.level.plane.height_cells
+                )
+                fps = frame_count / (now - started)
+                line = _hud_line(fps, state.level.name, tiles, cam_x, cam_y)
+                print(line)
+                window.set_title(line)
+            last_hud = now
+        # Pace to the engine's fixed 60 Hz so ``--seconds N`` is N real seconds.
+        deadline = started + frame_count * _WINDOW_TICK_SECONDS
+        remaining = deadline - time.monotonic()
+        if remaining > 0:
+            time.sleep(remaining)
+
+    try:
+        window = Window(source_size, surface_size)
+    except SDL2MissingError as exc:
+        print(str(exc))
+        return 1
+    except SDL2Error as exc:
+        print(f"error: cannot open the window: {exc}", file=sys.stderr)
+        return 1
+
+    try:
+        _report, _frame = run_slice(
+            manifest.root,
+            worlds=(world_path.stem,),
+            world_path=world_path,
+            max_ticks=args.seconds * 60,
+            playfield=args.playfield,
+            script=keyboard_script,
+            on_frame=on_frame,
+        )
+    except _WindowQuit:
+        pass
+    except WLDError as exc:
+        print(f"error: cannot read {world_path.name}: {exc}", file=sys.stderr)
+        return 1
+    except (OSError, ValueError) as exc:
+        print(f"error: {exc}", file=sys.stderr)
+        return 1
+    finally:
+        window.close()
+
+    if started is not None:
+        elapsed = time.monotonic() - started
+        mean_fps = frame_count / elapsed if elapsed > 0 else 0.0
+    else:
+        elapsed = 0.0
+        mean_fps = 0.0
+    window_layout = window.layout
+    print(
+        f"play: {frame_count} frames in {elapsed:.2f}s (mean fps {mean_fps:.1f}); "
+        f"keyboard input -> source {source_size[0]}x{source_size[1]} -> "
+        f"{surface_size[0]}x{surface_size[1]} at {window_layout.scale}x"
+    )
+    return 0
+
+
 def _cmd_anim_nmy(args: argparse.Namespace) -> int:
     """Decode the recovered ANIM/NMY framings and report per-world counts."""
     game_dir = args.game_dir or os.environ.get("LOMAX_GAME_DIR")
@@ -1148,6 +1277,50 @@ def build_parser() -> argparse.ArgumentParser:
         help="authentic profile: native 320x240 at 1x",
     )
     p_win.set_defaults(func=_cmd_window)
+
+    p_play = sub.add_parser(
+        "play",
+        help="play a level live: keyboard drives the 60 Hz tick (SDL2 window; read-only)",
+    )
+    p_play.add_argument(
+        "game_dir", help="unpacked game folder in the retail layout (no ISO)"
+    )
+    p_play.add_argument(
+        "--world",
+        metavar="NAME",
+        default="VILLAGE",
+        help="world stem to play (default: VILLAGE)",
+    )
+    p_play.add_argument(
+        "--seconds",
+        type=_positive_int,
+        default=60,
+        metavar="N",
+        help="wall-clock seconds to run before auto-exit (default: 60 = 3600 ticks at 60 Hz)",
+    )
+    p_play.add_argument(
+        "--playfield",
+        type=_non_negative_int,
+        default=0,
+        help="plane index used as the playable grid (default: 0)",
+    )
+    play_profile = p_play.add_mutually_exclusive_group()
+    play_profile.add_argument(
+        "--modern",
+        dest="modern",
+        action="store_const",
+        const=True,
+        help="modern profile: 1920x1080 surface, integer 4x scale (default)",
+    )
+    play_profile.add_argument(
+        "--authentic",
+        dest="modern",
+        action="store_const",
+        const=False,
+        help="authentic profile: native 320x240 at 1x",
+    )
+    p_play.set_defaults(func=_cmd_play)
+
     p_anm = sub.add_parser(
         "anim-nmy",
         help="decode the recovered ANIM/NMY framings and report counts (read-only)",

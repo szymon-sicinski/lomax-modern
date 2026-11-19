@@ -67,6 +67,20 @@ Versioning: [Semantic Versioning](https://semver.org/).
   install (no config, no PNG); a missing SDL2 prints one line and exits 1.
   Headless (`SDL_VIDEODRIVER=dummy`) tests assert frame count, dimensions and
   zero writes; CI now installs SDL2 so they run instead of skipping.
+- `lomax-modern play "<install>"` — the playable core (P4 of
+  `docs/roadmap/45-playable-level-plan.md` §1.1): drives `run_slice` into the
+  `sdl_window.Window` backend exactly like `window`, but the input script is
+  the P3 `Keymap` over `Window.poll_input` instead of `default_script` — once
+  per 60 Hz tick it polls the keyboard (held keys plus the press edge) and
+  folds them into one `Input`, so a human moves and jumps live. `Window` gains
+  `poll_input` (held/pressed/quit) built on the pure, SDL-free
+  `fold_key_events` (a held key that repeats never re-edges the jump), and the
+  event decoder now reads `SDL_KeyboardEvent.repeat` alongside the keysym.
+  Esc or window-close quits; `--seconds N` (default 60) bounds the run so
+  `SDL_VIDEODRIVER=dummy` exits cleanly headless. Controls are the P3 default
+  (arrows/WASD to move, Space/Up/W to jump); `--world`, `--playfield` and
+  `--modern`/`--authentic` mirror `window`. Read-only on the install; a missing
+  SDL2 prints one line and exits 1.
 - `lomax-modern probe-tiles` — a read-only probe that validates the recovered
   `MAP`/`TTAB`/`CELL` tile-pipeline layouts against an install and reports the
   counts (map words, tiles, flips, palettes, collision bytes) plus the scores of

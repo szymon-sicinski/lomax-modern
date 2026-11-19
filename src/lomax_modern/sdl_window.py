@@ -26,7 +26,7 @@ import struct
 import sys
 import time
 from dataclasses import dataclass
-from typing import Callable, Iterator
+from typing import Callable, Iterable, Iterator
 
 from . import scaler
 
@@ -35,6 +35,7 @@ __all__ = [
     "SDL2Error",
     "SDL2MissingError",
     "Window",
+    "fold_key_events",
     "load_sdl2",
     "open_window",
     "plan_layout",
@@ -66,6 +67,7 @@ SDL_PIXELFORMAT_RGB565 = 0x15151002
 
 SDL_QUIT = 0x100
 SDL_KEYDOWN = 0x300
+SDL_KEYUP = 0x301
 SDLK_ESCAPE = 0x1B
 
 #: ``SDL_Event`` is a fixed 56-byte union (compile-time asserted in SDL2).
@@ -73,6 +75,10 @@ _SDL_EVENT_SIZE = 56
 #: ``SDL_KeyboardEvent.keysym.sym``: type(4)+timestamp(4)+windowID(4)+
 #: state/repeat/padding(4) = 16, then ``SDL_Keysym`` scancode(4) -> sym at 20.
 _KEY_SYM_OFFSET = 20
+#: ``SDL_KeyboardEvent.repeat`` — the ``Uint8`` immediately after ``state`` and
+#: just before ``keysym``; non-zero for a synthetic key-repeat, so a caller can
+#: keep a held key from re-edging the press set.
+_KEY_REPEAT_OFFSET = 13
 
 
 class SDL2Error(RuntimeError):
@@ -319,15 +325,50 @@ def plan_layout(
     )
 
 
+def _decode_key_event(raw: bytes) -> tuple[int, int, int]:
+    """``(event_type, key_sym, repeat)`` from a 56-byte ``SDL_Event``.
+
+    ``repeat`` is ``SDL_KeyboardEvent.repeat``: non-zero for a synthetic
+    ``SDL_KEYDOWN`` repeat, so a caller can keep a held key from re-edging.
+    ``key_sym`` is only meaningful for ``SDL_KEYDOWN``/``SDL_KEYUP``.
+    """
+    event_type = struct.unpack_from("<I", raw, 0)[0]
+    key_sym = struct.unpack_from("<i", raw, _KEY_SYM_OFFSET)[0]
+    repeat = raw[_KEY_REPEAT_OFFSET]
+    return event_type, key_sym, repeat
+
+
 def _decode_event(raw: bytes) -> tuple[int, int]:
     """``(event_type, key_sym)`` from a 56-byte ``SDL_Event``.
 
     ``key_sym`` is only meaningful for ``SDL_KEYDOWN``/``SDL_KEYUP``; it is
     returned regardless so callers can decide.
     """
-    event_type = struct.unpack_from("<I", raw, 0)[0]
-    key_sym = struct.unpack_from("<i", raw, _KEY_SYM_OFFSET)[0]
+    event_type, key_sym, _repeat = _decode_key_event(raw)
     return event_type, key_sym
+
+
+def fold_key_events(
+    events: Iterable[tuple[int, int, int]],
+    held: Iterable[int] = (),
+) -> tuple[frozenset[int], frozenset[int]]:
+    """Fold ``(event_type, key_sym, repeat)`` events into held + pressed sets.
+
+    ``held`` carries the keycodes already down; each ``SDL_KEYDOWN`` adds its
+    key (and, when ``repeat`` is falsy, also records a fresh press) and each
+    ``SDL_KEYUP`` removes it.  Pure and SDL-free, so the play-loop wiring is
+    unit-tested without a display or an event queue.
+    """
+    current: set[int] = set(held)
+    pressed: set[int] = set()
+    for event_type, key_sym, repeat in events:
+        if event_type == SDL_KEYDOWN:
+            current.add(key_sym)
+            if not repeat:
+                pressed.add(key_sym)
+        elif event_type == SDL_KEYUP:
+            current.discard(key_sym)
+    return frozenset(current), frozenset(pressed)
 
 
 def _sleep_to(tick_start: float, interval: float) -> None:
@@ -417,6 +458,7 @@ class Window:
         self._byte_count = self.source_size[0] * self.source_size[1] * 2
         self._pixels = ctypes.create_string_buffer(self._byte_count)
         self._event_buf = ctypes.create_string_buffer(_SDL_EVENT_SIZE)
+        self._held: set[int] = set()
         self._title = title
         self._window: int | None = None
         self._renderer: int | None = None
@@ -453,6 +495,29 @@ class Window:
             if event_type == SDL_QUIT or (event_type == SDL_KEYDOWN and key_sym == SDLK_ESCAPE):
                 return True
         return False
+
+    def poll_input(self) -> tuple[frozenset[int], frozenset[int], bool]:
+        """Drain SDL events for one tick; return ``(held, pressed, quit)``.
+
+        ``held`` is every keycode currently down (carried across polls);
+        ``pressed`` is the subset whose ``SDL_KEYDOWN`` landed this tick (key
+        repeats filtered out, so a held key never re-edges).  ``quit`` is
+        ``True`` when the window was closed (``SDL_QUIT``) or Esc was pressed.
+        """
+        events: list[tuple[int, int, int]] = []
+        quit_ = False
+        while self._sdl.poll_event(ctypes.byref(self._event_buf)) != 0:
+            event_type, key_sym, repeat = _decode_key_event(self._event_buf.raw)
+            if event_type == SDL_QUIT or (
+                event_type == SDL_KEYDOWN and key_sym == SDLK_ESCAPE
+            ):
+                quit_ = True
+                break
+            if event_type in (SDL_KEYDOWN, SDL_KEYUP):
+                events.append((event_type, key_sym, repeat))
+        held, pressed = fold_key_events(events, self._held)
+        self._held = set(held)
+        return held, pressed, quit_
 
     def set_title(self, title: str) -> None:
         self._title = title
