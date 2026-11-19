@@ -35,8 +35,14 @@ Confidence, per claim (see ``docs/file-formats.md``):
   ``map cell -> tile record: unresolved``.
 * What the ``TTAB`` flags ``0x2000``/``0x4000`` mean (Q21) -- counted, not
   interpreted.
-* Sprite frames: ``ANIM``'s layout is unknown (Q24), so no sprite sheet is
-  fabricated; ``ANIM`` is reported as unresolved.
+
+**Verified, but not exported by this module**
+
+* The ``ANIM`` record layout is **V** (566/566 chunks, Q24,
+  ``docs/file-formats.md`` §2.6) and ``lomax-modern anim-nmy`` decodes it.
+  This module writes ``CELL``/``TTAB``/``MAP`` sheets only: sprite-frame
+  sheets are **not implemented** yet, and the report says that, not "layout
+  unknown".
 """
 
 from __future__ import annotations
@@ -749,7 +755,8 @@ def export_world(
     )
     lines.append("map cell -> tile record: unresolved (Q20)")
     lines.append(
-        "sprite frames: unresolved (Q24 -- ANIM record layout unknown; no sheet written)"
+        "sprite frames: not exported (sprite-frame export is not implemented; "
+        "the ANIM record layout is verified -- docs/file-formats.md 2.6)"
     )
     lines.append(
         "note: no unique-tile count is reported, because MAP->TTAB is unresolved (Q20)"

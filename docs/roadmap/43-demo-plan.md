@@ -220,12 +220,23 @@ The nearest *measured* anchors are the `40-budget.md` Revision re-forecasts:
 |---|---|---|---|
 | M5 controller & input | ~7 (3 specialist + 3 review + 1 lead synthesis) | ~1.2–1.9 h | §4 estimate 420 k/240 k exp, *not* measured |
 | M6 audio (if SFX is wanted) | ~2 (1 specialist + 1 review) | ~0.3–0.5 h | §4 estimate 100 k/55 k exp, *not* measured |
-| window presenter + M3 completion | **unbudgeted** | **weeks** | outside the measured M2–M4 spread |
+| window presenter (presentation half) | **3–4** (2–3 specialist + 1 review) | **0.53–1.38 h** | ≈126–168 k output · ≈307–410 k fresh · ≈11.2–14.9 M cached |
+| M3 completion (engine/input) | unbudgeted here — folded by the successor card | weeks | outside the measured M2–M4 spread |
+
+The **presentation half is now costed** — the window is no longer the blank
+`architecture.md` §5 left: [`44-presenter-options.md`](44-presenter-options.md)
+scopes the minimum window, ranks the four presenter options (default **ctypes +
+SDL2**, ≈$0.50 for 3 cards, ≈$0.66 for 4 with `epx-aa` parity), records the
+blit spike that settled "can SDL2 do it" (yes, 847 fps, ~14× headroom), and
+splits what is presentation work from what is engine/input work. The window is
+the cheapest third of C; the engine loop (GNMY population, map→tile art
+composition) and M5 input remain the unbudgeted parts.
 
 So C is a **milestone decision**, not a demo decision: it is the v0.5/v0.7
 ladder already in `20-releases.md`, and it is weeks not hours. The honest cost
-number is "M3 at order-of-magnitude uncertainty plus M5 re-forecast above," not
-a dollar figure off a per-card average.
+number is "M3 at order-of-magnitude uncertainty plus M5 re-forecast above, plus
+a now-costed presentation half of ≈$0.50–$0.66," not a dollar figure off a
+per-card average.
 
 ## 7. Recommendation — do **B**, at ~$0.50
 

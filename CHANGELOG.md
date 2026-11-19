@@ -18,6 +18,13 @@ Versioning: [Semantic Versioning](https://semver.org/).
   coordinates (3,584/3,593 on-map) — recovered from the reader at VA `0x414D16`
   (file offset `0x14116`) in `LOMAX.EXE` and validated on all 104 retail chunks
   (`docs/file-formats.md` §2.5). Read-only; accepts `$LOMAX_GAME_DIR`.
+- `docs/roadmap/44-presenter-options.md` scopes the window presenter for demo
+  option C: the minimum window, a ranked option table (default **ctypes + SDL2**,
+  ≈$0.50 for 3 cards / ≈$0.66 for 4 with `epx-aa` parity), and the blit spike
+  that settled the choice (SDL2 software renderer 847 fps, ~14× headroom).
+  `docs/architecture.md` §1/§3/§5 now point at it in addition to still calling
+  the presenter future at §1/§3, and `43-demo-plan.md` §6 links the now-costed
+  presentation half.
 - `examples/demo.sh` and [`docs/demo.md`](docs/demo.md): the alpha's capability
   as one runnable walkthrough — `doctor` → `present --modern` →
   `present --authentic` → `slice --frames` → `gif` → `conformance` → `export` —
@@ -68,12 +75,33 @@ Versioning: [Semantic Versioning](https://semver.org/).
   (bits 8-11).
 - `docs/research/05-open-questions.md`: Q20, Q21, Q22 and Q27 answered; Q8, Q9
   and Q31 narrowed by the same correction.
+- Re-graded the caveats the CLI prints instead of calling `Q23`/`Q24`
+  unresolved: `art export` now reports `sprite frames: not exported`
+  (sprite-frame export is not implemented) and notes that the `ANIM` record
+  layout is verified 566/566 (`docs/file-formats.md` §2.6); the `slice`/`present`
+  spawn and collect lines and the `new_game_state` docstring now state that the
+  `GNMY` entry layout is verified — `size`/`type`/`x`/`y` all [V], with `size`
+  the entry length and `x`/`y` pixel coordinates (§2.5) — and only the
+  spawn/exit/collectable *semantics* are unverified (`Q32` in
+  `docs/research/05-open-questions.md`). The placeholder spawn itself is
+  unchanged. `wldscan` and `measure` docstrings no longer describe the `ANIM`
+  layout as unknown or unmeasured — those modules simply do not decode it.
 
 ### Fixed
 
+- `measure --json` and `probe-anim-nmy --json` now refuse a report destination
+  inside the game folder, with the same wording and exit code as every other
+  writer (`error: refusing to write inside the game folder (<dir>); choose an
+  output directory outside it`, exit 2, nothing created). They were the last two
+  paths that would drop a derived file into the install; `--json` outside the
+  install, and the JSON-on-stdout `--quiet` form, are unchanged.
 - `anim-nmy` refuses a `*.WLD` that is not a world container the way `slice`
   and `present` already did: one `error: cannot read …` line and exit 1,
   instead of a `WLDParseError` traceback.
+- `probe-tiles --json` follows that same rule: a report destination inside the
+  game folder is refused with the shared message and exit 2, nothing created.
+  The command landed alongside the guard for the other two readers, so it was
+  the one remaining `--json` path that could drop a file into the install.
 
 ## [0.4.0-alpha.1] — 2026-11-18
 

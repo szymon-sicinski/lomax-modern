@@ -425,5 +425,29 @@ def test_run_slice_reports_ticks_and_clean_exit(tmp_path) -> None:
     assert report.clean_exit
     assert report.world == "VILLAGE"
     assert frame.width == 320 and frame.height == 240
-    assert "unresolved (Q20)" in report.format()
-    assert "retracted" in report.format()
+    text = report.format()
+    assert "unresolved (Q20)" in text
+    assert "retracted" in text
+    # Q23 (the NMY framing) and the GNMY entry layout are answered; the
+    # spawn/collect placeholders must blame only the Q32 semantics, never the
+    # layout, the position or the index mapping.
+    assert "the real spawn is a GNMY entry" in text
+    assert "the real positions are GNMY entries" in text
+    assert (
+        text.count("entry layout verified, spawn/exit/collectable semantics unverified, Q32")
+        == 2
+    )
+    assert "Q23" not in text
+    assert "entry meaning unverified" not in text
+    assert "semantics unresolved" not in text
+
+
+def test_new_game_state_docstring_grades_gnmy_entry_meaning() -> None:
+    """The docstring must keep the verified layout and flag only Q32."""
+    doc = new_game_state.__doc__ or ""
+    assert "entry layout is verified" in doc
+    assert "Q32" in doc
+    assert "unverified" in doc
+    assert "what its ``u16 size`` spans" not in doc
+    assert "Q23" not in doc
+    assert "unresolved" not in doc
