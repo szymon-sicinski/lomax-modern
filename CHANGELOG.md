@@ -8,6 +8,14 @@ Versioning: [Semantic Versioning](https://semver.org/).
 
 ### Added
 
+- The `window` HUD line now ends with `collect N/M` — `Moneybag`s picked up
+  over those on the playfield (P7 of
+  `docs/roadmap/45-playable-level-plan.md` §1.1), so progress is visible while
+  playing: `fps=60.1 plane=MEDIEVAL tiles=7920 camera=(57,385) collect 0/2`.
+  Counts come from the live state (`Entities.collected` / `collectibles`), not
+  a second store; a world with no `Moneybag` placement reads `collect 0/0`
+  rather than a percentage. Measured read-only on the retail install: ED and
+  MEDIEVAL report `0/2` at spawn and `1/2` after one pickup, VILLAGE `0/0`.
 - `lomax_modern.input` — the pure keyboard → `Input` mapping, the keyboard
   half of M5 (P3 of `docs/roadmap/45-playable-level-plan.md` §1.1):
   `Keymap.update(held, pressed)` folds two keycode sets into one `Input`,
@@ -30,6 +38,16 @@ Versioning: [Semantic Versioning](https://semver.org/).
   tracked-stale paragraph in `docs/file-formats.md` §2.5 is gone. Measured on
   the retail install: VILLAGE carries `Start` 3 / `Exit` 1 / `Moneybag` 0
   across its 15 planes, so its opening playfield shows no collectable marker.
+- The engine now consumes the `GNMY` placements as entities (Q32 **[V]**).
+  `Level.spawn` / `Level.collectables` / `Level.exits` resolve the playfield
+  plane's placements by `NMY` name — `Start` (spawn), `Exit` (level exit),
+  `Moneybag` (collectable) — and `new_game_state` turns them into the live
+  spawn, exit and collectables (pixel position → `CELL_PX` map cell), falling
+  back to the first passable cell when a plane has no `Start`. `slice` now
+  reports `spawn: Start (x, y) px`, `collect: N Moneybag(s)` and
+  `exit: Exit (x, y) px` instead of the old placeholders, and `present` /
+  `window` inherit the same wiring through `run_slice`. VILLAGE's opening
+  playfield carries `Start (99, 189)` and `Exit (4747, 246)` and no `Moneybag`.
 - `docs/roadmap/45-playable-level-plan.md` — the plan + budget for the next
   milestone, **one level fully playable** (C-playable): the scope table, a
   seven-card decomposition (NMY-name role classifier → Level semantics → input
@@ -39,6 +57,16 @@ Versioning: [Semantic Versioning](https://semver.org/).
   §6.2 M5 re-forecast rather than adding to it, and prices the loop
   `43-demo-plan.md` §6.2 had to leave open, now that Q32 is answered (the
   `GNMY` identity is the `NMY` name, not the flags).
+- The engine now consumes the `GNMY` placements as entities (Q32 **[V]**).
+  `Level.spawn` / `Level.collectables` / `Level.exits` resolve the playfield
+  plane's placements by `NMY` name — `Start` (spawn), `Exit` (level exit),
+  `Moneybag` (collectable) — and `new_game_state` turns them into the live
+  spawn, exit and collectables (pixel position → `CELL_PX` map cell), falling
+  back to the first passable cell when a plane has no `Start`. `slice` now
+  reports `spawn: Start (x, y) px`, `collect: N Moneybag(s)` and
+  `exit: Exit (x, y) px` instead of the old placeholders, and `present` /
+  `window` inherit the same wiring through `run_slice`. VILLAGE's opening
+  playfield carries `Start (99, 189)` and `Exit (4747, 246)` and no `Moneybag`.
 - `lomax_modern.sdl_window` — the SDL2 window backend, first half of demo
   option C's presentation half: `open_window` opens a window at the configured
   surface, uploads a 320×240 `B5G6R5` buffer to an `SDL_PIXELFORMAT_RGB565`

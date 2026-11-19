@@ -622,9 +622,25 @@ class _WindowQuit(Exception):
     """Raised from the frame sink when the window is closed or Esc is pressed."""
 
 
-def _hud_line(fps: float, plane: str, tiles: int, cam_x: int, cam_y: int) -> str:
-    """The one HUD line: fps, plane name, tile count, camera x/y."""
-    return f"fps={fps:.1f} plane={plane} tiles={tiles} camera=({cam_x},{cam_y})"
+def _hud_line(
+    fps: float,
+    plane: str,
+    tiles: int,
+    cam_x: int,
+    cam_y: int,
+    collected: int,
+    total: int,
+) -> str:
+    """The one HUD line: fps, plane name, tile count, camera x/y, collectables.
+
+    ``collected``/``total`` are the ``Moneybag`` counts (``total`` may be 0 —
+    a world with no `Moneybag` placement prints ``collect 0/0`` rather than a
+    percentage, which would divide by zero).
+    """
+    return (
+        f"fps={fps:.1f} plane={plane} tiles={tiles} camera=({cam_x},{cam_y})"
+        f" collect {collected}/{total}"
+    )
 
 
 def _cmd_window(args: argparse.Namespace) -> int:
@@ -704,7 +720,11 @@ def _cmd_window(args: argparse.Namespace) -> int:
                     * state.level.plane.height_cells
                 )
                 fps = frame_count / (now - started)
-                line = _hud_line(fps, state.level.name, tiles, cam_x, cam_y)
+                collected = len(state.entities.collected)
+                total = len(state.entities.collectibles)
+                line = _hud_line(
+                    fps, state.level.name, tiles, cam_x, cam_y, collected, total
+                )
                 print(line)
                 window.set_title(line)
             last_hud = now

@@ -307,13 +307,15 @@ a back-pointer to the placement at `+0x4`, x/y at `+0x3C`/`+0x40`,
 animation list, `+0x4` name, `+0x14` `W_A >> 8`, `+0x16` type index, `+0x18`
 `K`, `+0x1A` `W_A & 0xF`, `+0x1C` the `0x100` MAIN bank bit.
 
-**The marker overlay consumes this mapping.** `engine.overlay_gnmy` draws the
-playfield's placements styled by their `NMY` name: `Start`, `Exit` and
-`Moneybag` get distinct colours and sizes **[V]**, and every other name is one
-grey "other type" bucket — the remaining 86 names' handlers are unmapped, so no
-per-name glyph is invented for them. The engine's *simulation* still spawns at
-a placeholder passable cell and does not turn these placements into entities;
-that is a separate step, not an open question.
+**The marker overlay and the simulation consume this mapping.**
+`engine.overlay_gnmy` draws the playfield's placements styled by their `NMY`
+name: `Start`, `Exit` and `Moneybag` get distinct colours and sizes **[V]**,
+and every other name is one grey "other type" bucket — the remaining 86 names'
+handlers are unmapped, so no per-name glyph is invented for them. The engine's
+*simulation* also consumes the mapping: `Level.spawn` / `Level.collectables` /
+`Level.exits` resolve the same placements by name (Q32) and `new_game_state`
+turns them into the live spawn, exit and collectables, falling back to the
+first passable cell when a plane has no `Start` placement.
 
 ### 2.6 `ANIM` / sprites **[V]**
 

@@ -457,24 +457,28 @@ def test_run_slice_reports_ticks_and_clean_exit(tmp_path) -> None:
     assert "resolved (Q20)" in text
     assert "unresolved (Q20)" not in text
     assert "retracted" in text
-    # Q32 is answered: the spawn/collect placeholders now name the evidenced
-    # roles (Start/Exit/Moneybag) instead of blaming an open question.
-    assert "the real spawn is the `Start` GNMY placement [V]" in text
-    assert "the real collectables are the `Moneybag` GNMY placements [V]" in text
-    assert "does not consume" in text
+    # Q32 is now wired, not just named: this synthetic fixture carries no NMY
+    # names, so the engine falls back and says so instead of blaming Q32.
+    assert report.spawn_name is None
+    assert report.exits == ()
+    assert report.collected_total == 0
+    assert "placeholder" not in text
+    assert "does not consume" not in text
+    assert "no Start placement" in text
+    assert "collect: 0 Moneybag(s)" in text
+    assert "exit: none (no Exit placement)" in text
     assert "Start/Exit/Moneybag [V]" in text
     assert "Q23" not in text
     assert "entry meaning unverified" not in text
     assert "semantics unresolved" not in text
 
 
-def test_new_game_state_docstring_states_the_resolved_roles() -> None:
-    """The docstring must record Q32's answer and that the engine defers it."""
+def test_new_game_state_docstring_records_the_resolved_roles() -> None:
+    """The docstring must record Q32's answer and that the engine consumes it."""
     doc = new_game_state.__doc__ or ""
     assert "Q32" in doc
     assert "Start" in doc and "Exit" in doc and "Moneybag" in doc
-    assert "does not consume" in doc
-    assert "entry layout is verified" in doc
-    assert "what its ``u16 size`` spans" not in doc
+    assert "does not consume" not in doc
+    assert "falls back" in doc
     assert "Q23" not in doc
     assert "unresolved" not in doc
