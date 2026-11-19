@@ -240,8 +240,9 @@ keyboard, no player, no collect/exit — motion, not play. It is costable now:
 fresh / ≈$0.165 off-peak); the total is ≈252–378 k output · ≈612–918 k fresh ·
 ≈22.3–33.5 M cached. Wall-clock is specialist 13–25 min + reviewer 5.5–7.5 min
 per card (§3.1). The low end assumes nearest scaling for both profiles (no
-`epx-aa` port) and the population card folded into the tile-port PR; the high
-end adds the `epx-aa` parity card and a separate population card.
+`epx-aa` port) and counts the population row as **one** card, not two
+(3 window + 2 tile art + 1 population = 6); the high end adds the `epx-aa`
+parity card and a second population card.
 
 **What the research bought.** The old §6 folded this whole loop into "M3 —
 unbudgeted, weeks, order-of-magnitude" (`40-budget.md` §7's ≈$4.28 @pro row).
@@ -273,7 +274,11 @@ experiment, not before.
 The other known addition is **M5 input** (keyboard → `Input`), already
 re-forecast at **~7 cards / ≈$1.16 off-peak / ~1.2–1.9 h** (3 specialist + 3
 review + 1 lead synthesis — a re-forecast, not a measurement; the old §6 and
-the `40-budget.md` Revision). M6 audio stays optional and out of C's core.
+the `40-budget.md` Revision). `Derived:` the money is 7 × the §3 unit
+(7 × $0.165 ≈ $1.16); `40-budget.md` carries M5 at **$0.35** from the older
+per-milestone model, and the measured unit supersedes that row because it is
+recorded from the board rather than estimated. M6 audio stays optional and out
+of C's core.
 
 So the honest number for C-playable is **≈$2.32–$2.98** for everything *except*
 the playable loop itself — C-animated (≈$0.99–$1.49) + M5 (≈$1.16) + the Q32
@@ -293,7 +298,7 @@ cards" harden into certainty: the two ends exist because the `epx-aa` parity
 card and the population card are decisions, and because `Q32`'s answer is not in
 yet.
 
-## 7. Recommendation — do **B** now, then **C-animated** as v0.5, and price C-playable after the Q32 experiment
+## 7. Recommendation — do **B** now, then **C-animated** as v0.6, and price C-playable after the Q32 experiment
 
 **B (~$0.50)** is still the right first dollar: it shows the project *doing the
 thing it exists to do* — running the game's own data at 60 Hz — for three cards
@@ -304,14 +309,17 @@ the last.
 
 - **C-animated ≈$0.99–$1.49 (6–9 cards)** — a live window with correct tile art
   and population density. This is the "the game is coming back" shot B cannot
-  deliver: B is a recording, C-animated is a window. That is the v0.5 target.
+  deliver: B is a recording, C-animated is a window. That is the **v0.6 (presenter)**
+  rung — `20-releases.md` defines v0.5 as the engine core with keyboard input at the
+  original logic rate, and C-animated has no keyboard and no player.
 - **Q32 experiment ≈$0.17–$0.33 (1–2 cards)** — the one open question left
   (which `GNMY` entry is the spawn/collectable/exit). Cheap, and it is the
   *gate*: run it and the playable loop stops being an H and gets a price.
 - **C-playable** — C-animated + M5 input (≈$1.16) + the experiment + the loop
-  the experiment prices. A milestone (v0.6/v0.7), not a demo.
+  the experiment prices. Its playable loop *is* v0.5's contents, so this is a
+  milestone spanning v0.5→v0.7, not a demo.
 
-So the recommendation is **B now**; if B lands well, **C-animated next** (v0.5)
+So the recommendation is **B now**; if B lands well, **C-animated next** (v0.6)
 with the **Q32 experiment bought alongside it** so the step after that is a
 priced milestone rather than another blank. Do *not* approve "C" as a single
 number yet — approve C-animated, or approve the experiment.
