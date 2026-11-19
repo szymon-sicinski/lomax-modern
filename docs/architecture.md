@@ -13,7 +13,13 @@ There is deliberately no C/loader layer yet. The engine core (M3) is a
 dependency-free Python reference simulation in this package; the renderer (M4)
 ships the same way — a Python reference (`renderer.py`, the oracle) plus a
 C99 core in `native/` that reproduces it bit-for-bit and is built in CI only.
-The C/Win32 *presenter* (window + surface) is still a separate future component, because this package stays dependency-free Python. Its options, effort and the blit spike that settles the choice are scoped in
+The C/Win32 *presenter* (native window + packaging) is still a separate future
+component, because this package stays dependency-free Python. A Python
+`window` command (`lomax-modern window`) now ships the *live* half: it opens an
+SDL2 window through `ctypes` (a system library, `dependencies = []` unchanged),
+letterboxes the engine's 320×240 frame at the integer fit and blits with
+SDL2-native nearest. Its options, effort and the blit spike that settles the
+choice are scoped in
 [`docs/roadmap/44-presenter-options.md`](roadmap/44-presenter-options.md).
 
 ## 2. The clean-room boundary
@@ -126,10 +132,14 @@ used. Three rules keep it honest:
 - **A pinned scale must fit.** `plan_presentation` raises with the largest
   integer fit instead of letting `fit_scale` shrink the request silently; the
   numbers in the report are the numbers that produced the image.
-- **No window is claimed.** The Python package has no display dependency, so
-  `present` computes the surface and can write it to PNG (`--frame`, or one PNG
+- **The window is live, the C presenter is not.** `lomax-modern window` opens a
+  real SDL2 window (via `ctypes`, a system library — `dependencies = []`
+  unchanged) and blits the engine frame at the integer fit with SDL2-native
+  nearest scaling, with a one-line HUD. `present` stays headless: it computes
+  the surface and can write it to PNG (`--frame`, or one PNG
   per 60 Hz tick with `--frames N --out DIR`); the
-  Win32/C presenter remains future work (§5; options and effort are scoped in
+  native Win32/C presenter (packaging) remains future work (§5; options and
+  effort are scoped in
   [`docs/roadmap/44-presenter-options.md`](roadmap/44-presenter-options.md)). The rendered frame is the
   engine's *geometric* frame — composing decoded tile art into a world view
   still needs the unresolved `MAP` cell -> `TTAB` record link (Q20), which the
@@ -221,7 +231,7 @@ tick (input, gravity, axis-separated collision, collect, exit) to a 16-bit
 | Exporter (LMX-6) | Python | shipped in `lomax_modern.art` + `lomax-modern export` |
 | **Engine core (M3)** | Python | shipped in `lomax_modern.engine`; reference simulation, not the presenter |
 | **Renderer (M4)** | Python reference + C core | `renderer.py` is the oracle; `native/` (C99) reproduces it bit-for-bit and is built in CI only; `scaler.py` grades the presentation half; `conformance.py` grades colour at depth 16 vs 24, transparency and integer scale offscreen |
-| **Presenter CLI (M4)** | Python | shipped as `lomax-modern present` (`config.py`, `install.py`, `presenter.py`): P5 manifest, persisted modern/authentic profile, integer fit and runtime filter; writes a PNG, no window — the window presenter is scoped (options, effort, spike) in [`docs/roadmap/44-presenter-options.md`](roadmap/44-presenter-options.md) |
+| **Presenter CLI (M4)** | Python | shipped as `lomax-modern present` (`config.py`, `install.py`, `presenter.py`): P5 manifest, persisted modern/authentic profile, integer fit and runtime filter; writes a PNG. `lomax-modern window` (`sdl_window.py`, `cli.py`) opens a live SDL2 window via `ctypes` and letterboxes the frame with SDL2-native nearest scaling and a one-line HUD — options, effort and the blit spike are in [`docs/roadmap/44-presenter-options.md`](roadmap/44-presenter-options.md) |
 | Upscaler (LMX-8) | Python + NumPy | index-space only; output is never committed |
 | 2x render spike (LMX-10) | C (Win32) | separate spike branch, may be abandoned |
 
