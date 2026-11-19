@@ -254,6 +254,14 @@ not a blank.
 
 ### 6.2 The part that still cannot be closed — C-playable
 
+> **Update (2026-11-19).** This section was written while Q32 was still open.
+> Q32 has since closed (`t_6fa1ecf8`, docs PR #50): the identity is the `NMY`
+> record's **name** (`Start`/`Exit`/`Moneybag` through the name table), not the
+> flags. The playable loop is therefore now priced — see
+> [`45-playable-level-plan.md`](45-playable-level-plan.md) for the full plan and
+> budget (≈15 cards / ≈$2.48 off-peak). The text below is kept as the historical
+> reasoning that led to the Q32 experiment.
+
 A *playable* slice additionally needs the player to **spawn** somewhere, to
 **collect** items, to **exit** a level and **advance** to the next. All four
 read the same thing: which `GNMY` entries are the spawn, the collectables and
