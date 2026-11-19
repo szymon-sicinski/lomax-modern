@@ -160,7 +160,13 @@ def new_game_state(
     """Build a fresh state; ``spawn`` defaults to the top-left passable cell.
 
     The default spawn is a placeholder: the real spawn lives in the ``GNMY``
-    placements, whose record semantics are unresolved (Q23).
+    placements.  The ``GNMY`` entry layout is verified, including the position:
+    ``docs/file-formats.md`` §2.5 grades ``size``/``type``/``x``/``y`` all [V]
+    (``size`` is the entry's structural length, ``x``/``y`` are pixel
+    coordinates), and the type index -> ``NMY`` record mapping is [V] too.
+    What remains unverified is the *semantics*: which entry is the player start,
+    which is the level exit, and which is a collectable (Q32 in
+    ``docs/research/05-open-questions.md``), so the spawn stays a placeholder.
     """
     if spawn_x is None or spawn_y is None:
         sx, sy = first_passable_cell(level)

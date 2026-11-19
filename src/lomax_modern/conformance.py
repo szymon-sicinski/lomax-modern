@@ -70,10 +70,13 @@ from typing import Callable, Iterable, Sequence
 
 from . import art
 from .art import (
+    FLIP_H,
+    FLIP_MASK,
+    FLIP_V,
     PALETTE_ENTRY_COUNT,
     Cell,
     TileRecord,
-    TileWord,
+    TileSlot,
 )
 from .renderer import (
     CELL_PIXELS,
@@ -209,7 +212,7 @@ class Tile:
 
     ``cells`` is the cell bank the record indexes into, so an out-of-bank cell
     index is visible to the harness (and is skipped by both render paths, never
-    repaired — Q22).
+    repaired).  Each slot's flag word carries a flip the reference honours too.
     """
 
     record: TileRecord
@@ -292,8 +295,20 @@ def pattern_cell(index: int, seed: int, *, holes: bool = True) -> Cell:
     return Cell(index=index, pixels=bytes(pixels))
 
 
-def _tile_record(indices: Iterable[int]) -> TileRecord:
-    return TileRecord(index=0, words=tuple(TileWord(raw=value) for value in indices))
+def _tile_record(cells: Iterable[tuple[int, int] | int]) -> TileRecord:
+    """A ``TileRecord`` from four cells: ``(index, flags)`` pairs or bare indices.
+
+    A bare ``int`` is an index with no flags; a ``(index, flags)`` pair sets a
+    flip (``FLIP_H``/``FLIP_V``/``FLIP_MASK``).  ``TileRecord`` enforces four.
+    """
+    slots = []
+    for cell in cells:
+        if isinstance(cell, tuple):
+            index, flags = cell
+        else:
+            index, flags = cell, 0
+        slots.append(TileSlot(index=index, flags=flags))
+    return TileRecord(index=0, slots=tuple(slots))
 
 
 def synthetic_palette(key: int = 0x7C1F) -> tuple[int, ...]:
@@ -340,11 +355,21 @@ _SCENE_TILES = Scene(
             layout="2x2",
         ),
         # Slot 3 indexes outside the 4-cell bank: both paths must skip it and
-        # leave the background alone (Q22 preserved, not repaired).
+        # leave the background alone (never repaired).
         Tile(
             record=_tile_record((0, 1, 2, 9)),
             cells=tuple(pattern_cell(i, 200 + i) for i in range(4)),
             x=0,
+            y=20,
+        ),
+        # Flips: H, V, both and none.  The reference must mirror each cell the
+        # same way blit_tile does or the depth case fails.
+        Tile(
+            record=_tile_record(
+                ((0, FLIP_H), (1, FLIP_V), (2, FLIP_MASK), (3, 0))
+            ),
+            cells=tuple(pattern_cell(i, 300 + i) for i in range(4)),
+            x=32,
             y=20,
         ),
     ),
@@ -419,24 +444,29 @@ def _slot_offset(slot: int, layout: str) -> tuple[int, int]:
 
 def _placements(
     scene: Scene, scroll_x: int = 0, scroll_y: int = 0
-) -> list[tuple[Cell, int, int]]:
-    """Every cell the scene draws, with its absolute top-left corner.
+) -> list[tuple[Cell, int, int, int]]:
+    """Every cell the scene draws, with its absolute top-left corner and flip.
 
     Shared by the 24-bit reference and the transparency checker so the *fixture*
     has one placement rule.  The depth-16 path never uses this list: it calls
     :meth:`Framebuffer.blit_tile` / :meth:`Framebuffer.blit_cell`, which is how a
-    placement divergence between the two paths becomes a mismatch.
+    placement or flip divergence between the two paths becomes a mismatch.
     """
-    placed: list[tuple[Cell, int, int]] = []
+    placed: list[tuple[Cell, int, int, int]] = []
     for sprite in scene.sprites:
-        placed.append((sprite.cell, sprite.x - scroll_x, sprite.y - scroll_y))
+        placed.append((sprite.cell, sprite.x - scroll_x, sprite.y - scroll_y, 0))
     for tile in scene.tiles:
-        for slot, index in enumerate(tile.record.cell_indices):
-            if not 0 <= index < len(tile.cells):
+        for slot, cell_slot in enumerate(tile.record.slots):
+            if not 0 <= cell_slot.index < len(tile.cells):
                 continue
             dx, dy = _slot_offset(slot, tile.layout)
             placed.append(
-                (tile.cells[index], tile.x - scroll_x + dx, tile.y - scroll_y + dy)
+                (
+                    tile.cells[cell_slot.index],
+                    tile.x - scroll_x + dx,
+                    tile.y - scroll_y + dy,
+                    cell_slot.flip,
+                )
             )
     return placed
 
@@ -454,14 +484,21 @@ class _Buffer24:
             self.pixels[y * self.width + x] = value
 
 
-def _blit_cell24(buffer: _Buffer24, cell: Cell, palette: Sequence[int], x0: int, y0: int) -> None:
-    """Reference cell blit: skip the transparent key, paint everything else."""
-    for y in range(CELL_PIXELS):
-        for x in range(CELL_PIXELS):
-            index = cell.pixels[y * CELL_PIXELS + x]
+def _blit_cell24(
+    buffer: _Buffer24, cell: Cell, palette: Sequence[int], x0: int, y0: int, flip: int = 0
+) -> None:
+    """Reference cell blit: skip the transparent key, paint everything else.
+
+    ``flip`` mirrors the cell the same way :meth:`Framebuffer.blit_cell` does.
+    """
+    for dy in range(CELL_PIXELS):
+        for dx in range(CELL_PIXELS):
+            sx = (CELL_PIXELS - 1 - dx) if flip & FLIP_H else dx
+            sy = (CELL_PIXELS - 1 - dy) if flip & FLIP_V else dy
+            index = cell.pixels[sy * CELL_PIXELS + sx]
             if index == TRANSPARENT_INDEX:
                 continue
-            buffer.set(x0 + x, y0 + y, palette[index])
+            buffer.set(x0 + dx, y0 + dy, palette[index])
 
 
 def _render16(scene: Scene, scroll_x: int, scroll_y: int) -> Frame:
@@ -488,8 +525,8 @@ def _render24(scene: Scene, scroll_x: int, scroll_y: int) -> Frame:
     """Render the same scene at full precision, from the documented rule."""
     buffer = _Buffer24(scene.width, scene.height, _pack8(scene.background_rgb))
     palette = tuple(_pack8(art.rgb15_to_rgb8(word)) for word in scene.palette)
-    for cell, x0, y0 in _placements(scene, scroll_x, scroll_y):
-        _blit_cell24(buffer, cell, palette, x0, y0)
+    for cell, x0, y0, flip in _placements(scene, scroll_x, scroll_y):
+        _blit_cell24(buffer, cell, palette, x0, y0, flip)
     return Frame(Depth.BPP24, scene.width, scene.height, tuple(buffer.pixels))
 
 
@@ -708,13 +745,15 @@ def check_transparency(scene: Scene, *, render_fn: RenderFn = render) -> Transpa
     """
     coverage = bytearray(scene.width * scene.height)
     transparent: list[tuple[int, int]] = []
-    for cell, x0, y0 in _placements(scene):
-        for y in range(CELL_PIXELS):
-            for x in range(CELL_PIXELS):
-                px, py = x0 + x, y0 + y
+    for cell, x0, y0, flip in _placements(scene):
+        for dy in range(CELL_PIXELS):
+            for dx in range(CELL_PIXELS):
+                px, py = x0 + dx, y0 + dy
                 if not (0 <= px < scene.width and 0 <= py < scene.height):
                     continue
-                index = cell.pixels[y * CELL_PIXELS + x]
+                sx = (CELL_PIXELS - 1 - dx) if flip & FLIP_H else dx
+                sy = (CELL_PIXELS - 1 - dy) if flip & FLIP_V else dy
+                index = cell.pixels[sy * CELL_PIXELS + sx]
                 if index == TRANSPARENT_INDEX:
                     transparent.append((px, py))
                 else:

@@ -77,15 +77,19 @@ def cell_payload(blocks: Iterable[bytes | Sequence[int]]) -> bytes:
 
 
 def ttab_payload(records: Iterable[Sequence[int]]) -> bytes:
-    """A TTAB payload: 8-byte records of four big-endian u16 cell-index words."""
+    """A TTAB payload: 16-byte records of four ``[index word, flag word]`` cells.
+
+    Each record is eight big-endian ``u16`` words: for cells 0..3 the pairs
+    ``(index, flags)`` in stored order.
+    """
     out = bytearray()
     for record in records:
-        if len(record) != 4:
-            raise ValueError(f"tile record holds {len(record)} words, expected 4")
+        if len(record) != 8:
+            raise ValueError(f"tile record holds {len(record)} words, expected 8")
         for word in record:
             if not 0 <= word <= 0xFFFF:
                 raise ValueError(f"tile word {word} does not fit in a u16")
-        out += struct.pack(">4H", *record)
+        out += struct.pack(">8H", *record)
     return bytes(out)
 
 
@@ -95,22 +99,24 @@ def map_payload(
     *,
     cells: Iterable[tuple[int, int]] | None = None,
 ) -> bytes:
-    """A MAP payload: 3 bytes per 16x16 cell, padded to a multiple of 4.
+    """A MAP payload: ``N`` big-endian u16 tile words, then ``N`` collision bytes,
+    padded to a multiple of 4.
 
-    Measured on all 104 retail sections: ``size - 3 * cells`` is 0..3 and the
-    payload size is always a multiple of 4.  ``cells`` supplies ``(tile_word,
-    collision)`` pairs; the default fills zeros.
+    ``cells`` supplies ``(tile_word, collision)`` pairs in row-major order; the
+    default fills zeros.  The recovered layout is ``[N words][N collision bytes]``
+    (not interleaved), totalling 3 bytes per cell.
     """
     count = (width_units * 8 // 16) * (height_units * 8 // 16)
     if cells is None:
-        raw = b"\0" * (count * 3)
+        words = b"\0" * (count * 2)
+        collisions = b"\0" * count
     else:
-        out = bytearray()
-        for tile_word, collision in cells:
-            out += struct.pack(">H", tile_word) + bytes((collision,))
-        if len(out) != count * 3:
-            raise ValueError(f"{len(out) // 3} map cells supplied, expected {count}")
-        raw = bytes(out)
+        pairs = list(cells)
+        if len(pairs) != count:
+            raise ValueError(f"{len(pairs)} map cells supplied, expected {count}")
+        words = b"".join(struct.pack(">H", tile_word) for tile_word, _ in pairs)
+        collisions = bytes(collision for _, collision in pairs)
+    raw = words + collisions
     return raw + b"\0" * (-len(raw) % 4)
 
 
@@ -230,7 +236,7 @@ def synthetic_world(
     for width_units, height_units in planes:
         chunks += [
             ("HEAD", head_payload(width_units, height_units, endian=endian)),
-            ("TTAB", b"\0" * 24),
+            ("TTAB", b"\0" * 16),
             ("MAP", map_payload(width_units, height_units)),
             ("GNMY", gnmy_payload((0,))),
         ]

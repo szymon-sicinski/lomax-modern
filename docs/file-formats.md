@@ -11,7 +11,9 @@
   [`research/07-wp4-runtime-distribution.md`](research/07-wp4-runtime-distribution.md)),
   or in the LMX-11 static-analysis pass of 2026-11-18 (the `ANIM`/`NMY`/`GNMY`
   readers in `LOMAX.EXE`, §2.5/§2.6, validated with
-  `lomax-modern anim-nmy`).
+  `lomax-modern anim-nmy`), or in the tile-pipeline pass of 2026-11-18 (the
+  `HEAD`/`CELL`/`MAP`/`TTAB` readers and the flag-consuming tile-cache builder
+  in `LOMAX.EXE`, §2.4/§2.8, validated with `lomax-modern probe-tiles`).
 - **D** — documented by a third party `[S2]` `[S3]`, not verified here.
 - **H** — hypothesis in this repository, untested against a real file.
 - **retracted** — stated here previously and contradicted by measurement. The
@@ -103,50 +105,67 @@ Only HEADs whose plane bit is in the active plane mask load palettes; every
 plane's tiles are built from the last palettes loaded, and all shipped tiles use
 palette 0 `[D]` (unverified — Q8).
 
-### 2.4 `TTAB`, `MAP`, `CELL`
+### 2.4 `TTAB`, `MAP`, `CELL` — the tile pipeline
 
-- **`MAP` [V size, H word]**: 3 bytes per 16x16 cell — a 16-bit tile word plus
-  one collision byte — padded with 0–3 zero bytes so the payload size is a
-  multiple of 4. Verified on all 104 sections: `size − 3·cells ∈ {0,1,2,3}` and
-  every size is 4-aligned. The *word* is not verified as a plain index: read as
-  a tile field, the first of the three bytes masked to 7 bits (`b[0] & 0x7F`)
-  scores **0 violations** over all 523,229 cells, against 189 for unmasked `b[0]`
-  and 187 for `b[1]` **[V]**
-  ([`research/07-wp3-asset-pipeline.md`](research/07-wp3-asset-pipeline.md) G5).
-  **Open anomaly:** that 7-bit field saturates at 127 in every section that uses
-  tiles, while sibling `TTAB` banks hold up to 2,952 entries — so a map cell is
-  not a plain `TTAB` index and the map-cell → tile-record link stays unresolved
-  ([`research/05-open-questions.md`](research/05-open-questions.md)).
-- **`CELL` [V]**: whole 64-byte 8x8 palettised cells. 14,974 cells across the 9
+Recovered by static analysis of the readers in `LOMAX.EXE` (§2.8) and validated
+against all 9 retail world files with `lomax-modern probe-tiles` (2026-11-18).
+This subsection closes Q20/Q21/Q22 and opens Q33 (the flip *pairing*, which no
+measurement settles); every count below is reproduced by that command.
+
+- **`MAP` [V]**: `N` big-endian `u16` tile words, then `N` collision bytes,
+  padded with 0–3 zero bytes to a multiple of 4. `N` is the plane's 16x16-cell
+  count from the sibling `HEAD` (§2.3). The loader byte-swaps exactly the `2·N`
+  word bytes in place (the preprocessor at VA `0x415430`) and keeps the `N`
+  collision bytes at `map + 2·N`. Measured: **523,229 map words across 104
+  planes, 1,476 distinct, max 1,475**. The earlier "3 bytes per cell,
+  word+collision interleaved" reading is **retracted**: its `size − 3·cells`
+  arithmetic still holds, but its byte order is wrong — under it 51,381 of
+  523,229 words fall outside the plane's `TTAB` bank, against **0** for the
+  split reading.
+- **`MAP` word → `TTAB` record [V, Q20]**: the map word is a **direct index**
+  into the plane's `TTAB` record array. Every one of the 523,229 map words
+  resolves to an in-range record (0 out-of-bank, 104/104 planes). The tile
+  count per plane is `TTAB` payload size ÷ 16 (the `TTAB` reader stores
+  `size >> 4` at plane `+0x2C`).
+- **`TTAB` [V]**: 16-byte records = eight big-endian `u16` words = four cells,
+  each a `[index word, flag word]` pair. **37,561 records = 150,244 cells**
+  across the 9 files (the earlier "75,122 records" was the same data read as
+  8-byte records — 300,488 words ÷ 4 — a self-consistent but wrong framing).
+  - *Index word*: a full 16-bit `CELL` index. 0/150,244 are out of bank;
+    4,909 distinct (max 4,908). The blit resolves `CELL_base + index·64` with
+    no mask (§2.8).
+  - *Flag word*: bits 13–14 are the flip pair, bits 8–11 the palette index;
+    bits 0–7/12/15 are never set (0/150,244).
+- **`TTAB` flip bits [V, Q21]**: bits 13–14 of the flag word are the flip pair.
+  Exactly three combinations occur across the 150,244 retail cells — `0x2000` on
+  15,787, `0x4000` on 1,783, `0x6000` on 716, none on 131,958 — and every other
+  high bit is zero. The tile-cache builder dispatches on `flags & 0x6000` into
+  four distinct copy loops (§2.8). (The earlier "range" of 15,787–16,503 /
+  1,783–2,499 came from two runs counting different units; the per-*flag-word*
+  counts above are authoritative — Q27.)
+  **Which of the two bits is horizontal is `[H]`, not `[V]`.** This decoder reads
+  `0x2000` as horizontal and `0x4000` as vertical, and every consumer states the
+  same pairing (`art.py`, `renderer.py`, `native/renderer.h`), but that pairing
+  is a convention: nothing has compared a render of a flagged tile against the
+  game. Only "bits 13–14 flip the cell" is measured. The pairing is Q33.
+- **`TTAB` palette nibble [V]**: flag bits 8–11 select a palette (0–15). Retail
+  data uses only 0–3: `1` on 124,118 cells, `0` on 21,116, `2` on 2,913, `3` on
+  2,097 — consistent with the "palette 1 non-empty in 101/104 `HEAD`s"
+  observation, and it narrows Q8: the palette *does* live in the tile word
+  after all, in the flag word, not the index word.
+- **`CELL` [V]**: whole 64-byte 8x8 palettised cells; 14,974 across the 9
   files, every payload a multiple of 64.
-- **Collision byte [retracted, measured 2026-11-18]**: the third byte of a
-  `MAP` cell was documented `[D]` as a bit-field (`0x80` solid, `0xC0` one-way
-  floor, `0x08`/`0x10`/`0x20` directional blocking). That is **retracted**: the
-  byte measured across all 104 retail planes is near-uniform over all 256
-  values — `0x00` dominates (81–95 % by world) and every value `0x01`–`0xFF`
-  occurs, with `0x01` a clear second in the playable worlds (VILLAGE 5.7 %,
-  HAUNTED 2.9 %, WEST 1.7 %, MEDIEVAL 2.2 %) **[V]** (reproducible with
-  `python -m lomax_modern slice --world <W>` or `art.planes` + a byte
-  histogram). A flag byte clusters at a handful of values; this does not. The
-  byte's per-value semantics (material / one-way / hazard) are **unresolved**
-  ([`research/05-open-questions.md`](research/05-open-questions.md) Q31). The
-  engine core therefore ships only the 0-vs-non-zero rule (`0` passable,
-  non-zero solid) as a labelled hypothesis `[H]`, preserves the byte verbatim,
-  and never interprets its bits.
-- **`TTAB` [V structure, H meaning]**: 8 bytes per 16x16 tile — four big-endian
-  `u16` cell indices, each a 13-bit index plus flags in `0x2000`/`0x4000`
-  (`0x8000` never set). All 104 payloads are divisible by 8 and by 16, giving
-  **75,122 records = 300,488 words**; decoding under the 13-bit mask leaves
-  1,644 of the 300,488 indices outside the file's `CELL` count (0.55 %, all in
-  `BONUS.WLD`, index 256 against 251 cells), against 18,147 under the 14-bit
-  mask and 19,930 unmasked **[V]**
-  ([`research/07-wp3-asset-pipeline.md`](research/07-wp3-asset-pipeline.md)
-  G1–G3). Still **[D]**: 16x16 tiles assembled from four 8x8 cells, tile 0 and
-  cell 0 empty. The order of the four cells inside an entry, the flag semantics
-  and the map-cell link are **not** known. Flag counts come from two independent
-  runs that used different counting units — `0x2000` on 15,787–16,503 and
-  `0x4000` on 1,783–2,499 of the 300,488 words (G2 of the same report; WP-5,
-  card `t_50f8aa85`, §7) — so they are quoted as a range, not a number.
+- **`BONUS.WLD` "index 256" [V, Q22]**: not a cell reference. The 1,644 words
+  that decode to "index 256" under the 13-bit mask are the `BONUS` *flag* words
+  `0x0100` (palette 1) — `0x0100 & 0x1FFF == 256`. The index words themselves
+  are all in-bank. There is therefore **no out-of-bank cell index to reject or
+  preserve**: a writer round-trips every word verbatim.
+- **Collision byte [retracted layout, 2026-11-18]**: the third-byte bit-field
+  `[D]` was retracted as "near-uniform", but that histogram was itself read off
+  the interleaved bytes. On the true collision run (the `N` bytes after the `N`
+  words) the byte is `0x00` on **509,860 of 523,229 cells (97.4 %)** with 27
+  distinct values, the non-zero ones clustering in `0x80`–`0xF9`. Per-value
+  semantics stay unresolved (Q31); the engine's 0-vs-non-zero rule is unchanged.
 
 ### 2.5 `GNMY` placements, and the `NMY` type table **[V]**
 
@@ -293,8 +312,14 @@ virtual address + file offset:
 |---|---|---|
 | World loader (opens a `.WLD`, dispatches chunks) | `0x4147E0` | `0x13BE0` |
 | `ANIM` reader | `0x414A82` | `0x13E82` |
-| `NMY` reader | `0x415199` | `0x14599` |
+| `CELL` reader (stores the payload pointer at `0x498F68`) | `0x414BFC` | `0x13FFC` |
 | `GNMY` reader | `0x414D16` | `0x14116` |
+| `HEAD` reader (plane width/height `>> 1`, palettes) | `0x414E18` | `0x14218` |
+| `MAP` reader | `0x4150B5` | `0x144B5` |
+| `TTAB` reader (stores `size >> 4` = tile count) | `0x415107` | `0x14507` |
+| `MAP`/`TTAB` preprocessor (byte-swaps the big-endian words in place) | `0x415430` | `0x14430` |
+| tile-cache builder (consumes the `0x2000`/`0x4000` flips) | `0x4154B0` | `0x148B0` |
+| `NMY` reader | `0x415199` | `0x14599` |
 | `File_Read` (reads N bytes into a buffer) | `0x416A70` | `0x15E70` |
 | byte-swap (`bswap`, big-endian→little-endian) | `0x416620` | `0x15A20` |
 
@@ -308,6 +333,26 @@ reader. `ANIM` receives the payload and a per-world "MAIN" bank flag (`0x100` fo
 `MAIN.WLD`, else 0); `NMY` receives the payload and the same bank flag; `GNMY`
 receives the payload, the bank flag and a plane mask. The `WRLD` chunk is the one
 place the loader checks a magic (`"PS-X"` + `1234`).
+
+**Tile-pipeline dispatch.** The same loader dispatches `HEAD` → `0x414E18`,
+`CELL` → `0x414BFC`, `MAP` → `0x4150B5`, `TTAB` → `0x415107` (tags compared as
+the big-endian `u32`s `0x48454144`, `0x43454C4C`, `0x4D415020`, `0x54544142`).
+`PAGE`/`PARA`/`MACR` are read and discarded, and in `MAIN.WLD` (the "MAIN" bank
+flag) `CELL`/`TTAB`/`MAP` are skipped entirely. The `MAP` reader calls the
+preprocessor `0x415430`, which byte-swaps the `2·N` tile-word bytes in place —
+leaving the `N` collision bytes at `map + 2·N` untouched — and then the `size/2`
+`TTAB` words; it also records `plane+0x1C = map + 2·N`. The `TTAB` reader stores
+the payload at `plane+0x20` and `size >> 4` (the tile count) at `plane+0x2C`.
+After `CELL` is loaded, `0x4154B0` builds the per-plane tile cache: for each of
+the four cells of a 16-byte record it reads the index word, computes
+`CELL_base + index·64` (the `CELL` buffer pointer lives at `0x498F68`), and reads
+the flag word — masking bits 13–14 (`and bx, 0x6000`) to dispatch into one of
+four copy loops at `0x41566B` (no flip), `0x415686`, `0x4156A8` and `0x4156C6`
+(flag word has both bits set — 180°), and bits 8–11 (`and bp, 0xF00; shr bp, 8`)
+for the palette index. That these are four distinct transforms is `[V]`; calling
+`0x415686` horizontal and `0x4156A8` vertical is the decoder's convention
+(`[H]`, Q33), not a pairing measured against the game's own output. The map word
+itself is consumed elsewhere as a direct tile index (Q20).
 
 ## 3. `SFX/*.WAV` **[V]**
 

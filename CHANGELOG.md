@@ -8,6 +8,10 @@ Versioning: [Semantic Versioning](https://semver.org/).
 
 ### Added
 
+- `lomax-modern probe-tiles` — a read-only probe that validates the recovered
+  `MAP`/`TTAB`/`CELL` tile-pipeline layouts against an install and reports the
+  counts (map words, tiles, flips, palettes, collision bytes) plus the scores of
+  the superseded interleaved/8-byte readings, so a wrong assumption stays visible.
 - `gnmy` command: decodes the recovered `GNMY` entry layout (`u16 size/type/x/y/
   flags` + `K` params + optional extra) and reports the placement correlation —
   3,593 entries, `size == structural length` on 3,593/3,593, `x`/`y` as pixel
@@ -70,12 +74,58 @@ Versioning: [Semantic Versioning](https://semver.org/).
   resolves one level of nesting, `doctor` matches retail names exactly,
   `measure` globs worlds recursively but probes folders at the root, `slice`
   expects `WORLDS/VILLAGE.WLD` literally.
+- `docs/file-formats.md` §2.4/§2.8: the `MAP` payload is `N` big-endian `u16`
+  tile words then `N` collision bytes (not 3 bytes interleaved per cell); a
+  `TTAB` record is 16 bytes = four `[16-bit index word, flag word]` cells (not
+  four 13-bit indices). The map word is a direct `TTAB` record index; the flag
+  word carries the flip pair (bits 13-14) and the palette (bits 8-11).
+- `docs/research/05-open-questions.md`: Q20, Q21, Q22 and Q27 answered; Q8, Q9
+  and Q31 narrowed by the same correction.
+- The `TTAB` flip claim is split into its two grades everywhere it appears
+  (`docs/file-formats.md` §2.4/§2.8, `docs/research/05-open-questions.md`,
+  `art.py`, `renderer.py`, `probe_tiles.py`, `native/renderer.h`): *bits 13-14
+  are the flip pair* is `[V]` (exactly three combinations across 150,244 retail
+  cells, every other high bit zero), while *which bit is horizontal* is the
+  decoder's convention `[H]` — nothing has compared a render against the game.
+  Q21 now answers only the bit roles; the pairing is the new open question
+  **Q33**, and `probe-tiles` prints the axis names as a convention. Docstrings
+  and comments only: no decode behaviour changed and no test was touched.
+- Re-graded the caveats the CLI prints instead of calling `Q23`/`Q24`
+  unresolved: `art export` now reports `sprite frames: not exported`
+  (sprite-frame export is not implemented) and notes that the `ANIM` record
+  layout is verified 566/566 (`docs/file-formats.md` §2.6); the `slice`/`present`
+  spawn and collect lines and the `new_game_state` docstring now state that the
+  `GNMY` entry layout is verified — `size`/`type`/`x`/`y` all [V], with `size`
+  the entry length and `x`/`y` pixel coordinates (§2.5) — and only the
+  spawn/exit/collectable *semantics* are unverified (`Q32` in
+  `docs/research/05-open-questions.md`). The placeholder spawn itself is
+  unchanged. `wldscan` and `measure` docstrings no longer describe the `ANIM`
+  layout as unknown or unmeasured — those modules simply do not decode it.
 
 ### Fixed
 
+- `measure --json` and `probe-anim-nmy --json` now refuse a report destination
+  inside the game folder, with the same wording and exit code as every other
+  writer (`error: refusing to write inside the game folder (<dir>); choose an
+  output directory outside it`, exit 2, nothing created). They were the last two
+  paths that would drop a derived file into the install; `--json` outside the
+  install, and the JSON-on-stdout `--quiet` form, are unchanged.
 - `anim-nmy` refuses a `*.WLD` that is not a world container the way `slice`
   and `present` already did: one `error: cannot read …` line and exit 1,
   instead of a `WLDParseError` traceback.
+- `export` and the M4 renderer now decode the corrected `MAP`/`TTAB` layouts
+  (port of the map→tile pipeline findings, `docs/file-formats.md` §2.4): a
+  `MAP` is `N` big-endian `u16` tile words — each a **direct `TTAB` record
+  index** — then `N` collision bytes, and a `TTAB` record is 16 bytes of four
+  `[index word, flag word]` cells, the flag word carrying an H/V flip (bits
+  13-14) and a palette (bits 8-11). The exporter reports the resolved map→tile
+  link (no longer "unresolved (Q20)") and the corrected counts (16-byte
+  framing, 0 out-of-bank), and `renderer.blit_tile` honours the flips. The
+  `native/renderer.c` port stays bit-for-bit with the Python oracle.
+- `probe-tiles --json` follows that same rule: a report destination inside the
+  game folder is refused with the shared message and exit 2, nothing created.
+  The command landed alongside the guard for the other two readers, so it was
+  the one remaining `--json` path that could drop a file into the install.
 
 ## [0.4.0-alpha.1] — 2026-11-18
 

@@ -8,7 +8,8 @@ Synthetic fixtures only: every byte is generated here or by
 * the cell blit paints the palette word for every non-transparent index and
   leaves the destination untouched for index 0 — so the key colour never leaks;
 * the tile blit places four cells in stored order (``strip``) or the documented
-  2x2 order, and skips out-of-bank indices instead of inventing pixels;
+  2x2 order, honours each cell's H/V flip flag, and skips out-of-bank indices
+  instead of inventing pixels;
 * the fade-surface rule rounds any width up to a multiple of 32;
 * the ``MAP`` field blit draws raw bytes as greyscale, never art.
 
@@ -203,7 +204,8 @@ def _solid_cells(*words) -> tuple[art.Cell, ...]:
 
 
 def _tile_record(*indices) -> art.TileRecord:
-    payload = ttab_payload([indices])
+    words = tuple(word for index in indices for word in (index, 0))
+    payload = ttab_payload([words])
     records = art.decode_tiles(chunk("TTAB", payload))
     return records[0]
 
@@ -246,6 +248,19 @@ def test_blit_tile_rejects_unknown_layout() -> None:
         Framebuffer(8, 8).blit_tile(
             _tile_record(0, 1, 2, 3), (), PALETTE, 0, 0, layout="diagonal"
         )
+
+
+def test_blit_tile_honours_flip_flags() -> None:
+    # A single corner pixel: an H flip mirrors it to the mirrored column.
+    corner = art.Cell(index=0, pixels=bytes([1] + [0] * 63))
+    record = art.decode_tiles(
+        chunk("TTAB", ttab_payload([(0, art.FLIP_H, 0, 0, 0, 0, 0, 0)]))
+    )[0]
+    fb = Framebuffer(32, 8, fill=0x0000)
+    fb.blit_tile(record, (corner,), PALETTE, 0, 0, layout="strip")
+    # Slot 0 is H-flipped: the red corner pixel lands at column 7, not 0.
+    assert fb.pixel(0, 0) == 0x0000
+    assert fb.pixel(7, 0) == 0xF800
 
 
 # ---------------------------------------------------------------------------

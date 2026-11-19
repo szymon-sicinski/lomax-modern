@@ -78,9 +78,11 @@ class SliceReport:
                 f"{value:#04x}:{count}" for value, count in self.collision_histogram.items()
             ),
             f"spawn: ({self.spawn[0]:.1f}, {self.spawn[1]:.1f}) px "
-            "(placeholder -- real spawn lives in GNMY, Q23)",
+            "(placeholder -- the real spawn is a GNMY entry; entry layout "
+            "verified, spawn/exit/collectable semantics unverified, Q32)",
             f"collect: {self.collected}/{self.collected_total} "
-            "(placement is placeholder -- GNMY semantics unresolved, Q23)",
+            "(placeholder -- the real positions are GNMY entries; entry layout "
+            "verified, spawn/exit/collectable semantics unverified, Q32)",
             f"result: {'reached exit' if self.complete else 'did not reach exit'} "
             f"after {self.ticks} ticks",
             f"frames: {self.frames} (fixed 60 Hz: one frame per tick)",
@@ -88,7 +90,8 @@ class SliceReport:
             f"next level: {self.next_level or 'none (end of sequence or exit not reached)'}",
             f"exit: {'clean' if self.clean_exit else 'ERROR'}",
             "tile art: decoded (CELL/TTAB) but not placed on the map -- "
-            "map cell -> tile record unresolved (Q20)",
+            "map cell -> tile record resolved (Q20); the engine draws the "
+            "collision layer",
         ]
         return "\n".join(lines)
 

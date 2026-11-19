@@ -42,5 +42,5 @@ def test_slice_first_world_reports_ticks_and_clean_exit() -> None:
     # The collision byte is preserved and its semantics flagged, not guessed.
     assert report.collision_histogram  # non-empty: 0x00 and at least one solid
     assert "retracted" in report.format()
-    assert "unresolved (Q20)" in report.format()
+    assert "resolved (Q20)" in report.format()
     assert "Q31" in report.format()
