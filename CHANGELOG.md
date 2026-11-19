@@ -30,6 +30,15 @@ Versioning: [Semantic Versioning](https://semver.org/).
   tracked-stale paragraph in `docs/file-formats.md` §2.5 is gone. Measured on
   the retail install: VILLAGE carries `Start` 3 / `Exit` 1 / `Moneybag` 0
   across its 15 planes, so its opening playfield shows no collectable marker.
+- `docs/roadmap/45-playable-level-plan.md` — the plan + budget for the next
+  milestone, **one level fully playable** (C-playable): the scope table, a
+  seven-card decomposition (NMY-name role classifier → Level semantics → input
+  → `play` loop → sprite → physics → HUD, one reviewer pass each, one lead
+  synthesis), and the cost — **15 cards ≈ $2.48 off-peak** of *new* work (high ≈$3.50;
+  ≈$3.47–$3.97 end to end with the already-shipped C-animated). It replaces the
+  §6.2 M5 re-forecast rather than adding to it, and prices the loop
+  `43-demo-plan.md` §6.2 had to leave open, now that Q32 is answered (the
+  `GNMY` identity is the `NMY` name, not the flags).
 - `lomax_modern.sdl_window` — the SDL2 window backend, first half of demo
   option C's presentation half: `open_window` opens a window at the configured
   surface, uploads a 320×240 `B5G6R5` buffer to an `SDL_PIXELFORMAT_RGB565`

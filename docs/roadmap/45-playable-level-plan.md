@@ -176,13 +176,20 @@ matching log line, so the true per-card average is at least $0.165).
 | item | cards | money (off-peak) |
 |---|---:|---:|
 | C-animated (already shipped) | 6–9 | ≈$0.99–$1.49 ([`43-demo-plan.md`](43-demo-plan.md) §6.1) |
-| **one level fully playable** | **15** | **≈$2.48** (high ≈$3.50) |
-| **delta over C-animated** | **+6–9** | **≈+$0.99–$1.49** |
+| **this milestone — new work** | **15** | **≈$2.48** (high ≈$3.50) |
+| **C-playable end to end (cumulative)** | **21–24** | **≈$3.47–$3.97** |
 
-This is consistent with `43-demo-plan.md` §6.2, which priced C-playable at
-"≈$2.32–$2.98 for everything *except* the playable loop itself". The loop was
-the unpriced part because Q32 was open; now that it is answered, the loop is
-the ~$1.00–$1.16 in this plan, and the whole lands at ≈$2.48.
+None of the 15 cards is a C-animated card, so the new spend is the **whole
+$2.48**, not a delta over the shipped milestone. Adding the shipped C-animated
+band gives **21–24 cards ≈$3.47–$3.97** for one playable level end to end.
+
+This **supersedes** [`43-demo-plan.md`](43-demo-plan.md) §6.2 rather than adding
+to it. §6.2's "≈$2.32–$2.98 for everything *except* the playable loop" composes
+as C-animated ($0.99–1.49) + the M5 re-forecast ($1.16) + the Q32 experiment
+($0.17–0.33). This plan replaces that M5 re-forecast with an explicit 15-card
+graph and retires the Q32 experiment line entirely, because Q32 is answered
+([`05-open-questions.md`](../research/05-open-questions.md)). The loop is
+therefore inside the $2.48, not on top of it.
 
 ## 5. Risks and the cheapest experiment for each
 
