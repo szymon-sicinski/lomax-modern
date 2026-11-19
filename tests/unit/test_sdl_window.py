@@ -17,17 +17,21 @@ import time
 import pytest
 
 from lomax_modern import sdl_window
+from lomax_modern.input import SDLK_LEFT, SDLK_RIGHT, SDLK_SPACE
 from lomax_modern.sdl_window import (
     SDL_KEYDOWN,
+    SDL_KEYUP,
     SDL_PIXELFORMAT_RGB565,
     SDL_QUIT,
     SDLK_ESCAPE,
     Layout,
     Window,
     _decode_event,
+    _decode_key_event,
     _frame_bytes,
     _sleep_to,
     _synthetic_frames,
+    fold_key_events,
     load_sdl2,
     open_window,
     plan_layout,
@@ -133,6 +137,89 @@ def test_decode_event_keydown_other_key() -> None:
     event_type, key = _decode_event(_event(SDL_KEYDOWN, ord("a")))
     assert event_type == SDL_KEYDOWN
     assert key != SDLK_ESCAPE
+
+
+def _key_event(event_type: int, key_sym: int = 0, repeat: int = 0) -> bytes:
+    raw = bytearray(sdl_window._SDL_EVENT_SIZE)
+    struct.pack_into("<I", raw, 0, event_type)
+    struct.pack_into("<i", raw, sdl_window._KEY_SYM_OFFSET, key_sym)
+    raw[sdl_window._KEY_REPEAT_OFFSET] = repeat
+    return bytes(raw)
+
+
+def test_decode_key_event_keydown_no_repeat() -> None:
+    assert _decode_key_event(_key_event(SDL_KEYDOWN, SDLK_RIGHT)) == (
+        SDL_KEYDOWN,
+        SDLK_RIGHT,
+        0,
+    )
+
+
+def test_decode_key_event_keydown_repeat() -> None:
+    assert _decode_key_event(_key_event(SDL_KEYDOWN, SDLK_RIGHT, 1)) == (
+        SDL_KEYDOWN,
+        SDLK_RIGHT,
+        1,
+    )
+
+
+def test_decode_key_event_keyup() -> None:
+    assert _decode_key_event(_key_event(SDL_KEYUP, SDLK_RIGHT)) == (
+        SDL_KEYUP,
+        SDLK_RIGHT,
+        0,
+    )
+
+
+# ---------------------------------------------------------------------------
+# Keyboard state folding (held + press edge), pure
+# ---------------------------------------------------------------------------
+
+
+def test_fold_key_events_empty() -> None:
+    assert fold_key_events([]) == (frozenset(), frozenset())
+
+
+def test_fold_key_events_keydown_held_and_pressed() -> None:
+    held, pressed = fold_key_events([(SDL_KEYDOWN, SDLK_RIGHT, 0)])
+    assert held == frozenset({SDLK_RIGHT})
+    assert pressed == frozenset({SDLK_RIGHT})
+
+
+def test_fold_key_events_repeat_is_held_not_pressed() -> None:
+    # A held key that repeats re-adds to `held` but never re-edges `pressed`.
+    held, pressed = fold_key_events([(SDL_KEYDOWN, SDLK_RIGHT, 1)], held={SDLK_RIGHT})
+    assert held == frozenset({SDLK_RIGHT})
+    assert pressed == frozenset()
+
+
+def test_fold_key_events_keyup_removes() -> None:
+    held, pressed = fold_key_events(
+        [(SDL_KEYUP, SDLK_RIGHT, 0)], held={SDLK_RIGHT, SDLK_LEFT}
+    )
+    assert held == frozenset({SDLK_LEFT})
+    assert pressed == frozenset()
+
+
+def test_fold_key_events_press_repeat_release() -> None:
+    held, pressed = fold_key_events(
+        [
+            (SDL_KEYDOWN, SDLK_RIGHT, 0),
+            (SDL_KEYDOWN, SDLK_RIGHT, 1),
+            (SDL_KEYUP, SDLK_RIGHT, 0),
+        ]
+    )
+    assert held == frozenset()
+    assert pressed == frozenset({SDLK_RIGHT})
+
+
+def test_fold_key_events_press_and_release_same_tick() -> None:
+    # A tap (down then up within one poll) ends held but still carries the edge.
+    held, pressed = fold_key_events(
+        [(SDL_KEYDOWN, SDLK_SPACE, 0), (SDL_KEYUP, SDLK_SPACE, 0)]
+    )
+    assert held == frozenset()
+    assert pressed == frozenset({SDLK_SPACE})
 
 
 # ---------------------------------------------------------------------------
