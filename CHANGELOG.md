@@ -60,6 +60,13 @@ Versioning: [Semantic Versioning](https://semver.org/).
 
 ### Changed
 
+- `docs/roadmap/43-demo-plan.md` §6 no longer calls option C "unbudgeted": the
+  three research cards are folded into a real estimate. C now splits into a
+  costed **animated** slice (window + tile-art port + population density,
+  ≈$0.99–$1.49, 6–9 cards) and a **playable** slice that stays a milestone
+  gated on `Q32` (which `GNMY` entry is the spawn/collectable/exit), with the
+  experiment priced at ≈$0.17–$0.33 rather than a total invented. §2 and §7
+  updated to match.
 - README rewritten as an alpha install/launch/configure guide: what works and what
   does not, three install paths, the config file and its five keys, a command
   reference with exit codes, and a troubleshooting table keyed on the strings the
