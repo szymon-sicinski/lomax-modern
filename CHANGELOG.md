@@ -8,6 +8,16 @@ Versioning: [Semantic Versioning](https://semver.org/).
 
 ### Added
 
+- `lomax_modern.input` — the pure keyboard → `Input` mapping, the keyboard
+  half of M5 (P3 of `docs/roadmap/45-playable-level-plan.md` §1.1):
+  `Keymap.update(held, pressed)` folds two keycode sets into one `Input`,
+  with `left`/`right` level-triggered and mutually exclusive (both held ⇒
+  neutral) and `jump` edge-triggered (a held jump key never re-jumps on
+  landing, per `Input.jump`'s contract in `engine/entities.py`). Ships a
+  default arrow-keys-and-WASD layout (Space / Up / W jump) plus the SDL
+  keysym constants it binds. It imports no SDL and reads no events, so it is
+  unit-tested with no display and no pad attached; the `play` loop that
+  consumes it lands in P4.
 - GNMY markers now consume the `NMY` name Q32 resolved. `decode_nmy` returns
   each record's `name` and `load_level` attaches it to every placement
   (`GnmyEntry.name`); `engine.overlay_gnmy` styles `Start` (white 7×7),
