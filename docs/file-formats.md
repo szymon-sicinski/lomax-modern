@@ -109,8 +109,8 @@ palette 0 `[D]` (unverified — Q8).
 
 Recovered by static analysis of the readers in `LOMAX.EXE` (§2.8) and validated
 against all 9 retail world files with `lomax-modern probe-tiles` (2026-11-18).
-This subsection closes Q20/Q21/Q22; every count below is reproduced by that
-command.
+This subsection closes Q20/Q21/Q22 and opens Q33 (the flip *pairing*, which no
+measurement settles); every count below is reproduced by that command.
 
 - **`MAP` [V]**: `N` big-endian `u16` tile words, then `N` collision bytes,
   padded with 0–3 zero bytes to a multiple of 4. `N` is the plane's 16x16-cell
@@ -134,14 +134,20 @@ command.
   - *Index word*: a full 16-bit `CELL` index. 0/150,244 are out of bank;
     4,909 distinct (max 4,908). The blit resolves `CELL_base + index·64` with
     no mask (§2.8).
-  - *Flag word*: flip in bits 13–14, palette in bits 8–11, bits 0–7/12/15 never
-    set (0/150,244).
-- **`TTAB` flags [V, Q21]**: `0x2000` = flip **horizontal**, `0x4000` = flip
-  **vertical**, `0x6000` = **both** (180°). The tile-cache builder dispatches on
-  `flags & 0x6000` into four distinct copy loops (§2.8). Counts: `0x2000` on
-  15,787 cells, `0x4000` on 1,783, `0x6000` on 716, none on 131,958. (The
-  earlier "range" of 15,787–16,503 / 1,783–2,499 came from two runs counting
-  different units; the per-*flag-word* counts above are authoritative — Q27.)
+  - *Flag word*: bits 13–14 are the flip pair, bits 8–11 the palette index;
+    bits 0–7/12/15 are never set (0/150,244).
+- **`TTAB` flip bits [V, Q21]**: bits 13–14 of the flag word are the flip pair.
+  Exactly three combinations occur across the 150,244 retail cells — `0x2000` on
+  15,787, `0x4000` on 1,783, `0x6000` on 716, none on 131,958 — and every other
+  high bit is zero. The tile-cache builder dispatches on `flags & 0x6000` into
+  four distinct copy loops (§2.8). (The earlier "range" of 15,787–16,503 /
+  1,783–2,499 came from two runs counting different units; the per-*flag-word*
+  counts above are authoritative — Q27.)
+  **Which of the two bits is horizontal is `[H]`, not `[V]`.** This decoder reads
+  `0x2000` as horizontal and `0x4000` as vertical, and every consumer states the
+  same pairing (`art.py`, `renderer.py`, `native/renderer.h`), but that pairing
+  is a convention: nothing has compared a render of a flagged tile against the
+  game. Only "bits 13–14 flip the cell" is measured. The pairing is Q33.
 - **`TTAB` palette nibble [V]**: flag bits 8–11 select a palette (0–15). Retail
   data uses only 0–3: `1` on 124,118 cells, `0` on 21,116, `2` on 2,913, `3` on
   2,097 — consistent with the "palette 1 non-empty in 101/104 `HEAD`s"
@@ -341,10 +347,12 @@ After `CELL` is loaded, `0x4154B0` builds the per-plane tile cache: for each of
 the four cells of a 16-byte record it reads the index word, computes
 `CELL_base + index·64` (the `CELL` buffer pointer lives at `0x498F68`), and reads
 the flag word — masking bits 13–14 (`and bx, 0x6000`) to dispatch into one of
-four copy loops at `0x41566B` (no flip), `0x415686` (horizontal), `0x4156A8`
-(vertical) and `0x4156C6` (both), and bits 8–11 (`and bp, 0xF00; shr bp, 8`) for
-the palette index. The map word itself is consumed elsewhere as a direct tile
-index (Q20).
+four copy loops at `0x41566B` (no flip), `0x415686`, `0x4156A8` and `0x4156C6`
+(flag word has both bits set — 180°), and bits 8–11 (`and bp, 0xF00; shr bp, 8`)
+for the palette index. That these are four distinct transforms is `[V]`; calling
+`0x415686` horizontal and `0x4156A8` vertical is the decoder's convention
+(`[H]`, Q33), not a pairing measured against the game's own output. The map word
+itself is consumed elsewhere as a direct tile index (Q20).
 
 ## 3. `SFX/*.WAV` **[V]**
 

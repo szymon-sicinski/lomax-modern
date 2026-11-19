@@ -31,7 +31,8 @@ Confidence, per claim (see ``docs/file-formats.md``):
 * *Which* of those two bits is horizontal and which is vertical.  The decoder
   reads ``0x2000`` as horizontal and ``0x4000`` as vertical, but that pairing has
   not been confirmed against a render of the game — only "these bits flip the
-  cell" is ``[V]``.
+  cell" is ``[V]``.  The pairing is Q33, the same open question the docs and the
+  C port carry.
 * The order of the four cells inside a ``TTAB`` record (G1, open).  The default
   tile sheet therefore draws each record as its four cells **in stored order**
   and labels the 2x2 assembly an explicit option.

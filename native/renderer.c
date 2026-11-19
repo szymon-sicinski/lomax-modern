@@ -49,6 +49,8 @@ void blit_cell(framebuffer_t *fb, const uint8_t *cell,
     int x, y;
     for (y = 0; y < 8; y++) {
         for (x = 0; x < 8; x++) {
+            /* FLIP_H mirrors columns and FLIP_V rows: the decoder's axis
+             * pairing ([H], Q33), identical to renderer.py's reference. */
             int sx = (flip & FLIP_H) ? (7 - x) : x;
             int sy = (flip & FLIP_V) ? (7 - y) : y;
             uint8_t index = cell[sy * 8 + sx];

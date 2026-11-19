@@ -25,9 +25,11 @@ typedef struct {
     uint16_t *pixels; /* width * height words, caller-allocated */
 } framebuffer_t;
 
-/* Flip bits of a TTAB *flag* word (bits 13-14): mirror a cell about its axis. */
-#define FLIP_H 0x2000u /* horizontal flip */
-#define FLIP_V 0x4000u /* vertical flip */
+/* Flip bits of a TTAB *flag* word (bits 13-14): mirror a cell about its axis.
+ * The bit pair is measured ([V], Q21); which bit is the horizontal one is this
+ * decoder's convention ([H], Q33) - nothing has compared a render to the game. */
+#define FLIP_H 0x2000u /* horizontal flip (convention, [H]) */
+#define FLIP_V 0x4000u /* vertical flip (convention, [H]) */
 
 /* Widen a 15-bit little-endian colour (blue 0-4, green 5-9, red 10-14) to
  * B5G6R5.  Green widens 5->6 by bit replication, the round-trip-preserving

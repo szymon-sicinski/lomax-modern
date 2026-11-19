@@ -23,11 +23,11 @@ Confidence, per claim (see ``docs/file-formats.md``):
 
 * A ``CELL`` record is 8x8 palette indices (whole 64-byte records).
 * A ``TTAB`` record is 16 bytes = four ``[index word, flag word]`` cells; the
-  index word is a full 16-bit ``CELL`` index and the flag word carries a flip
-  in bits 13-14 (``0x2000`` H, ``0x4000`` V, ``0x6000`` both) and a palette in
-  bits 8-11.  A ``MAP`` cell is one big-endian ``u16`` tile word (a direct
-  ``TTAB`` record index) plus one collision byte — ``N`` words then ``N``
-  collision bytes, padded to a multiple of 4.
+  index word is a full 16-bit ``CELL`` index and the flag word carries the flip
+  pair in bits 13-14 and a palette in bits 8-11.  A ``MAP`` cell is one
+  big-endian ``u16`` tile word (a direct ``TTAB`` record index) plus one
+  collision byte — ``N`` words then ``N`` collision bytes, padded to a multiple
+  of 4.
 * The ``HEAD`` palette block is 10 x 256 little-endian 15-bit words.
 
 **Design choice, stated so a test can pin it (H)**
@@ -47,9 +47,11 @@ Confidence, per claim (see ``docs/file-formats.md``):
   (``"strip"``) by default; the documented 16x16 2x2 assembly is an explicit
   ``"2x2"`` option and is labelled ``[H]`` (the seam test failed, see
   ``art``).
-* *Flip.*  The flag bits 13-14 mirror the cell about its own axis: ``0x2000``
-  horizontal, ``0x4000`` vertical, ``0x6000`` both.  A flipped cell occupies
-  the same 8x8 destination box as its unflipped form.
+* *Flip pairing.*  Bits 13-14 are the flip pair ``[V]`` (three combinations
+  occur, Q21); that ``0x2000`` is the *horizontal* one and ``0x4000`` the
+  vertical is this decoder's convention ``[H]`` — no render has been compared
+  against the game (Q33).  A flipped cell occupies the same 8x8 destination box
+  as its unflipped form.
 
 **Kept explicit so a test can pin it**
 
