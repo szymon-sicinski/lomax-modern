@@ -773,8 +773,8 @@ def export_world(
     lines.append(
         f"tile sheet layout: {tile_layout}"
         + (
-            " (stored order, four cells per record -- the order inside a record is "
-            "column-major, verified, G1)")
+            " (stored order, four cells per record; the order inside a record is "
+            "column-major [V], G1)"
             if tile_layout == "strip"
             else " (2x2 assembly is column-major, verified against a retail render; G1)"
         )
