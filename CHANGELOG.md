@@ -40,6 +40,15 @@ Versioning: [Semantic Versioning](https://semver.org/).
   `exit: Exit (x, y) px` instead of the old placeholders, and `present` /
   `window` inherit the same wiring through `run_slice`. VILLAGE's opening
   playfield carries `Start (99, 189)` and `Exit (4747, 246)` and no `Moneybag`.
+- `docs/roadmap/45-playable-level-plan.md` — the plan + budget for the next
+  milestone, **one level fully playable** (C-playable): the scope table, a
+  seven-card decomposition (NMY-name role classifier → Level semantics → input
+  → `play` loop → sprite → physics → HUD, one reviewer pass each, one lead
+  synthesis), and the cost — **15 cards ≈ $2.48 off-peak** of *new* work (high ≈$3.50;
+  ≈$3.47–$3.97 end to end with the already-shipped C-animated). It replaces the
+  §6.2 M5 re-forecast rather than adding to it, and prices the loop
+  `43-demo-plan.md` §6.2 had to leave open, now that Q32 is answered (the
+  `GNMY` identity is the `NMY` name, not the flags).
 - `lomax_modern.sdl_window` — the SDL2 window backend, first half of demo
   option C's presentation half: `open_window` opens a window at the configured
   surface, uploads a 320×240 `B5G6R5` buffer to an `SDL_PIXELFORMAT_RGB565`
@@ -147,6 +156,13 @@ Versioning: [Semantic Versioning](https://semver.org/).
 
 ### Changed
 
+- Player physics tuned to the rates measured from `LOMAX.EXE` (P6):
+  `WALK_SPEED` 2.0, `GRAVITY` 0.35 → **0.375**, `JUMP_SPEED` −5.5 → **−4.0**,
+  `MAX_FALL` 8.0 → **6.0** px/tick, each with its virtual-address citation in
+  the `entities.py` comment and a unit test pinning value and source. The
+  measured 16.16-fixed-point immediates and the two mechanics the engine's
+  simple model does not yet reproduce (post-jump gravity lockout, hold-to-rise
+  counter) are recorded in `docs/file-formats.md` §2.9.
 - `docs/roadmap/43-demo-plan.md` §6 no longer calls option C "unbudgeted": the
   three research cards are folded into a real estimate. C now splits into a
   costed **animated** slice (window + tile-art port + population density,
