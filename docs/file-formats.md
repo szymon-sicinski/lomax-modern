@@ -307,6 +307,18 @@ a back-pointer to the placement at `+0x4`, x/y at `+0x3C`/`+0x40`,
 animation list, `+0x4` name, `+0x14` `W_A >> 8`, `+0x16` type index, `+0x18`
 `K`, `+0x1A` `W_A & 0xF`, `+0x1C` the `0x100` MAIN bank bit.
 
+**What this section does *not* change yet: the marker overlay.** The demo's
+`engine.render_tiles` overlay (`#49`) draws one type-coloured marker per
+placement and reads only `x`/`y`/`type_index`; it does not consume the name →
+semantics mapping above, and its console line still says the semantics are
+unresolved. That is deliberate, not an oversight: the mapping lives in this
+section, the overlay stays a *density* visual, and wiring names into it (so
+`Start`/`Exit`/`Moneybag` render as distinct glyphs) is a follow-up card. Until
+that card lands, the code's "Q32 unresolved" wording at
+`engine/run.py`, `engine/state.py`, `engine/render.py`, `engine/level.py`,
+`docs/architecture.md` and `docs/demo.md` is stale relative to this section —
+tracked, not forgotten.
+
 ### 2.6 `ANIM` / sprites **[V]**
 
 Recovered from the reader at VA `0x414A82` / file offset `0x13E82`, validated on
