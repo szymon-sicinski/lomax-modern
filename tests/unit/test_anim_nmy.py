@@ -4,7 +4,14 @@ from __future__ import annotations
 
 import struct
 
-from lomax_modern.anim_nmy import decode_anim, decode_gnmy, decode_nmy, probe_anim_nmy, probe_gnmy
+from lomax_modern.anim_nmy import (
+    decode_anim,
+    decode_gnmy,
+    decode_nmy,
+    placement_role,
+    probe_anim_nmy,
+    probe_gnmy,
+)
 from tests.fixtures.synth import (
     anim_payload,
     build_container,
@@ -74,6 +81,30 @@ def test_nmy_single_record_round_trips() -> None:
     assert [a.frame_count for a in records[0].anims] == [1, 1]
     assert all(a.size_field == 20 + 8 * 1 for a in records[0].anims)
     assert len(payload) - consumed == 2  # u16 terminator consumed, 2 pad bytes left
+
+
+def test_nmy_records_carry_their_names() -> None:
+    """Each ``NMY`` record exposes the NUL-terminated name on disk (Q32)."""
+    payload = nmy_payload([("Start", 0), ("Moneybag", 2), ("Zoom Colors", 0)], trailer=2)
+    records, _ = decode_nmy(payload)
+    assert records is not None
+    assert [r.name for r in records] == ["Start", "Moneybag", "Zoom Colors"]
+
+
+def test_placement_role_maps_only_the_evidenced_prefixes() -> None:
+    """Only Start/Exit/Moneybag (four-byte prefixes) are named; the rest is other.
+
+    Q32 maps the identity through the four-byte name-table prefix, so the
+    classifier matches ``name[:4]`` and never invents a role for the other
+    names (the remaining handlers are unmapped).
+    """
+    assert placement_role("Start") == "start"
+    assert placement_role("Start2") == "start"  # matched on the table prefix
+    assert placement_role("Exit") == "exit"
+    assert placement_role("Moneybag") == "moneybag"
+    assert placement_role("Star") == "start"  # the table's own spelling
+    for name in ("Finish", "Revive", "Spikes", "Parallax", "T0", "", None):
+        assert placement_role(name) == "other"
 
 
 def test_nmy_multiple_records() -> None:
