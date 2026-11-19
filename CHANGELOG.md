@@ -23,6 +23,19 @@ Versioning: [Semantic Versioning](https://semver.org/).
   `Window` class is the push-style seam the `window` command (card B) drives.
   21 unit tests over synthetic buffers, including the RGB565 format constant
   pinned against the real SDL2 mask tables.
+- `lomax-modern window "<install>"` — the second half of demo option C's
+  presentation: drives `engine.run.run_slice`'s `on_frame` sink into the
+  `sdl_window.Window` backend, letterboxing the 320×240 frame at the integer
+  fit from `scaler.fit_scale` (geometry only) and scaling the pixels with
+  SDL2-native nearest — `scaler.nearest`/`epx_aa` stay off the per-frame path.
+  Prints a one-line HUD (`fps`, plane name, tile count, camera x/y) to stdout
+  and the window title ~1×/s, and a final `mean fps` (≥ 55 on a real run).
+  `--seconds N` (default 60) runs N wall-clock seconds at the engine's 60 Hz;
+  `--world` (default `VILLAGE`) and `--modern`/`--authentic` (1920×1080 at 4× /
+  native 320×240 at 1×) select the playfield and surface. Read-only on the
+  install (no config, no PNG); a missing SDL2 prints one line and exits 1.
+  Headless (`SDL_VIDEODRIVER=dummy`) tests assert frame count, dimensions and
+  zero writes; CI now installs SDL2 so they run instead of skipping.
 - `lomax-modern probe-tiles` — a read-only probe that validates the recovered
   `MAP`/`TTAB`/`CELL` tile-pipeline layouts against an install and reports the
   counts (map words, tiles, flips, palettes, collision bytes) plus the scores of

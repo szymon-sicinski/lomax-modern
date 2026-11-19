@@ -6,6 +6,7 @@ import argparse
 import os
 import re
 import sys
+import time
 from pathlib import Path
 from typing import Callable
 
@@ -26,7 +27,8 @@ from .anim_nmy import format_gnmy_report
 from .anim_nmy import probe_anim_nmy as probe_recovered_framings
 from .anim_nmy import probe_gnmy
 from .doctor import find_world_files, format_report, inventory
-from .engine.run import run_slice
+from .engine.render import VIEWPORT_HEIGHT, VIEWPORT_WIDTH, camera
+from .engine.run import default_script, run_slice
 from .install import check_install, is_inside_tree, resolve_world
 from .measure import measure_install, summarise, to_json
 from .probe_anim_nmy import format_report as format_probe_report
@@ -42,6 +44,7 @@ from .presenter import (
     write_presentation_png,
 )
 from .scaler import Filter
+from .sdl_window import SDL2Error, SDL2MissingError, Window
 from .wld import WLDError, parse_file
 from .wldscan import format_report as format_wld_report
 from .wldscan import scan_file
@@ -600,9 +603,158 @@ def _cmd_present(args: argparse.Namespace) -> int:
         print(_sequence_summary(out_dir, report.ticks))
     else:
         print(
-            "frame: none written (pass --frame PATH for a PNG; this build has no "
-            "window -- the Win32 presenter remains future, docs/architecture.md §5)"
+            "frame: none written (pass --frame PATH for a PNG; or use "
+            "`lomax-modern window` for a live SDL2 window)"
         )
+    return 0
+
+
+#: The engine's fixed 60 Hz logic tick rate (``engine.entities.TICK_RATE``).
+_WINDOW_TICK_SECONDS = 1.0 / 60.0
+
+#: One HUD update per second of wall time (matches the ~1x/s acceptance).
+_WINDOW_HUD_INTERVAL = 1.0
+
+
+class _WindowQuit(Exception):
+    """Raised from the frame sink when the window is closed or Esc is pressed."""
+
+
+def _hud_line(fps: float, plane: str, tiles: int, cam_x: int, cam_y: int) -> str:
+    """The one HUD line: fps, plane name, tile count, camera x/y."""
+    return f"fps={fps:.1f} plane={plane} tiles={tiles} camera=({cam_x},{cam_y})"
+
+
+def _cmd_window(args: argparse.Namespace) -> int:
+    """Drive the engine's 60 Hz slice into a live SDL2 window with a HUD.
+
+    Read-only on the install: nothing is written — no config, no PNG.  The only
+    side effects are the window, the window title and stdout.  Scaling is the
+    integer fit from :func:`lomax_modern.scaler.fit_scale` used for the
+    *geometry* only; the pixels are scaled by SDL2 itself (nearest), never by
+    ``scaler.nearest``/``epx_aa``.
+    """
+    requested = Path(args.game_dir).expanduser()
+    manifest = check_install(requested)
+    if not manifest.ok:
+        print(manifest.format(), file=sys.stderr)
+        print(f"error: not an unpacked Lomax game directory: {requested}", file=sys.stderr)
+        print(
+            "hint: window expects the retail layout (WORLDS/ with *.WLD, SFX/, "
+            "AMBIENT/, JINGLES/, DEMOS/, LOMAX.EXE). It never reads a disc image.",
+            file=sys.stderr,
+        )
+        return 2
+    print(manifest.format())
+
+    try:
+        world_path = resolve_world(manifest, args.world)
+    except LookupError as exc:
+        print(f"error: {exc}", file=sys.stderr)
+        return 2
+
+    # The modern/authentic toggle is a profile: surface (1920x1080 / 320x240)
+    # and, at 1x, the nearest filter has nothing to do — the window always uses
+    # SDL2-native nearest regardless.
+    modern = True if args.modern is None else args.modern
+    settings = PresentSettings().with_profile(modern)
+    source_size = (VIEWPORT_WIDTH, VIEWPORT_HEIGHT)
+    surface_size = settings.surface
+
+    # A mutable cell so the recording script (called with the pre-tick state)
+    # can share the live state object with the sink (called after ``state.tick``
+    # has moved it), without copying the whole game state every frame.
+    state_cell: list = [None]
+    frame_count = 0
+    started: float | None = None
+    last_hud: float | None = None
+
+    def recording_script(tick: int, state) -> object:
+        """``default_script`` plus a live reference to the state for the HUD.
+
+        ``run_slice`` calls the script with the pre-tick state and then mutates
+        that same object in ``state.tick``, so by the time the sink reads
+        ``state_cell[0]`` it holds the post-tick position (the one the frame
+        shows).  Storing the reference — not a copy — is what makes the camera
+        HUD exact rather than one tick stale.
+        """
+        state_cell[0] = state
+        return default_script(tick, state)
+
+    def on_frame(tick_index: int, frame) -> None:
+        nonlocal frame_count, started, last_hud
+        now = time.monotonic()
+        if started is None:
+            started = now
+            last_hud = now
+        window.present(frame)
+        if window.poll_quit():
+            raise _WindowQuit()
+        frame_count += 1
+        if last_hud is not None and now - last_hud >= _WINDOW_HUD_INTERVAL:
+            state = state_cell[0]
+            if state is not None:
+                cam_x, cam_y = camera(
+                    state.level, state.player, frame.width, frame.height
+                )
+                tiles = (
+                    state.level.plane.width_cells
+                    * state.level.plane.height_cells
+                )
+                fps = frame_count / (now - started)
+                line = _hud_line(fps, state.level.name, tiles, cam_x, cam_y)
+                print(line)
+                window.set_title(line)
+            last_hud = now
+        # Pace to the engine's fixed 60 Hz so ``--seconds N`` is N real seconds.
+        deadline = started + frame_count * _WINDOW_TICK_SECONDS
+        remaining = deadline - time.monotonic()
+        if remaining > 0:
+            time.sleep(remaining)
+
+    try:
+        window = Window(source_size, surface_size)
+    except SDL2MissingError as exc:
+        print(str(exc))
+        return 1
+    except SDL2Error as exc:
+        print(f"error: cannot open the window: {exc}", file=sys.stderr)
+        return 1
+
+    try:
+        _report, _frame = run_slice(
+            manifest.root,
+            worlds=(world_path.stem,),
+            world_path=world_path,
+            max_ticks=args.seconds * 60,
+            playfield=args.playfield,
+            script=recording_script,
+            on_frame=on_frame,
+        )
+    except _WindowQuit:
+        pass
+    except WLDError as exc:
+        print(f"error: cannot read {world_path.name}: {exc}", file=sys.stderr)
+        return 1
+    except (OSError, ValueError) as exc:
+        print(f"error: {exc}", file=sys.stderr)
+        return 1
+    finally:
+        window.close()
+
+    if started is not None:
+        elapsed = time.monotonic() - started
+        mean_fps = frame_count / elapsed if elapsed > 0 else 0.0
+    else:
+        elapsed = 0.0
+        mean_fps = 0.0
+    window_layout = window.layout
+    print(
+        f"window: {frame_count} frames in {elapsed:.2f}s (mean fps {mean_fps:.1f}); "
+        f"source {source_size[0]}x{source_size[1]} -> {surface_size[0]}x{surface_size[1]} "
+        f"at {window_layout.scale}x (content {window_layout.width}x{window_layout.height} "
+        f"at +{window_layout.x}+{window_layout.y})"
+    )
     return 0
 
 
@@ -953,6 +1105,49 @@ def build_parser() -> argparse.ArgumentParser:
         "created if absent, refused inside the game folder)",
     )
     p_pres.set_defaults(func=_cmd_present)
+
+    p_win = sub.add_parser(
+        "window",
+        help="run the engine slice in a live SDL2 window (letterboxed, HUD; read-only)",
+    )
+    p_win.add_argument(
+        "game_dir", help="unpacked game folder in the retail layout (no ISO)"
+    )
+    p_win.add_argument(
+        "--world",
+        metavar="NAME",
+        default="VILLAGE",
+        help="world stem to play (default: VILLAGE)",
+    )
+    p_win.add_argument(
+        "--seconds",
+        type=_positive_int,
+        default=60,
+        metavar="N",
+        help="wall-clock seconds to run (default: 60 = 3600 ticks at 60 Hz)",
+    )
+    p_win.add_argument(
+        "--playfield",
+        type=_non_negative_int,
+        default=0,
+        help="plane index used as the playable grid (default: 0)",
+    )
+    win_profile = p_win.add_mutually_exclusive_group()
+    win_profile.add_argument(
+        "--modern",
+        dest="modern",
+        action="store_const",
+        const=True,
+        help="modern profile: 1920x1080 surface, integer 4x scale (default)",
+    )
+    win_profile.add_argument(
+        "--authentic",
+        dest="modern",
+        action="store_const",
+        const=False,
+        help="authentic profile: native 320x240 at 1x",
+    )
+    p_win.set_defaults(func=_cmd_window)
     p_anm = sub.add_parser(
         "anim-nmy",
         help="decode the recovered ANIM/NMY framings and report counts (read-only)",

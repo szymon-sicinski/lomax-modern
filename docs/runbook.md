@@ -142,8 +142,7 @@ source: 320x240 (engine frame)
 surface: 1920x1080
 scale: 4x (auto: largest integer fit)
 content: 1280x960 at +320+60; pads left 320, right 320, top 60, bottom 60
-frame: none written (pass --frame PATH for a PNG; this build has no window -- the
-       Win32 presenter remains future, docs/architecture.md §5)
+frame: none written (pass --frame PATH for a PNG; or use `lomax-modern window` for a live SDL2 window)
 ```
 
 How to read it:
@@ -159,11 +158,13 @@ How to read it:
 | `frame` | the PNG written by `--frame`, if any |
 | `frames` | the `frame_NNNN.png` sequence written by `--frames N --out DIR`, and its size |
 
-**No window yet.** `present` computes the padded surface (and can write it as a
-PNG with `--frame`, or one PNG per tick with `--frames N --out DIR`); the Win32
-window is the native presenter that is still
-future (`docs/architecture.md` §5). It is a presentation pipeline, not a game
-you can play with the keyboard — see §5.
+**A window now ships.** `present` computes the padded surface (and can write it
+as a PNG with `--frame`, or one PNG per tick with `--frames N --out DIR`);
+`lomax-modern window "<install>"` opens a live SDL2 window that letterboxes the
+engine frame and prints a HUD (`--seconds N`, `--world NAME`,
+`--modern`/`--authentic`). The native Win32/C presenter (packaging) is still
+future (`docs/architecture.md` §5). `present` is a presentation pipeline, not
+a game you can play with the keyboard — see §5.
 
 ## 5. Controls
 
