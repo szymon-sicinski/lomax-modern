@@ -25,6 +25,15 @@ jobs:
         with:
           python-version: ${{ matrix.python-version }}
 
+      - name: Install SDL2 (headless window backend)
+        # `libsdl2-dev` ships the `libSDL2.so` linker symlink that
+        # `ctypes.util.find_library("SDL2")` resolves; the runtime package
+        # (`libsdl2-2.0-0`) alone provides only `libSDL2-2.0.so.0`, which
+        # find_library does not match, leaving the window tests skipped.
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libsdl2-dev
+
       - name: Install
         run: |
           python -m pip install --upgrade pip

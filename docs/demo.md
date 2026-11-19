@@ -165,13 +165,17 @@ final position: (180.0, 178.0) px
 next level: none (end of sequence or exit not reached)
 exit: clean
 tile art: composed -- map cell -> tile record resolved (Q20), each record blitted as four CELLs in 2x2 column-major order (V, G1) with the HEAD palette (slot 1) and index-0 transparency; flip pairing [H] (Q33); the geometric collision grid stays on render() as a debug path
+GNMY markers: 32 placements drawn as type-coloured markers (position + type index only; spawn/exit/collectable meaning unresolved, Q32)
 frames: 120 PNGs in demo-out/frames (frame_0000.png .. frame_0119.png)
 ```
 
 **What you are looking at:** the headless engine running a fixed 60 Hz tick —
 no display, no window, no `LOMAX.EXE` — and writing one `frame_0000.png` …
 `frame_0119.png` per tick, so the movement is on disk instead of in one final
-still.
+still. Each frame is the composed tile art with the playfield's 32 `GNMY`
+placements overlaid as small type-coloured markers — position and type index
+only, since what a placement *means* (spawn/collectable/exit) is still
+unresolved (`Q32`).
 
 ## 5. `gif` — the frame sequence as one looping animation
 

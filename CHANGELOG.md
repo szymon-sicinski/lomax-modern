@@ -8,6 +8,34 @@ Versioning: [Semantic Versioning](https://semver.org/).
 
 ### Added
 
+- `lomax_modern.sdl_window` — the SDL2 window backend, first half of demo
+  option C's presentation half: `open_window` opens a window at the configured
+  surface, uploads a 320×240 `B5G6R5` buffer to an `SDL_PIXELFORMAT_RGB565`
+  streaming texture and blits it to the integer-fit letterboxed rect with
+  SDL2-native nearest scaling — the per-frame path never calls
+  `scaler.nearest`/`scaler.epx_aa` (40 ms / 142 ms per 4× frame vs the 1.18 ms
+  SDL2 blit; `44-presenter-options.md` §2). Paces at 60 Hz by sleeping to the
+  16.67 ms tick, quits on window-close and Esc, and runs headless under
+  `SDL_VIDEODRIVER=dummy`. SDL2 is a *system* library via
+  `ctypes.util.find_library("SDL2")` (`dependencies = []` unchanged); when it is
+  absent `open_window` prints one line
+  (`install libsdl2 (e.g. apt install libsdl2-2.0-0)`) and exits 1. The
+  `Window` class is the push-style seam the `window` command (card B) drives.
+  21 unit tests over synthetic buffers, including the RGB565 format constant
+  pinned against the real SDL2 mask tables.
+- `lomax-modern window "<install>"` — the second half of demo option C's
+  presentation: drives `engine.run.run_slice`'s `on_frame` sink into the
+  `sdl_window.Window` backend, letterboxing the 320×240 frame at the integer
+  fit from `scaler.fit_scale` (geometry only) and scaling the pixels with
+  SDL2-native nearest — `scaler.nearest`/`epx_aa` stay off the per-frame path.
+  Prints a one-line HUD (`fps`, plane name, tile count, camera x/y) to stdout
+  and the window title ~1×/s, and a final `mean fps` (≥ 55 on a real run).
+  `--seconds N` (default 60) runs N wall-clock seconds at the engine's 60 Hz;
+  `--world` (default `VILLAGE`) and `--modern`/`--authentic` (1920×1080 at 4× /
+  native 320×240 at 1×) select the playfield and surface. Read-only on the
+  install (no config, no PNG); a missing SDL2 prints one line and exits 1.
+  Headless (`SDL_VIDEODRIVER=dummy`) tests assert frame count, dimensions and
+  zero writes; CI now installs SDL2 so they run instead of skipping.
 - `lomax-modern probe-tiles` — a read-only probe that validates the recovered
   `MAP`/`TTAB`/`CELL` tile-pipeline layouts against an install and reports the
   counts (map words, tiles, flips, palettes, collision bytes) plus the scores of
@@ -20,6 +48,14 @@ Versioning: [Semantic Versioning](https://semver.org/).
   `present`/`slice` frames) now emit tile art instead of the grey collision
   grid; `engine.render` stays as the geometric debug path. The 2x2 tile cell
   order (`[H]`, G1) and the flip-axis pairing (`[H]`, Q33) remain flagged.
+- `engine.overlay_gnmy` + `gnmy_type_colour` — the GNMY density markers: the
+  tile-art frame now overlays one small marker per `GNMY` placement at its
+  pixel `(x, y)`, colour-coded on `type_index` only (position + type index, no
+  semantics — what an entry *means* is Q32 unresolved, so nothing names a
+  spawn/collectable/exit). `load_level` decodes the playfield plane's `GNMY`
+  chunk into `Level.gnmy`; `slice` reports the marker count. 6 synthetic unit
+  tests + 1 opt-in real-install test (in-view marker count matches the
+  independently decoded placement count).
 - `gnmy` command: decodes the recovered `GNMY` entry layout (`u16 size/type/x/y/
   flags` + `K` params + optional extra) and reports the placement correlation —
   3,593 entries, `size == structural length` on 3,593/3,593, `x`/`y` as pixel
@@ -79,6 +115,13 @@ Versioning: [Semantic Versioning](https://semver.org/).
 
 ### Changed
 
+- `docs/roadmap/43-demo-plan.md` §6 no longer calls option C "unbudgeted": the
+  three research cards are folded into a real estimate. C now splits into a
+  costed **animated** slice (window + tile-art port + population density,
+  ≈$0.99–$1.49, 6–9 cards) and a **playable** slice that stays a milestone
+  gated on `Q32` (which `GNMY` entry is the spawn/collectable/exit), with the
+  experiment priced at ≈$0.17–$0.33 rather than a total invented. §2 and §7
+  updated to match.
 - README rewritten as an alpha install/launch/configure guide: what works and what
   does not, three install paths, the config file and its five keys, a command
   reference with exit codes, and a troubleshooting table keyed on the strings the

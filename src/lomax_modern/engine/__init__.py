@@ -13,7 +13,16 @@ verbatim and flagged, never guessed.
 
 from .entities import Collectible, Exit, Input, Player
 from .level import CELL_PX, CollisionModel, Level, load_level
-from .render import Frame, camera, frame_to_rgba, pack_rgb565, render, render_tiles
+from .render import (
+    Frame,
+    camera,
+    frame_to_rgba,
+    gnmy_type_colour,
+    overlay_gnmy,
+    pack_rgb565,
+    render,
+    render_tiles,
+)
 from .state import GameState, Snapshot, new_game_state, step_player
 from .run import SliceReport, run_slice
 
@@ -31,8 +40,10 @@ __all__ = [
     "Snapshot",
     "camera",
     "frame_to_rgba",
+    "gnmy_type_colour",
     "load_level",
     "new_game_state",
+    "overlay_gnmy",
     "pack_rgb565",
     "render",
     "render_tiles",

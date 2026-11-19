@@ -17,6 +17,7 @@ from dataclasses import dataclass
 from pathlib import Path
 
 from .. import art, wld
+from ..anim_nmy import GnmyEntry, decode_gnmy, decode_nmy
 
 #: A ``MAP`` cell is a 16x16-pixel block (``docs/file-formats.md`` §2.4).
 CELL_PX = 16
@@ -79,6 +80,11 @@ class Level:
     palette: art.Palette
     playfield: int
     collision: CollisionModel
+    #: The playfield plane's ``GNMY`` placements, decoded from the ``GNMY``
+    #: chunk that follows that plane's ``MAP``.  Structure only: each entry is
+    #: a pixel position plus a ``type_index``; what an entry *means*
+    #: (spawn/collectable/exit) is Q32 unresolved and is never attached here.
+    gnmy: tuple[GnmyEntry, ...] = ()
 
     @property
     def plane(self) -> art.MapPlane:
@@ -108,6 +114,42 @@ class Level:
         return not self.solid_at(cell_x, cell_y)
 
 
+def _decode_gnmy_per_plane(world: wld.World) -> tuple[tuple[GnmyEntry, ...], ...]:
+    """Decode each plane's ``GNMY`` placements, one tuple per plane, in order.
+
+    A ``GNMY`` chunk belongs to the plane whose ``HEAD`` precedes it (retail
+    order ``HEAD, TTAB, MAP, GNMY`` repeats once per plane).  The entry layout
+    is recovered and graded ``[V]`` in ``docs/file-formats.md`` §2.5; the
+    *meaning* of an entry (spawn/collectable/exit) is Q32 and is never attached
+    here — the tuples carry pixel position and ``type_index`` only.
+
+    A missing ``NMY``/``GNMY`` (or one that does not parse under the recovered
+    framing) yields an empty tuple for that plane rather than raising: markers
+    are a diagnostic overlay, never a parse gate.
+    """
+    nmy_chunk = next((c for c in world.chunks if c.tag == "NMY"), None)
+    k_of: dict[int, int] = {}
+    if nmy_chunk is not None:
+        result = decode_nmy(nmy_chunk.payload)
+        if result is not None:
+            records, _ = result
+            k_of = {i: (record.flags >> 4) & 0xF for i, record in enumerate(records)}
+
+    per_plane: list[list[GnmyEntry]] = []
+    plane_index = -1
+    in_plane = False
+    for chunk in world.chunks:
+        if chunk.tag == "HEAD":
+            plane_index += 1
+            in_plane = True
+            per_plane.append([])
+        elif chunk.tag == "GNMY" and in_plane:
+            decoded = decode_gnmy(chunk.payload, k_of)
+            if decoded is not None:
+                per_plane[plane_index].extend(decoded[0])
+    return tuple(tuple(entries) for entries in per_plane)
+
+
 def load_level(
     path: str | Path,
     *,
@@ -118,7 +160,9 @@ def load_level(
 
     Decodes the ``CELL`` bank and the ``HEAD`` palette (default slot 1, the
     ``[H]`` choice documented in ``art``) so the level carries the art needed
-    to render, alongside the collision grid the simulation walks on.
+    to render, alongside the collision grid the simulation walks on.  It also
+    decodes the playfield plane's ``GNMY`` placements into ``Level.gnmy``
+    (position + ``type_index`` only; Q32 semantics are never attached).
     """
     source = Path(path)
     world = wld.parse_file(source)
@@ -135,6 +179,9 @@ def load_level(
             f"playfield plane {playfield} is out of range for {len(sections)} planes"
         )
 
+    gnmy_planes = _decode_gnmy_per_plane(world)
+    gnmy = gnmy_planes[playfield] if playfield < len(gnmy_planes) else ()
+
     return Level(
         name=source.stem,
         path=source,
@@ -143,4 +190,5 @@ def load_level(
         palette=palette,
         playfield=playfield,
         collision=collision or CollisionModel(),
+        gnmy=gnmy,
     )
