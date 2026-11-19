@@ -6,6 +6,7 @@ and collision claim below is asserted against a geometry the test controls.
 
 from __future__ import annotations
 
+import inspect
 import struct
 
 import pytest
@@ -26,6 +27,8 @@ from lomax_modern.engine import (
     run_slice,
     step_player,
 )
+from lomax_modern.engine import entities as entities_module
+from lomax_modern.engine.entities import GRAVITY, JUMP_SPEED, MAX_FALL, WALK_SPEED
 from lomax_modern.engine.level import OUT_OF_BOUNDS_COLLISION
 from lomax_modern.engine.render import (
     COLOUR_PLAYER,
@@ -199,6 +202,30 @@ def test_out_of_bounds_floor_holds_player(tmp_path) -> None:
     assert 0 <= player.y < level.height_px
     # Resting on the bottom boundary: bottom edge = 48 = 3*16.
     assert player.y == pytest.approx(48.0 - player.height)
+
+
+def test_physics_constants_match_measured_original_rates() -> None:
+    """The four rates are read from ``LOMAX.EXE``, not our own design.
+
+    Each immediate is a 16.16-fixed-point value read by the objdump pass
+    (``docs/file-formats.md`` §2.9); the floats here are the same rates in
+    pixels per 60 Hz tick.
+    """
+    assert WALK_SPEED == 2.0
+    assert GRAVITY == 0.375
+    assert JUMP_SPEED == -4.0
+    assert MAX_FALL == 6.0
+
+
+def test_physics_constants_document_their_source() -> None:
+    """Every constant names the virtual address it was measured at.
+
+    A value without a VA (or with the wrong VA) is a guess, and this test must
+    fail on it — which is what keeps a future edit honest.
+    """
+    src = inspect.getsource(entities_module)
+    for va in ("0x426E28", "0x410BB8", "0x41083C", "0x410BC2"):
+        assert va in src, f"missing measured VA {va} in entities.py comments"
 
 
 # --------------------------------------------------------------------------

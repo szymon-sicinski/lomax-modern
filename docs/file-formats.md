@@ -426,6 +426,53 @@ player struct (`0x498F1C`) from that plane — so the player start is the `Start
 placement's *plane*, and `Start`/`Exit`/`Finish`/`Revive`/`Moneybag` are the
 spawn / exit / checkpoint / collectable types respectively (§2.5).
 
+### 2.9 Player movement constants (walk/jump/gravity/fall) **[V]**
+
+Recovered from the player-movement code in `LOMAX.EXE` (read-only `objdump`
+pass, 2026-11-19). The player's position and velocity are **16.16 fixed point**
+(integer part = pixels, fraction = 1/65536 px): position `X`/`Y` live at
+`0x59F244`/`0x59F248`, the integer pixels at `0x59F23C`/`0x59F240`, and
+velocity `vx`/`vy` at `0x59F24C`/`0x59F250` (each store then re-reads the high
+word back as the integer coordinate — the fixed-point signature). The tick is
+the 60 Hz `WINMM.timeSetEvent` loop
+([`07-wp1-patching-surface.md`](../research/07-wp1-patching-surface.md) §4),
+so "per tick" is "per 1/60 s". The four rates, which the engine carries as
+`engine/entities.py` constants:
+
+| Constant | Value (px/tick) | Fixed-point | VA (file offset) | Evidence |
+|---|---|---|---|---|
+| `WALK_SPEED` | **2.0** | `0x20000` | `0x426E28` (`0x26228`) | `mov ebp, 0x20000` — the terrain-0 max horizontal speed, stored to the max-speed global `0x49C4B4` (`0x426E78`) |
+| `GRAVITY` | **0.375** | `0x6000`/tick | `0x410BB8` (`0xFFB8`) | `add eax, 0x6000` added to `vy` every airborne tick |
+| `JUMP_SPEED` | **−4.0** | `0xFFFC0000` | `0x41083C` (`0xFC3C`) | `mov ds:0x59F250, 0xFFFC0000` (also `0x4108B7`, `0x410929`, `0x4109D1`, `0x412DAB`, `0x412EC2`) |
+| `MAX_FALL` | **6.0** | `0x60000` | `0x410BC2` (`0xFFC2`) | `cmp vy, 0x60000; jle` … `mov vy, 0x60000` terminal-velocity clamp |
+
+Measured nuances the engine's simple `impulse + constant gravity` model does
+not yet reproduce, recorded here so they are not silently dropped:
+
+- **The normal jump impulse is −4.0 everywhere.** Stomping an enemy or a spring
+  uses a higher impulse (**−5.0** at `0x412F14`, **−6.0** at `0x41022A`), and a
+  small hop uses **−2.0** (`0x41067B`); the engine's single `JUMP_SPEED` is the
+  normal jump.
+- **Gravity is skipped for a few ticks after a jump.** `0x59E764` is set to 5
+  (jumping while moving) or 10 (a straight-up jump) at `0x4106EC`/`0x4106FF`,
+  decremented once a tick (`0x410D36`), and while it is non-zero the gravity
+  add is gated off (`0x410B19`–`0x410B21`) — so the impulse plays out before
+  gravity bites. The engine applies gravity unconditionally, so for the same
+  constants its jump arc is shorter than the original's.
+- **Holding the jump raises with reduced gravity** via a per-tick counter
+  `0x59E94C` (initialised to `0x9800`/`0xA800`/`0xB000`, decremented `0x800`
+  per tick at `0x4105D4`, the remainder subtracted from `vy`). A held
+  slide/down input instead uses a **0.125** fall (`0x2000` at `0x410B9A`)
+  clamped to **1.0**.
+- **Walk speed is terrain-dependent.** Terrain type 1 (the cell byte's
+  `0x30 >> 4 == 1`, dispatched at `0x413C93`) replaces 2.0 with a directional
+  **1.5** / **2.5** (`0x426DEC`–`0x426E26`); terrains 0 and 2 use 2.0.
+
+The jump gravity-lockout and the hold-to-rise counter are the two measured
+mechanics that would make the engine's jump feel exactly like the original's;
+adopting them is follow-up work, not an open question — the mechanism is
+measured, only the engine's adoption is missing.
+
 ## 3. `SFX/*.WAV` **[V]**
 
 All 82 audio files (`SFX` 67, `AMBIENT` 12, `JINGLES` 3) are RIFF/WAVE, PCM

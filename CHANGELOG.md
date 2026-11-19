@@ -146,6 +146,13 @@ Versioning: [Semantic Versioning](https://semver.org/).
 
 ### Changed
 
+- Player physics tuned to the rates measured from `LOMAX.EXE` (P6):
+  `WALK_SPEED` 2.0, `GRAVITY` 0.35 → **0.375**, `JUMP_SPEED` −5.5 → **−4.0**,
+  `MAX_FALL` 8.0 → **6.0** px/tick, each with its virtual-address citation in
+  the `entities.py` comment and a unit test pinning value and source. The
+  measured 16.16-fixed-point immediates and the two mechanics the engine's
+  simple model does not yet reproduce (post-jump gravity lockout, hold-to-rise
+  counter) are recorded in `docs/file-formats.md` §2.9.
 - `docs/roadmap/43-demo-plan.md` §6 no longer calls option C "unbudgeted": the
   three research cards are folded into a real estimate. C now splits into a
   costed **animated** slice (window + tile-art port + population density,
