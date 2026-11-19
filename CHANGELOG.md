@@ -26,6 +26,17 @@ Versioning: [Semantic Versioning](https://semver.org/).
   coordinates (3,584/3,593 on-map) — recovered from the reader at VA `0x414D16`
   (file offset `0x14116`) in `LOMAX.EXE` and validated on all 104 retail chunks
   (`docs/file-formats.md` §2.5). Read-only; accepts `$LOMAX_GAME_DIR`.
+- Q32 resolved (`docs/file-formats.md` §2.5/§2.8, `docs/research/05-open-questions.md`):
+  the `GNMY` flags' 2-bit subfield and bit-15 extra word are **not** a
+  spawn/collectable/exit enum. Tracing their consumer in `LOMAX.EXE` shows the
+  identity is the `NMY` record's **name**, resolved through an 89-entry name
+  table (VA `0x464650`) to a per-type handler (VA `0x4647B8`, dispatched by the
+  spawn pass at `0x4126A0`): `Start` is the player spawn (found by the level-load
+  scan at `0x40ED7C`), the level/plane exit is `Exit` (`0x427670`; `Finish`/
+  `Revive` are the end-of-plane and checkpoint types), `Moneybag` the collectable
+  (`0x428190`). The 2-bit field seeds a
+  per-instance 2-bit state (entity `+0x62`); the extra word is an intra-plane
+  object reference (rewritten to the Nth list node's pointer by `0x4165F0`).
 - `docs/roadmap/44-presenter-options.md` scopes the window presenter for demo
   option C: the minimum window, a ranked option table (default **ctypes + SDL2**,
   ≈$0.50 for 3 cards / ≈$0.66 for 4 with `epx-aa` parity), and the blit spike
