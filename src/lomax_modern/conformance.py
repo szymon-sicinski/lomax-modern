@@ -438,7 +438,10 @@ def _slot_offset(slot: int, layout: str) -> tuple[int, int]:
     if layout == "strip":
         return slot * CELL_PIXELS, 0
     if layout == "2x2":
-        return (slot % 2) * CELL_PIXELS, (slot // 2) * CELL_PIXELS
+        # Column-major (verified against a retail render): slots 0/1 are the
+        # left column, 2/3 the right.  The reference must agree with the
+        # renderer, which is the point of this harness.
+        return (slot // 2) * CELL_PIXELS, (slot % 2) * CELL_PIXELS
     raise ValueError(f"unknown tile layout {layout!r}; expected 'strip' or '2x2'")
 
 

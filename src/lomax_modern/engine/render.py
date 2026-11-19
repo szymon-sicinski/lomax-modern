@@ -1,11 +1,19 @@
-"""16-bit ``B5G6R5`` framebuffer and the collision-layer frame.
+"""16-bit ``B5G6R5`` framebuffer and the engine's two render paths.
 
-This is the engine's *geometric* frame — it proves the loop produces pixels at
-the original resolution from decoded ``CELL``/``TTAB``/``MAP`` data — not the
-full art renderer.  The tile art blit, palette transparency, scaling and
-filters are owned by the M4 renderer card; here every non-zero collision cell
-is drawn in one colour and the player/entities as markers, with the unresolved
-bits (Q31) flagged in the report rather than painted.
+:func:`render_tiles` composes the visible tile art: it walks the visible
+``MAP`` cells, resolves each ``tile_word`` to a ``TTAB`` record, blits the
+record's four ``CELL`` blocks (flips applied) with the ``HEAD`` palette and
+index-0 transparency into the 320x240 viewport, and overlays the player marker
+so the camera-follow and scrolling are visible.  :func:`render` remains the
+*geometric* debug path: every non-zero collision cell is drawn in one colour
+and the player/entities as markers, with the unresolved bits (Q31) flagged in
+the report rather than painted.
+
+Two placements stay hypotheses and are rendered exactly as
+:mod:`lomax_modern.renderer` blits them, so a wrong assumption shows up in the
+output instead of hiding: the four cells of a ``TTAB`` record are assembled in
+the verified 2x2 column-major order (``[V]``, G1) and the flip-axis pairing (``0x2000``
+horizontal / ``0x4000`` vertical) is this decoder's convention (``[H]``, Q33).
 
 ``Frame`` is a genuine 16-bit buffer: pixels are packed ``B5G6R5`` and
 ``to_bytes()`` emits little-endian ``u16`` words suitable for a 16-bit surface.
@@ -16,6 +24,8 @@ from __future__ import annotations
 import struct
 from dataclasses import dataclass
 
+from ..art import DEFAULT_PALETTE_SLOT
+from ..renderer import Framebuffer, head_palette565
 from .entities import Player
 from .level import CELL_PX, Level
 from .state import GameState
@@ -151,4 +161,59 @@ def render(
     sx = int(state.player.x) - cam_x
     sy = int(state.player.y) - cam_y
     frame.fill_rect(sx, sy, state.player.width, state.player.height, COLOUR_PLAYER)
+    return frame
+
+
+def render_tiles(
+    level: Level,
+    state: GameState,
+    *,
+    viewport: tuple[int, int] = (VIEWPORT_WIDTH, VIEWPORT_HEIGHT),
+) -> Frame:
+    """Compose the visible tile art: MAP -> TTAB -> CELL -> HEAD palette.
+
+    Walks the ``MAP`` cells visible under the camera and, for each, resolves
+    its ``tile_word`` to the playfield's ``TTAB`` record and blits the record's
+    four ``CELL`` blocks in the verified 2x2 column-major order with the ``HEAD`` palette
+    (slot 1) and index-0 transparency.  A ``tile_word`` outside the plane's
+    ``TTAB`` bank leaves the backdrop untouched — it is never repaired.
+
+    The backdrop (transparent regions) is :data:`COLOUR_SKY`, a placeholder:
+    the real parallax/sky layer is a separate plane this card does not draw.
+    The player marker is overlaid last so camera-follow and scrolling are
+    visible; no collectible/exit/GNMY markers are drawn here (that is a
+    separate density card).
+    """
+    vw, vh = viewport
+    cam_x, cam_y = camera(level, state.player, vw, vh)
+    section = level.sections[level.playfield]
+    plane = section.plane
+    tiles = section.tiles
+    cells = level.cells
+    palette = head_palette565(section.head, DEFAULT_PALETTE_SLOT)
+
+    fb = Framebuffer(vw, vh, fill=COLOUR_SKY)
+    cx0 = max(0, cam_x // CELL_PX)
+    cy0 = max(0, cam_y // CELL_PX)
+    cx1 = min(plane.width_cells - 1, (cam_x + vw - 1) // CELL_PX)
+    cy1 = min(plane.height_cells - 1, (cam_y + vh - 1) // CELL_PX)
+    for cell_y in range(cy0, cy1 + 1):
+        for cell_x in range(cx0, cx1 + 1):
+            tile_word = plane.at(cell_x, cell_y).tile_word
+            if 0 <= tile_word < len(tiles):
+                fb.blit_tile(
+                    tiles[tile_word],
+                    cells,
+                    palette,
+                    cell_x * CELL_PX - cam_x,
+                    cell_y * CELL_PX - cam_y,
+                    layout="2x2",
+                )
+
+    sx = int(state.player.x) - cam_x
+    sy = int(state.player.y) - cam_y
+    fb.fill_rect(sx, sy, state.player.width, state.player.height, COLOUR_PLAYER)
+
+    frame = Frame(vw, vh)
+    frame.pixels = fb.pixels
     return frame

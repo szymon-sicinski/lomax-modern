@@ -33,9 +33,13 @@ Confidence, per claim (see ``docs/file-formats.md``):
   not been confirmed against a render of the game — only "these bits flip the
   cell" is ``[V]``.  The pairing is Q33, the same open question the docs and the
   C port carry.
-* The order of the four cells inside a ``TTAB`` record (G1, open).  The default
+* The order of the four cells inside a ``TTAB`` record.  This was G1 and is now
+  settled: column-major, verified against a retail render (row-major produces
+  visible vertical striping; column-major is continuous).  The default
   tile sheet therefore draws each record as its four cells **in stored order**
-  and labels the 2x2 assembly an explicit option.
+  and labels the 2x2 assembly an explicit option.  The 2x2 order is
+  **column-major** (``[V]``: a retail render with row-major shows vertical
+  striping; column-major is continuous), so G1 is answered.
 
 **Verified, but not exported by this module**
 
@@ -519,8 +523,9 @@ def tile_sheet(
 ) -> Image:
     """Draw ``TTAB`` records; ``strip`` keeps the four cells in stored order.
 
-    ``layout="2x2"`` arranges them as the documented 16x16 tile, which uses an
-    order the data does not prove (G1) and is therefore never the default.
+    ``layout="2x2"`` arranges them as a 16x16 tile in the verified column-major
+    order (G1); it is still not the default, because the sheet is easier to read
+    with the four cells side by side.
     Each cell honours its flag word's flip (``FLIP_H``/``FLIP_V``); a cell
     index outside the world's ``CELL`` bank is left empty.
     """
@@ -545,8 +550,8 @@ def tile_sheet(
             if layout == "strip":
                 dx, dy = slot * CELL_PIXELS * scale, 0
             else:
-                dx = (slot % 2) * CELL_PIXELS * scale
-                dy = (slot // 2) * CELL_PIXELS * scale
+                dx = (slot // 2) * CELL_PIXELS * scale
+                dy = (slot % 2) * CELL_PIXELS * scale
             canvas.paste_indexed(
                 flipped_rows(cells[cell_slot.index], cell_slot.flip),
                 palette,
@@ -768,10 +773,10 @@ def export_world(
     lines.append(
         f"tile sheet layout: {tile_layout}"
         + (
-            " (stored order, four cells per record -- the order inside a record is "
-            "unresolved, G1)"
+            " (stored order, four cells per record; the order inside a record is "
+            "column-major [V], G1)"
             if tile_layout == "strip"
-            else " (2x2 assembly is a hypothesis: the order inside a record is unresolved, G1)"
+            else " (2x2 assembly is column-major, verified against a retail render; G1)"
         )
     )
 

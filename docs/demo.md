@@ -141,11 +141,12 @@ output path.
 </table>
 
 Both images are this CLI's own output, produced by the two commands above from
-the author's unpacked copy — they are not screenshots of the original game. At
-this stage the engine draws the playfield as solid blocks and the player as a
-yellow box, because map cell → tile record is unresolved (`Q20`): the tiles are
-decoded, just not placed. So what you are comparing is the presenter, not the
-art.
+the author's unpacked copy — they are not screenshots of the original game.
+These two frames are the *geometric* debug render (collision grid + player
+marker), captured before the tile-art path shipped; `present --frame` and
+`slice --frames` now compose the real tile art (map cell → `TTAB` record →
+`CELL`, `HEAD` palette, index-0 transparency — see §4). So what these two
+images compare is the presenter, not the art.
 
 ## 4. `slice --frames 120` — two seconds of the engine, one PNG per tick
 
@@ -156,14 +157,14 @@ playfield: 305x24 cells (4880x384 px)
 collision: byte 0 = passable, non-zero = solid [H]; per-value semantics (material/one-way/hazard) unresolved (Q31); the documented [D] bit-field is retracted
 collision-byte histogram (value: count): 0x00:5364, 0x01:774, 0x02:2, ... 0xff:1
                                           (256 entries elided here; the script prints them all)
-spawn: (0.0, 0.0) px (placeholder -- real spawn lives in GNMY, Q23)
-collect: 0/0 (placement is placeholder -- GNMY semantics unresolved, Q23)
+spawn: (0.0, 0.0) px (placeholder -- the real spawn is a GNMY entry; entry layout verified, spawn/exit/collectable semantics unverified, Q32)
+collect: 0/0 (placeholder -- the real positions are GNMY entries; entry layout verified, spawn/exit/collectable semantics unverified, Q32)
 result: did not reach exit after 120 ticks
 frames: 120 (fixed 60 Hz: one frame per tick)
 final position: (180.0, 178.0) px
 next level: none (end of sequence or exit not reached)
 exit: clean
-tile art: decoded (CELL/TTAB) but not placed on the map -- map cell -> tile record unresolved (Q20)
+tile art: composed -- map cell -> tile record resolved (Q20), each record blitted as four CELLs in 2x2 column-major order (V, G1) with the HEAD palette (slot 1) and index-0 transparency; flip pairing [H] (Q33); the geometric collision grid stays on render() as a debug path
 frames: 120 PNGs in demo-out/frames (frame_0000.png .. frame_0119.png)
 ```
 
@@ -234,18 +235,20 @@ plane 00: 305x24 cells = 7320, 1024 TTAB records, MAP pad 0 B -> village_tiles_p
 plane 01: 304x28 cells = 8512, 1042 TTAB records, MAP pad 0 B -> village_tiles_plane01.png, village_map_plane01_collision.png
 ...                       (one line per plane, 00 to 14; the script prints them all)
 plane 14: 24x16 cells = 384, 2 TTAB records, MAP pad 0 B -> village_tiles_plane14.png, village_map_plane14_collision.png
-tile sheet layout: strip (stored order, four cells per record -- the order inside a record is unresolved, G1)
-MAP: 60509 cells (3 B each: 16-bit tile word + collision byte), 1186 distinct tile words; map sheet shows the raw collision byte as greyscale, no art
-distinct TTAB cell indices referenced: 1374 of 1374 records
-map cell -> tile record: unresolved (Q20)
-sprite frames: unresolved (Q24 -- ANIM record layout unknown; no sheet written)
-note: no unique-tile count is reported, because MAP->TTAB is unresolved (Q20)
+tile sheet layout: strip (stored order, four cells per record; the order inside a record is column-major [V], G1)
+MAP: 60509 cells (2 B tile word + 1 B collision byte, split: N words then N bytes), 636 distinct tile words; map sheet shows the raw collision byte as greyscale, no art
+map cell -> tile record: resolved -- map word is a direct TTAB record index (Q20); 0 of 60509 map words fall outside their plane's TTAB range
+distinct TTAB records referenced via MAP: 636 of 5098
+sprite frames: not exported (sprite-frame export is not implemented; the ANIM record layout is verified -- docs/file-formats.md 2.6)
 ```
 
 **What you are looking at:** 31 PNGs written from one 851,192-byte world file —
 a cell sheet, a tile sheet and a collision map per plane — with every field that
-is still a hypothesis named as one (`Q8` palette slot, `Q20` map→tile, `Q21`
-flags, `Q24` sprites) instead of being guessed into the picture.
+is still not certain named as one (`Q8` palette slot; `Q21`'s flip *pairing*,
+which is `Q33`) instead of being guessed into the picture. `Q20` (map cell →
+tile record) and `Q24` (sprite frames) are **answered** — the exporter reports
+0 of 60,509 map words outside their plane's `TTAB` range, and says plainly that
+sprite export is unimplemented rather than that the layout is unknown.
 
 ## When the path is wrong
 

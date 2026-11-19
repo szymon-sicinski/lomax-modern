@@ -141,9 +141,10 @@ used. Three rules keep it honest:
   native Win32/C presenter (packaging) remains future work (§5; options and
   effort are scoped in
   [`docs/roadmap/44-presenter-options.md`](roadmap/44-presenter-options.md)). The rendered frame is the
-  engine's *geometric* frame — composing decoded tile art into a world view
-  still needs the unresolved `MAP` cell -> `TTAB` record link (Q20), which the
-  presenter does not invent to look finished.
+  engine's *tile-art* frame — each visible `MAP` cell resolves through `TTAB`
+  to its `CELL` blocks and blits with the `HEAD` palette and index-0
+  transparency, now that the `MAP` cell -> `TTAB` record link is measured
+  (Q20). The geometric collision grid remains as a debug path.
 
 The P5 gate is deliberately split into required and expected entries:
 `LOMAX.EXE` plus `WORLDS/` with at least one `*.WLD` is "the game"; missing
@@ -212,16 +213,20 @@ tick (input, gravity, axis-separated collision, collect, exit) to a 16-bit
   semantics are unresolved (Q31), so `CollisionModel` uses only the measured
   0-vs-non-zero rule, flags it `[H]` in its report, and preserves every byte
   verbatim — a future decode plugs in without losing data.
-- **The frame is geometric.** It draws the collision grid and entity markers at
-  native 320x240. The tile-art blit, palette transparency and the fade rule
-  are the M4 renderer card's job, and they now ship in `renderer.py` (oracle)
-  + `native/` (C99); scaling and filters stay in `scaler.py`. Composing the
-  art blit into the engine frame — and resolving the map→tile link (Q20) — is
-  the synthesis card's job, not invented here.
+- **Two render paths.** `engine.render_tiles` composes the tile art — each
+  visible `MAP` cell resolves through `TTAB` to its four `CELL` blocks and
+  blits them with the `HEAD` palette and index-0 transparency at native
+  320x240 — while `engine.render` keeps the geometric collision grid and
+  entity markers as a debug path. The tile blit, palette transparency and the
+  fade rule ship in `renderer.py` (oracle) + `native/` (C99); scaling and
+  filters stay in `scaler.py`. The tile cell order is the 2x2 **column-major**
+  assembly (`[V]`, G1 — verified against a retail render) and the flip-axis
+  pairing is this decoder's convention (`[H]`, Q33) — the first is measured,
+  the second is flagged, neither is invented.
 - **Entity placement is deferred.** Spawn, collectibles and exit are explicit
-  (placeholder) in the slice; the real placements live in `GNMY`, whose record
-  semantics are unresolved (Q23). The map→tile link (Q20) is likewise flagged,
-  not invented.
+  (placeholder) in the slice; the real placements live in `GNMY`, whose entry
+  layout is verified but whose spawn/exit/collectable *semantics* are
+  unresolved (Q32).
 
 ## 5. Future components and where they sit
 

@@ -40,6 +40,14 @@ Versioning: [Semantic Versioning](https://semver.org/).
   `MAP`/`TTAB`/`CELL` tile-pipeline layouts against an install and reports the
   counts (map words, tiles, flips, palettes, collision bytes) plus the scores of
   the superseded interleaved/8-byte readings, so a wrong assumption stays visible.
+- `engine.render_tiles` — the tile-art composition path: each visible `MAP`
+  cell resolves its `tile_word` to a `TTAB` record and blits the record's four
+  `CELL` blocks (flips applied) with the `HEAD` palette (slot 1) and index-0
+  transparency into the 320x240 viewport, with the player marker overlaid so
+  camera-follow and scrolling are visible. `run_slice`'s `on_frame` (and
+  `present`/`slice` frames) now emit tile art instead of the grey collision
+  grid; `engine.render` stays as the geometric debug path. The 2x2 tile cell
+  order (`[H]`, G1) and the flip-axis pairing (`[H]`, Q33) remain flagged.
 - `gnmy` command: decodes the recovered `GNMY` entry layout (`u16 size/type/x/y/
   flags` + `K` params + optional extra) and reports the placement correlation —
   3,593 entries, `size == structural length` on 3,593/3,593, `x`/`y` as pixel

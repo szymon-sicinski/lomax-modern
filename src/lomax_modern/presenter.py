@@ -21,10 +21,11 @@ Two properties are deliberate:
 
 The frame may be an :class:`lomax_modern.engine.Frame` (a ``pixels`` list) or a
 :class:`lomax_modern.renderer.Framebuffer` (which exposes ``to_image()``); both
-are ``RGB565``.  The current ``present`` command feeds the engine's geometric
-frame, because composing decoded tile art into a world view still needs the
-unresolved ``MAP`` cell -> ``TTAB`` record link (Q20); inventing that link to
-look more finished would violate the repository's own rule.
+are ``RGB565``.  The ``present`` command feeds the engine's *tile-art* frame
+(:func:`lomax_modern.engine.render_tiles`): each visible ``MAP`` cell resolves
+through ``TTAB`` to ``CELL`` and blits with the ``HEAD`` palette and index-0
+transparency, now that the ``MAP`` cell -> ``TTAB`` record link is measured
+(Q20).  The geometric collision-grid frame remains as a debug path.
 """
 
 from __future__ import annotations

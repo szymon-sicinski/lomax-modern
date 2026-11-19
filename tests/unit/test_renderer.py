@@ -226,9 +226,10 @@ def test_blit_tile_2x2_is_documented_layout() -> None:
     record = _tile_record(0, 1, 2, 3)
     fb = Framebuffer(16, 16, fill=0x0000)
     fb.blit_tile(record, (red, green, blue, white), PALETTE, 0, 0, layout="2x2")
+    # Column-major: slot 0 top-left, 1 bottom-left, 2 top-right, 3 bottom-right.
     assert fb.pixel(0, 0) == 0xF800
-    assert fb.pixel(8, 0) == 0x07E0
-    assert fb.pixel(0, 8) == 0x001F
+    assert fb.pixel(0, 8) == 0x07E0
+    assert fb.pixel(8, 0) == 0x001F
     assert fb.pixel(8, 8) == 0xFFFF
 
 

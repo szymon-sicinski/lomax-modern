@@ -74,8 +74,9 @@ void blit_tile(framebuffer_t *fb, const uint16_t *record,
             continue;
         }
         if (layout_2x2) {
-            dx = (slot % 2) * 8;
-            dy = (slot / 2) * 8;
+            /* column-major: slots 0/1 left column, 2/3 right */
+            dx = (slot / 2) * 8;
+            dy = (slot % 2) * 8;
         } else {
             dx = slot * 8;
             dy = 0;

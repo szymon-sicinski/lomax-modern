@@ -44,9 +44,9 @@ Confidence, per claim (see ``docs/file-formats.md``):
 * *Cell pixel order.*  Row-major 8x8, the same ``[H]`` reading the exporter
   uses.
 * *Tile cell order.*  A ``TTAB`` record's four cells are placed in stored order
-  (``"strip"``) by default; the documented 16x16 2x2 assembly is an explicit
-  ``"2x2"`` option and is labelled ``[H]`` (the seam test failed, see
-  ``art``).
+  (``"strip"``) by default; the 16x16 2x2 assembly is an explicit ``"2x2"``
+  option and is **column-major**, verified against a retail render (``[V]``,
+  G1 answered — see ``art``).
 * *Flip pairing.*  Bits 13-14 are the flip pair ``[V]`` (three combinations
   occur, Q21); that ``0x2000`` is the *horizontal* one and ``0x4000`` the
   vertical is this decoder's convention ``[H]`` — no render has been compared
@@ -60,9 +60,10 @@ Confidence, per claim (see ``docs/file-formats.md``):
   exporter's default slot) and does not switch slots per cell; multi-slot
   selection is out of the M4 blit contract.
 * *Map->tile art blit.*  A ``MAP`` word is a direct ``TTAB`` record index
-  (Q20), so the link is known — but :func:`blit_map_field` still draws the raw
-  ``MAP`` byte as greyscale rather than assembling tile art; the art blit is
-  left to a later milestone.
+  (Q20).  :meth:`blit_map_field` still draws the raw ``MAP`` byte as greyscale
+  — a field visualisation — while the map->tile *art* assembly is the engine's
+  job and now lives in :func:`lomax_modern.engine.render_tiles`, which calls
+  :meth:`blit_tile` once per visible map cell.
 
 The fade rule
 -------------
@@ -102,7 +103,7 @@ TRANSPARENT_INDEX = 0
 #: Pixels per side of a ``CELL`` block (``docs/file-formats.md`` §2.4 ``[V]``).
 CELL_PIXELS = 8
 
-#: Tile cell-order layouts: stored order, or the documented (``[H]``) 2x2 tile.
+#: Tile cell-order layouts: stored order, or the verified (``[V]``) 2x2 tile.
 TILE_LAYOUTS = ("strip", "2x2")
 
 #: ``MAP`` raw-byte channels the field blit can visualise.
@@ -298,7 +299,7 @@ class Framebuffer:
         """Draw a ``TTAB`` record as its four cells, in ``layout`` order.
 
         ``"strip"`` places the four cells side by side (stored order, 32x8);
-        ``"2x2"`` assembles the documented 16x16 tile (cell order ``[H]``).
+        ``"2x2"`` assembles the 16x16 tile in **column-major** order (``[V]``).
         Each cell honours its flag word's flip; a cell index outside the bank
         is left empty (background), never repaired.
         """
@@ -310,8 +311,11 @@ class Framebuffer:
             if layout == "strip":
                 dx, dy = slot * CELL_PIXELS, 0
             else:
-                dx = (slot % 2) * CELL_PIXELS
-                dy = (slot // 2) * CELL_PIXELS
+                # Column-major: slot 0/1 fill the left column, 2/3 the right.
+                # Verified against a retail render -- row-major produces visible
+                # vertical striping because cells from different columns meet.
+                dx = (slot // 2) * CELL_PIXELS
+                dy = (slot % 2) * CELL_PIXELS
             self.blit_cell(
                 cells[cell_slot.index],
                 palette,
