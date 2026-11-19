@@ -16,7 +16,7 @@ from lomax_modern import wld
 from lomax_modern.anim_nmy import decode_gnmy, decode_nmy
 from lomax_modern.engine import (
     camera,
-    gnmy_type_colour,
+    gnmy_marker,
     load_level,
     new_game_state,
     render,
@@ -122,7 +122,7 @@ def _playfield_gnmy(world, playfield: int) -> list:
 
 
 def test_render_tiles_overlays_gnmy_markers() -> None:
-    """The playfield's GNMY placements paint type-coloured markers in the frame."""
+    """The playfield's GNMY placements paint name-styled markers in the frame."""
     path = Path(GAME_DIR or "") / "WORLDS" / "VILLAGE.WLD"
     if not path.is_file():
         pytest.skip("VILLAGE.WLD not present in this install")
@@ -135,12 +135,14 @@ def test_render_tiles_overlays_gnmy_markers() -> None:
     assert [(e.x, e.y, e.type_index) for e in level.gnmy] == [
         (e.x, e.y, e.type_index) for e in expected
     ]
+    # Every placement resolved its type to an NMY record name (Q32).
+    assert all(entry.name for entry in level.gnmy)
 
     state = new_game_state(level, spawn_x=0.0, spawn_y=0.0)
     frame = render_tiles(level, state)
     cam_x, cam_y = camera(level, state.player, frame.width, frame.height)
 
-    # Every in-view placement paints its type-coloured marker at its exact
+    # Every in-view placement paints its name-styled marker at its exact
     # pixel — except inside the player marker, which is drawn last and wins.
     px = int(state.player.x) - cam_x
     py = int(state.player.y) - cam_y
@@ -153,7 +155,7 @@ def test_render_tiles_overlays_gnmy_markers() -> None:
         in_view += 1
         if px <= sx < px + state.player.width and py <= sy < py + state.player.height:
             continue
-        if frame.pixel(sx, sy) == gnmy_type_colour(entry.type_index):
+        if frame.pixel(sx, sy) == gnmy_marker(entry.name).colour:
             painted += 1
 
     print(

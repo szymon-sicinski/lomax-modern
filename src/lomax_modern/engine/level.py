@@ -13,7 +13,7 @@ see the class docstring.
 
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from pathlib import Path
 
 from .. import art, wld
@@ -81,9 +81,10 @@ class Level:
     playfield: int
     collision: CollisionModel
     #: The playfield plane's ``GNMY`` placements, decoded from the ``GNMY``
-    #: chunk that follows that plane's ``MAP``.  Structure only: each entry is
-    #: a pixel position plus a ``type_index``; what an entry *means*
-    #: (spawn/collectable/exit) is Q32 unresolved and is never attached here.
+    #: chunk that follows that plane's ``MAP``.  Each entry carries its pixel
+    #: position, ``type_index`` and the resolved ``NMY`` record ``name`` (Q32
+    #: **[V]**: ``Start`` = spawn, ``Exit`` = level exit, ``Moneybag`` =
+    #: collectable; every other name is unmapped).
     gnmy: tuple[GnmyEntry, ...] = ()
 
     @property
@@ -119,9 +120,10 @@ def _decode_gnmy_per_plane(world: wld.World) -> tuple[tuple[GnmyEntry, ...], ...
 
     A ``GNMY`` chunk belongs to the plane whose ``HEAD`` precedes it (retail
     order ``HEAD, TTAB, MAP, GNMY`` repeats once per plane).  The entry layout
-    is recovered and graded ``[V]`` in ``docs/file-formats.md`` §2.5; the
-    *meaning* of an entry (spawn/collectable/exit) is Q32 and is never attached
-    here — the tuples carry pixel position and ``type_index`` only.
+    is recovered and graded ``[V]`` in ``docs/file-formats.md`` §2.5, and each
+    entry's ``name`` is resolved from the world's ``NMY`` table (Q32 **[V]**:
+    ``Start`` = spawn, ``Exit`` = level exit, ``Moneybag`` = collectable; the
+    remaining names are unmapped, so no other meaning is attached).
 
     A missing ``NMY``/``GNMY`` (or one that does not parse under the recovered
     framing) yields an empty tuple for that plane rather than raising: markers
@@ -129,11 +131,13 @@ def _decode_gnmy_per_plane(world: wld.World) -> tuple[tuple[GnmyEntry, ...], ...
     """
     nmy_chunk = next((c for c in world.chunks if c.tag == "NMY"), None)
     k_of: dict[int, int] = {}
+    names: tuple[str, ...] = ()
     if nmy_chunk is not None:
         result = decode_nmy(nmy_chunk.payload)
         if result is not None:
             records, _ = result
             k_of = {i: (record.flags >> 4) & 0xF for i, record in enumerate(records)}
+            names = tuple(record.name for record in records)
 
     per_plane: list[list[GnmyEntry]] = []
     plane_index = -1
@@ -146,7 +150,12 @@ def _decode_gnmy_per_plane(world: wld.World) -> tuple[tuple[GnmyEntry, ...], ...
         elif chunk.tag == "GNMY" and in_plane:
             decoded = decode_gnmy(chunk.payload, k_of)
             if decoded is not None:
-                per_plane[plane_index].extend(decoded[0])
+                per_plane[plane_index].extend(
+                    replace(entry, name=names[entry.type_index])
+                    if entry.type_index < len(names)
+                    else entry
+                    for entry in decoded[0]
+                )
     return tuple(tuple(entries) for entries in per_plane)
 
 
@@ -161,8 +170,10 @@ def load_level(
     Decodes the ``CELL`` bank and the ``HEAD`` palette (default slot 1, the
     ``[H]`` choice documented in ``art``) so the level carries the art needed
     to render, alongside the collision grid the simulation walks on.  It also
-    decodes the playfield plane's ``GNMY`` placements into ``Level.gnmy``
-    (position + ``type_index`` only; Q32 semantics are never attached).
+    decodes the playfield plane's ``GNMY`` placements into ``Level.gnmy``,
+    resolving each entry's ``NMY`` record name (Q32 **[V]**: ``Start`` = spawn,
+    ``Exit`` = level exit, ``Moneybag`` = collectable; every other name is
+    unmapped).
     """
     source = Path(path)
     world = wld.parse_file(source)

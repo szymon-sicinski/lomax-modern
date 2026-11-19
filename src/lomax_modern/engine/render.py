@@ -4,9 +4,10 @@
 ``MAP`` cells, resolves each ``tile_word`` to a ``TTAB`` record, blits the
 record's four ``CELL`` blocks (flips applied) with the ``HEAD`` palette and
 index-0 transparency into the 320x240 viewport, overlays the playfield's
-``GNMY`` placements as type-coloured density markers (position + ``type_index``
-only, Q32 unresolved), and finally the player marker so the camera-follow and
-scrolling are visible.  :func:`render` remains the
+``GNMY`` placements as markers styled by the placement's ``NMY`` name
+(``Start``/``Exit``/``Moneybag`` distinct, every other name one grey "other
+type" bucket — Q32 **[V]**), and finally the player marker so the camera-follow
+and scrolling are visible.  :func:`render` remains the
 *geometric* debug path: every non-zero collision cell is drawn in one colour
 and the player/entities as markers, with the unresolved bits (Q31) flagged in
 the report rather than painted.
@@ -26,6 +27,7 @@ from __future__ import annotations
 import struct
 from dataclasses import dataclass
 
+from ..anim_nmy import placement_role
 from ..art import DEFAULT_PALETTE_SLOT
 from ..renderer import Framebuffer, head_palette565
 from .entities import Player
@@ -70,29 +72,44 @@ COLOUR_PLAYER = pack_rgb565(255, 220, 0)
 COLOUR_COLLECTIBLE = pack_rgb565(255, 140, 0)
 COLOUR_EXIT = pack_rgb565(0, 220, 0)
 
-#: Marker hues for GNMY placement markers, keyed on ``type_index`` modulo the
-#: table length.  The *meaning* of a ``GNMY`` type index (spawn/collectable/exit)
-#: is **Q32 unresolved** — these colours key the raw index only, so two entries
-#: whose indices are congruent modulo 8 share a colour.  Purely diagnostic.
-GNMY_MARKER_COLOURS = (
-    pack_rgb565(255, 0, 0),  # type_index % 8 == 0
-    pack_rgb565(0, 220, 0),  # == 1
-    pack_rgb565(0, 96, 255),  # == 2
-    pack_rgb565(255, 255, 0),  # == 3
-    pack_rgb565(255, 0, 255),  # == 4
-    pack_rgb565(0, 255, 255),  # == 5
-    pack_rgb565(255, 128, 0),  # == 6
-    pack_rgb565(160, 0, 255),  # == 7
-)
+#: Marker colours for the three ``GNMY`` placement roles Q32 evidenced **[V]**
+#: (``Start``/``Exit``/``Moneybag``) and one grey bucket for every other ``NMY``
+#: name.  Purely diagnostic.
+COLOUR_GNMY_START = pack_rgb565(255, 255, 255)
+COLOUR_GNMY_EXIT = pack_rgb565(0, 220, 0)
+COLOUR_GNMY_MONEYBAG = pack_rgb565(255, 140, 0)
+COLOUR_GNMY_OTHER = pack_rgb565(120, 120, 120)
 
 
-def gnmy_type_colour(type_index: int) -> int:
-    """A distinct ``B5G6R5`` marker colour for a ``GNMY`` ``type_index`` (Q32).
+@dataclass(frozen=True)
+class MarkerStyle:
+    """How one placement is drawn: its evidenced role, colour and pixel size."""
 
-    Deterministic and purely a function of the index — the colour carries no
-    meaning beyond "these entries share a type index".
+    role: str
+    colour: int
+    size: int
+
+
+#: One style per role.  The three evidenced roles differ in colour *and* size
+#: so a greyscale capture still separates them; ``other`` is the single bucket
+#: for the names whose handlers are unmapped — no per-name glyph is invented.
+GNMY_MARKER_STYLES: dict[str, MarkerStyle] = {
+    "start": MarkerStyle("start", COLOUR_GNMY_START, 7),
+    "exit": MarkerStyle("exit", COLOUR_GNMY_EXIT, 5),
+    "moneybag": MarkerStyle("moneybag", COLOUR_GNMY_MONEYBAG, 3),
+    "other": MarkerStyle("other", COLOUR_GNMY_OTHER, 3),
+}
+
+
+def gnmy_marker(name: str | None) -> MarkerStyle:
+    """The marker style for a placement's ``NMY`` name.
+
+    The name is classified by :func:`lomax_modern.anim_nmy.placement_role`, so
+    only ``Start``/``Exit``/``Moneybag`` (Q32 **[V]**) get their own style and
+    every other name — including a missing one — falls into the grey ``other``
+    bucket instead of inventing a meaning.
     """
-    return GNMY_MARKER_COLOURS[type_index % len(GNMY_MARKER_COLOURS)]
+    return GNMY_MARKER_STYLES[placement_role(name)]
 
 
 @dataclass
@@ -196,20 +213,23 @@ def overlay_gnmy(
     cam_x: int,
     cam_y: int,
 ) -> None:
-    """Draw one small marker per ``GNMY`` placement, coloured by ``type_index``.
+    """Draw one marker per ``GNMY`` placement, styled by its ``NMY`` name.
 
     ``entries`` are the playfield plane's :class:`lomax_modern.anim_nmy.GnmyEntry`
-    placements; each is drawn as a small 3x3 marker centred on its pixel
-    ``(x, y)``, camera-relative (``cam_x``/``cam_y`` are the viewport top-left
-    in level pixels).  Position and ``type_index`` only: what an entry *means*
-    (spawn/collectable/exit) is **Q32 unresolved**, so nothing here attaches
-    semantics.  A marker whose centre is off the viewport is clipped by the
-    buffer, not drawn.
+    placements; each is drawn as a filled square centred on its pixel ``(x, y)``,
+    camera-relative (``cam_x``/``cam_y`` are the viewport top-left in level
+    pixels).  Colour and size come from :func:`gnmy_marker`: ``Start`` (spawn),
+    ``Exit`` and ``Moneybag`` (collectable) are the three roles Q32 resolved
+    **[V]**, and every other name — or a missing one — is one grey "other type"
+    marker, so no meaning is invented for the unmapped names.  A marker whose
+    centre is off the viewport is clipped by the buffer, not drawn.
     """
     for entry in entries:
+        style = gnmy_marker(entry.name)
         sx = entry.x - cam_x
         sy = entry.y - cam_y
-        frame.fill_rect(sx - 1, sy - 1, 3, 3, gnmy_type_colour(entry.type_index))
+        d = style.size
+        frame.fill_rect(sx - d // 2, sy - d // 2, d, d, style.colour)
 
 
 def render_tiles(
@@ -228,10 +248,12 @@ def render_tiles(
 
     The backdrop (transparent regions) is :data:`COLOUR_SKY`, a placeholder:
     the real parallax/sky layer is a separate plane this card does not draw.
-    The playfield's ``GNMY`` placements are overlaid as type-coloured density
-    markers (position + ``type_index`` only, Q32 unresolved — no
-    spawn/collectable/exit meaning is attached), then the player marker is
-    overlaid last so camera-follow and scrolling stay visible.
+    The playfield's ``GNMY`` placements are overlaid as markers styled by the
+    placement's ``NMY`` name — ``Start`` (spawn), ``Exit`` and ``Moneybag``
+    (collectable) distinct, every other name one grey "other type" bucket
+    (Q32 **[V]**; the remaining handlers are unmapped, so nothing is invented)
+    — then the player marker is overlaid last so camera-follow and scrolling
+    stay visible.
     """
     vw, vh = viewport
     cam_x, cam_y = camera(level, state.player, vw, vh)

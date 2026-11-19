@@ -8,6 +8,18 @@ Versioning: [Semantic Versioning](https://semver.org/).
 
 ### Added
 
+- GNMY markers now consume the `NMY` name Q32 resolved. `decode_nmy` returns
+  each record's `name` and `load_level` attaches it to every placement
+  (`GnmyEntry.name`); `engine.overlay_gnmy` styles `Start` (white 7×7),
+  `Exit` (green 5×5) and `Moneybag` (orange 3×3) distinctly, and every other
+  name falls into one grey 3×3 "other type" bucket — no glyph is invented for
+  the remaining 86 names. `slice`'s digest counts the four buckets by name.
+  The stale "Q32 unresolved" wording in `engine/run.py`, `engine/state.py`,
+  `engine/render.py`, `engine/level.py`, `docs/architecture.md` and
+  `docs/demo.md` is replaced with the resolved statement, and the
+  tracked-stale paragraph in `docs/file-formats.md` §2.5 is gone. Measured on
+  the retail install: VILLAGE carries `Start` 3 / `Exit` 1 / `Moneybag` 0
+  across its 15 planes, so its opening playfield shows no collectable marker.
 - `lomax_modern.sdl_window` — the SDL2 window backend, first half of demo
   option C's presentation half: `open_window` opens a window at the configured
   surface, uploads a 320×240 `B5G6R5` buffer to an `SDL_PIXELFORMAT_RGB565`
