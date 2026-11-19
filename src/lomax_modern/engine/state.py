@@ -157,29 +157,42 @@ def new_game_state(
     collectibles: list[Collectible] | None = None,
     exits: list[Exit] | None = None,
 ) -> GameState:
-    """Build a fresh state; ``spawn`` defaults to the top-left passable cell.
+    """Build a fresh state from the level's ``GNMY`` placements (Q32 **[V]**).
 
-    The default spawn is a placeholder: the engine still spawns at the first
-    passable cell and does not consume ``GNMY`` placements yet.  Their
-    semantics are resolved (Q32, ``docs/file-formats.md`` §2.5) **[V]**: the
-    player start is the ``Start`` placement, the level exit is ``Exit`` and the
-    collectable is ``Moneybag``, each matched on the ``NMY`` record's four-byte
-    name prefix.  The entry layout is verified, including the position
-    (``size``/``type``/``x``/``y`` are all [V]).  What is *not* done here is
-    turning those placements into entities — until a caller does, it supplies
-    ``spawn_x``/``spawn_y`` and the entity lists explicitly.
+    The defaults come from the playfield plane's placements, each resolved on
+    the ``NMY`` record's four-byte name prefix (``docs/file-formats.md`` §2.5):
+    the spawn is the ``Start`` placement's pixel position, the collectibles are
+    the ``Moneybag`` placements and the exits are the ``Exit`` placements, each
+    converted to its ``CELL_PX`` map cell.  A level without a ``Start``
+    placement falls back to the first passable cell, and one without
+    ``Moneybag``/``Exit`` placements yields empty entity lists, so a synthetic
+    level with no ``NMY``/``GNMY`` data still runs.  Any of the four may be
+    overridden explicitly by the caller.
     """
     if spawn_x is None or spawn_y is None:
-        sx, sy = first_passable_cell(level)
-        spawn_x = spawn_x if spawn_x is not None else sx * CELL_PX
-        spawn_y = spawn_y if spawn_y is not None else sy * CELL_PX
+        spawn = level.spawn
+        if spawn is not None:
+            sx, sy = spawn
+            spawn_x = spawn_x if spawn_x is not None else float(sx)
+            spawn_y = spawn_y if spawn_y is not None else float(sy)
+        else:
+            sx, sy = first_passable_cell(level)
+            spawn_x = spawn_x if spawn_x is not None else sx * CELL_PX
+            spawn_y = spawn_y if spawn_y is not None else sy * CELL_PX
     player = Player(x=float(spawn_x), y=float(spawn_y))
+    if collectibles is None:
+        collectibles = [
+            Collectible(px_x // CELL_PX, px_y // CELL_PX)
+            for px_x, px_y in level.collectables
+        ]
+    if exits is None:
+        exits = [Exit(px_x // CELL_PX, px_y // CELL_PX) for px_x, px_y in level.exits]
     return GameState(
         level=level,
         player=player,
         entities=Entities(
-            collectibles=list(collectibles or []),
-            exits=list(exits or []),
+            collectibles=list(collectibles),
+            exits=list(exits),
         ),
     )
 

@@ -230,11 +230,12 @@ tick (input, gravity, axis-separated collision, collect, exit) to a 16-bit
   colours and sizes `[V]` (Q32), and every other name is one grey "other type"
   bucket — the remaining handlers are unmapped, so no per-name glyph is
   invented. `slice`'s console digest counts the four buckets by name.
-- **Entity placement is deferred.** Spawn, collectibles and exit are explicit
-  (placeholder) in the slice: the engine does not consume `GNMY` placements as
-  entities yet. Which placement is which is resolved `[V]` for
-  `Start`/`Exit`/`Moneybag` (Q32); turning them into the live spawn, exit and
-  collectables is the next engine step.
+- **Entity placement from `GNMY`.** `Level.spawn` / `Level.collectables` /
+  `Level.exits` resolve the playfield plane's `GNMY` placements by their `NMY`
+  name — `Start` (spawn), `Exit` (level exit), `Moneybag` (collectable) `[V]`
+  (Q32) — and `new_game_state` turns them into the live spawn, exit and
+  collectables. A plane without a `Start` placement falls back to the first
+  passable cell; the remaining names are unmapped and yield no entity.
 
 ## 5. Future components and where they sit
 

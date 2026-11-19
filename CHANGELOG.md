@@ -30,6 +30,16 @@ Versioning: [Semantic Versioning](https://semver.org/).
   tracked-stale paragraph in `docs/file-formats.md` §2.5 is gone. Measured on
   the retail install: VILLAGE carries `Start` 3 / `Exit` 1 / `Moneybag` 0
   across its 15 planes, so its opening playfield shows no collectable marker.
+- The engine now consumes the `GNMY` placements as entities (Q32 **[V]**).
+  `Level.spawn` / `Level.collectables` / `Level.exits` resolve the playfield
+  plane's placements by `NMY` name — `Start` (spawn), `Exit` (level exit),
+  `Moneybag` (collectable) — and `new_game_state` turns them into the live
+  spawn, exit and collectables (pixel position → `CELL_PX` map cell), falling
+  back to the first passable cell when a plane has no `Start`. `slice` now
+  reports `spawn: Start (x, y) px`, `collect: N Moneybag(s)` and
+  `exit: Exit (x, y) px` instead of the old placeholders, and `present` /
+  `window` inherit the same wiring through `run_slice`. VILLAGE's opening
+  playfield carries `Start (99, 189)` and `Exit (4747, 246)` and no `Moneybag`.
 - `lomax_modern.sdl_window` — the SDL2 window backend, first half of demo
   option C's presentation half: `open_window` opens a window at the configured
   surface, uploads a 320×240 `B5G6R5` buffer to an `SDL_PIXELFORMAT_RGB565`

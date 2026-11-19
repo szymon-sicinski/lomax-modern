@@ -150,7 +150,7 @@ How to read it:
 | Line | Meaning |
 |---|---|
 | `world` | which `*.WLD` was loaded (`--world NAME` to pick another; default is `VILLAGE` when present, else the first file) |
-| `engine` | fixed 60 Hz tick count, frames produced, whether the placeholder exit was reached in `--ticks` |
+| `engine` | fixed 60 Hz tick count, frames produced, whether the `Exit` placement was reached in `--ticks` |
 | `profile` | modern (default) or authentic |
 | `filter` | `epx-aa` or `nearest`; switchable per run with `--filter` |
 | `source` / `surface` | the engine frame is **always** 320x240; `surface` is the presentation size |

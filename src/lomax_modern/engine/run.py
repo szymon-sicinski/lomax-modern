@@ -14,10 +14,10 @@ from pathlib import Path
 from typing import Callable
 
 from ..anim_nmy import placement_role
-from .entities import Collectible, Exit, Input
+from .entities import Input
 from .level import Level, load_level
 from .render import Frame, render_tiles
-from .state import GameState, first_passable_cell, new_game_state
+from .state import GameState, new_game_state
 
 #: A script turns the current tick and state into one tick of input.
 InputScript = Callable[[int, GameState], Input]
@@ -40,14 +40,6 @@ def _collision_histogram(level: Level) -> dict[int, int]:
     return dict(sorted(counts.items()))
 
 
-def _last_passable_cell(level: Level) -> tuple[int, int]:
-    for cell_y in range(level.plane.height_cells - 1, -1, -1):
-        for cell_x in range(level.plane.width_cells - 1, -1, -1):
-            if level.passable(cell_x, cell_y):
-                return cell_x, cell_y
-    raise ValueError("level has no passable cell")
-
-
 @dataclass(frozen=True)
 class SliceReport:
     """What one vertical-slice run did; ``format()`` renders a text digest."""
@@ -59,6 +51,10 @@ class SliceReport:
     collision_histogram: dict[int, int]
     collision_model: str
     spawn: tuple[float, float]
+    #: The spawn placement's ``NMY`` name (``"Start"``), or ``None`` when the
+    #: level has no ``Start`` placement and the spawn fell back to the first
+    #: passable cell.
+    spawn_name: str | None
     ticks: int
     frames: int
     complete: bool
@@ -70,9 +66,28 @@ class SliceReport:
     #: Placement count per ``NMY`` role: ``start``/``exit``/``moneybag`` are
     #: Q32 **[V]**; ``other`` is every unmapped name (one bucket, no glyph).
     gnmy_roles: dict[str, int]
+    #: Pixel ``(x, y)`` of every ``Exit`` placement, in file order.
+    exits: tuple[tuple[int, int], ...]
     next_level: str | None = None
 
     def format(self) -> str:
+        if self.spawn_name is not None:
+            spawn_line = (
+                f"spawn: {self.spawn_name} "
+                f"({self.spawn[0]:.0f}, {self.spawn[1]:.0f}) px"
+            )
+        else:
+            spawn_line = (
+                f"spawn: ({self.spawn[0]:.1f}, {self.spawn[1]:.1f}) px "
+                "(no Start placement; fell back to the first passable cell)"
+            )
+        if self.exits:
+            first = self.exits[0]
+            exit_line = f"exit: Exit ({first[0]}, {first[1]}) px"
+            if len(self.exits) > 1:
+                exit_line += f" (+{len(self.exits) - 1} more Exit placement(s))"
+        else:
+            exit_line = "exit: none (no Exit placement)"
         lines = [
             f"world: {self.world} ({self.planes} planes, playfield plane {self.playfield})",
             f"playfield: {self.playfield_size[0]}x{self.playfield_size[1]} cells "
@@ -82,20 +97,15 @@ class SliceReport:
             + ", ".join(
                 f"{value:#04x}:{count}" for value, count in self.collision_histogram.items()
             ),
-            f"spawn: ({self.spawn[0]:.1f}, {self.spawn[1]:.1f}) px "
-            "(placeholder -- the engine still spawns at the first passable "
-            "cell; the real spawn is the `Start` GNMY placement [V], which the "
-            "engine does not consume yet)",
-            f"collect: {self.collected}/{self.collected_total} "
-            "(placeholder -- entity positions are synthetic; the real "
-            "collectables are the `Moneybag` GNMY placements [V], which the "
-            "engine does not consume yet)",
+            spawn_line,
+            f"collect: {self.collected_total} Moneybag(s)",
             f"result: {'reached exit' if self.complete else 'did not reach exit'} "
             f"after {self.ticks} ticks",
             f"frames: {self.frames} (fixed 60 Hz: one frame per tick)",
             f"final position: ({self.final_position[0]:.1f}, {self.final_position[1]:.1f}) px",
             f"next level: {self.next_level or 'none (end of sequence or exit not reached)'}",
-            f"exit: {'clean' if self.clean_exit else 'ERROR'}",
+            exit_line,
+            f"run exit: {'clean' if self.clean_exit else 'ERROR'}",
             "tile art: composed -- map cell -> tile record resolved (Q20), each "
             "record blitted as four CELLs in 2x2 column-major order (V, G1) "
             "with the HEAD palette (slot 1) and index-0 transparency; flip "
@@ -149,14 +159,9 @@ def run_slice(
         raise FileNotFoundError(f"no world file at {resolved}")
 
     level = load_level(resolved, playfield=playfield)
-    spawn_cell = first_passable_cell(level)
-    exit_cell = _last_passable_cell(level)
-    state = new_game_state(
-        level,
-        spawn_x=spawn_cell[0] * 16,
-        spawn_y=spawn_cell[1] * 16,
-        exits=[Exit(exit_cell[0], exit_cell[1])],
-    )
+    state = new_game_state(level)
+    spawn_pos = (state.player.x, state.player.y)
+    spawn_name = "Start" if level.spawn is not None else None
 
     ticks = 0
     captured: Frame | None = None
@@ -179,7 +184,8 @@ def run_slice(
         playfield_size=(level.plane.width_cells, level.plane.height_cells),
         collision_histogram=_collision_histogram(level),
         collision_model=level.collision.report(),
-        spawn=(spawn_cell[0] * 16, spawn_cell[1] * 16),
+        spawn=spawn_pos,
+        spawn_name=spawn_name,
         ticks=ticks,
         frames=ticks,
         complete=state.complete,
@@ -189,6 +195,7 @@ def run_slice(
         clean_exit=True,
         gnmy_entries=len(level.gnmy),
         gnmy_roles=dict(gnmy_roles),
+        exits=level.exits,
         next_level=next_level,
     )
     return report, final_frame

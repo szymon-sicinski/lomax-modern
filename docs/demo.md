@@ -155,15 +155,15 @@ $ lomax-modern slice "<install>" --world VILLAGE --frames 120 --out demo-out/fra
 world: VILLAGE (15 planes, playfield plane 0)
 playfield: 305x24 cells (4880x384 px)
 collision: byte 0 = passable, non-zero = solid [H]; per-value semantics (material/one-way/hazard) unresolved (Q31); the documented [D] bit-field is retracted
-collision-byte histogram (value: count): 0x00:5364, 0x01:774, 0x02:2, ... 0xff:1
-                                          (256 entries elided here; the script prints them all)
-spawn: (0.0, 0.0) px (placeholder -- the engine still spawns at the first passable cell; the real spawn is the `Start` GNMY placement [V], which the engine does not consume yet)
-collect: 0/0 (placeholder -- entity positions are synthetic; the real collectables are the `Moneybag` GNMY placements [V], which the engine does not consume yet)
+collision-byte histogram (value: count): 0x00:7107, 0xc1:58, 0xc9:111, 0xd1:10, 0xd9:12, 0xe1:10, 0xe9:12
+spawn: Start (99, 189) px
+collect: 0 Moneybag(s)
 result: did not reach exit after 120 ticks
 frames: 120 (fixed 60 Hz: one frame per tick)
-final position: (180.0, 178.0) px
+final position: (314.0, 190.2) px
 next level: none (end of sequence or exit not reached)
-exit: clean
+exit: Exit (4747, 246) px
+run exit: clean
 tile art: composed -- map cell -> tile record resolved (Q20), each record blitted as four CELLs in 2x2 column-major order (V, G1) with the HEAD palette (slot 1) and index-0 transparency; flip pairing [H] (Q33); the geometric collision grid stays on render() as a debug path
 GNMY markers: 32 placements drawn by NMY name -- start 1, exit 1, moneybag 0, other 30 (Start/Exit/Moneybag [V]; the other names' handlers are unmapped)
 frames: 120 PNGs in demo-out/frames (frame_0000.png .. frame_0119.png)
