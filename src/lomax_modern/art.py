@@ -11,10 +11,13 @@ Confidence, per claim (see ``docs/file-formats.md``):
   ``[index word, flag word]`` cells (37,561 records = 150,244 cells).
 * ``CELL`` payloads are a whole number of 64-byte records (14,974).
 * A ``TTAB`` index word is a full 16-bit ``CELL`` index (all in-bank).  Its
-  paired flag word carries a flip in bits 13-14 (``0x2000`` H, ``0x4000`` V,
-  ``0x6000`` both) and a palette in bits 8-11 (0-15; retail uses 0-3).  Words
-  are **preserved verbatim** — Q22's "index 256" was the flag word ``0x0100``
-  misread as a 13-bit index, so no out-of-bank index exists.
+  paired flag word carries both a flip (bits 13-14) and a palette (bits 8-11,
+  0-15; retail uses 0-3).  Words are **preserved verbatim** — Q22's "index 256"
+  was the flag word ``0x0100`` misread as a 13-bit index, so no out-of-bank
+  index exists.
+* That bits 13-14 are the flip pair is ``[V]``: exactly three combinations
+  occur (``0x2000`` on 15,787 cells, ``0x4000`` on 1,783, ``0x6000`` on 716) and
+  every other high bit is zero across all 150,244 retail cells.
 
 **Hypothesis (H), and therefore printed as such by the exporter**
 
@@ -25,6 +28,10 @@ Confidence, per claim (see ``docs/file-formats.md``):
   word's bits 8-11 (Q8, narrowed from "the container names no slot").  The
   exporter decodes and counts the flag-word palette, but still draws the sheet
   with its default slot (1): slot selection is counted, not yet switched.
+* *Which* of those two bits is horizontal and which is vertical.  The decoder
+  reads ``0x2000`` as horizontal and ``0x4000`` as vertical, but that pairing has
+  not been confirmed against a render of the game — only "these bits flip the
+  cell" is ``[V]``.
 * The order of the four cells inside a ``TTAB`` record (G1, open).  The default
   tile sheet therefore draws each record as its four cells **in stored order**
   and labels the 2x2 assembly an explicit option.
@@ -58,10 +65,13 @@ TILE_WORDS = TILE_CELLS * 2
 #: Bytes per ``TTAB`` record.
 TILE_SIZE = TILE_WORDS * 2
 
-#: Flip flags live in bits 13-14 of a ``TTAB`` *flag* word.
+#: Flip flags live in bits 13-14 of a ``TTAB`` *flag* word (``[V]``: only these
+#: three combinations occur across 150,244 retail cells; every other high bit 0).
 FLIP_MASK = 0x6000
-FLIP_H = 0x2000  # horizontal flip
-FLIP_V = 0x4000  # vertical flip
+#: The axis pairing below is a convention (``[H]``), not a measurement: which
+#: bit mirrors which axis has not been confirmed against the game's own output.
+FLIP_H = 0x2000  # horizontal flip (convention, [H])
+FLIP_V = 0x4000  # vertical flip (convention, [H])
 
 #: Palette index lives in bits 8-11 of a ``TTAB`` *flag* word.
 PALETTE_MASK = 0x0F00
@@ -211,7 +221,11 @@ class TileSlot:
 
     @property
     def flip(self) -> int:
-        """The flip bits 13-14: ``0x2000`` H, ``0x4000`` V, ``0x6000`` both."""
+        """The flip bits 13-14: ``0x2000``, ``0x4000``, or both.
+
+        That these bits flip the cell is ``[V]``; that ``0x2000`` is the
+        horizontal one is an unconfirmed convention (``[H]``).
+        """
         return self.flags & FLIP_MASK
 
     @property
