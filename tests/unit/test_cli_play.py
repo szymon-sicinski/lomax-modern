@@ -230,11 +230,13 @@ def test_play_hud_prints_fps_plane_tiles_camera(tmp_path, monkeypatch, capsys) -
     out = capsys.readouterr().out
 
     assert code == 0
-    # The synthetic world is 20x15 cells -> 300 tiles, camera clamped at (0,0).
+    # The synthetic world is 20x15 cells -> 300 tiles, camera clamped at (0,0),
+    # and carries no GNMY Moneybag placement -> `collect 0/0` on the HUD line.
     assert "plane=VILLAGE" in out
     assert "tiles=300" in out
     assert "camera=(0,0)" in out
     assert "fps=" in out
+    assert "collect 0/0" in out
 
 
 def test_play_missing_sdl2_prints_one_line_and_exits_1(tmp_path, monkeypatch, capsys) -> None:

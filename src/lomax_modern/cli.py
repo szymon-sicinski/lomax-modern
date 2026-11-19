@@ -852,7 +852,11 @@ def _cmd_play(args: argparse.Namespace) -> int:
                     * state.level.plane.height_cells
                 )
                 fps = frame_count / (now - started)
-                line = _hud_line(fps, state.level.name, tiles, cam_x, cam_y)
+                collected = len(state.entities.collected)
+                total = len(state.entities.collectibles)
+                line = _hud_line(
+                    fps, state.level.name, tiles, cam_x, cam_y, collected, total
+                )
                 print(line)
                 window.set_title(line)
             last_hud = now
