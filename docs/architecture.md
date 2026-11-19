@@ -236,6 +236,15 @@ tick (input, gravity, axis-separated collision, collect, exit) to a 16-bit
   (Q32) — and `new_game_state` turns them into the live spawn, exit and
   collectables. A plane without a `Start` placement falls back to the first
   passable cell; the remaining names are unmapped and yield no entity.
+- **Player as a decoded ANIM sprite.** `render_tiles` draws the player as its
+  standing `ANIM` frame, not a marker: `decode_anim_pixels` expands the frame's
+  packed 4-bit (low nibble first, `[V]` from the sprite decompressor at VA
+  `0x415E30`) or raw 8-bit pixels to palette indices, and `load_player_sprite`
+  resolves that frame from `MAIN.WLD`'s `Hero` → `STA1` animation (the
+  keyframe's first byte is the referenced `ANIM` type_index). The indexed
+  sprite is blitted through the level's `HEAD` palette; a synthetic world
+  without `MAIN.WLD` falls back to the marker. Animation (frame cycling) is a
+  deferred follow-up; the keyframe's other five bytes stay unmapped (Q34).
 
 ## 5. Future components and where they sit
 

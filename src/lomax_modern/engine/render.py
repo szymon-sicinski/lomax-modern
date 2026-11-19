@@ -6,8 +6,10 @@ record's four ``CELL`` blocks (flips applied) with the ``HEAD`` palette and
 index-0 transparency into the 320x240 viewport, overlays the playfield's
 ``GNMY`` placements as markers styled by the placement's ``NMY`` name
 (``Start``/``Exit``/``Moneybag`` distinct, every other name one grey "other
-type" bucket — Q32 **[V]**), and finally the player marker so the camera-follow
-and scrolling are visible.  :func:`render` remains the
+type" bucket — Q32 **[V]**), and finally the player — its standing ``ANIM``
+sprite from the global ``MAIN.WLD`` bank, falling back to a marker when that
+bank is absent — so the camera-follow and scrolling are visible.
+:func:`render` remains the
 *geometric* debug path: every non-zero collision cell is drawn in one colour
 and the player/entities as markers, with the unresolved bits (Q31) flagged in
 the report rather than painted.
@@ -252,8 +254,11 @@ def render_tiles(
     placement's ``NMY`` name — ``Start`` (spawn), ``Exit`` and ``Moneybag``
     (collectable) distinct, every other name one grey "other type" bucket
     (Q32 **[V]**; the remaining handlers are unmapped, so nothing is invented)
-    — then the player marker is overlaid last so camera-follow and scrolling
-    stay visible.
+    — then the player is overlaid last so camera-follow and scrolling stay
+    visible.  The player is its standing ANIM sprite (decoded from the global
+    ``MAIN.WLD`` bank, see :func:`lomax_modern.engine.level.load_player_sprite`),
+    blitted through the ``HEAD`` palette with index-0 transparency; when that
+    bank is absent (a synthetic world) the player falls back to the marker.
     """
     vw, vh = viewport
     cam_x, cam_y = camera(level, state.player, vw, vh)
@@ -283,9 +288,18 @@ def render_tiles(
 
     overlay_gnmy(fb, level.gnmy, cam_x, cam_y)
 
-    sx = int(state.player.x) - cam_x
-    sy = int(state.player.y) - cam_y
-    fb.fill_rect(sx, sy, state.player.width, state.player.height, COLOUR_PLAYER)
+    sprite = level.player_sprite
+    if sprite is None:
+        # No global bank (synthetic world): fall back to the player marker so
+        # camera-follow stays visible without a sprite.
+        sx = int(state.player.x) - cam_x
+        sy = int(state.player.y) - cam_y
+        fb.fill_rect(sx, sy, state.player.width, state.player.height, COLOUR_PLAYER)
+    else:
+        # Centre the sprite on the player's collision box; feet at its bottom.
+        sx = int(state.player.centre_x - sprite.width / 2) - cam_x
+        sy = int(state.player.y + state.player.height - sprite.height) - cam_y
+        fb.blit_sprite(sprite.indices, sprite.width, sprite.height, palette, sx, sy)
 
     frame = Frame(vw, vh)
     frame.pixels = fb.pixels

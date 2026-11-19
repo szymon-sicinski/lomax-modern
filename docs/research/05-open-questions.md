@@ -67,6 +67,16 @@ these can be answered from public documentation alone.
 > the collectable. The 2-bit field seeds a per-instance 2-bit state, and the
 > extra word is an intra-plane object reference (index → Nth list node). See
 > [`../file-formats.md`](../file-formats.md) §2.5/§2.8.
+>
+> **Revision v8** (P5 player sprite, 2026-11-19). The `ANIM` *pixel* path is
+> decoded: the sprite decompressor (VA `0x415E30`) expands a frame into an
+> 8-bit index buffer — packed 4-bit reads **low nibble first** then high
+> (`and al,0xf` / `shr al,4` at `0x415F18`), raw 8-bit is a straight byte copy
+> (`0x415F65`). Each `NMY` keyframe's first byte is the referenced `ANIM`
+> type_index (3,124/3,156 same-world resolution across the install). The player
+> standing frame is therefore `MAIN.WLD`'s `Hero` → `STA1` animation, first
+> keyframe (a 54×41 raw sprite), and `render_tiles` now blits it instead of the
+> marker. The keyframe's other five bytes are still unmapped and are **Q34**.
 
 | # | Question | Why it matters | How to resolve |
 |---|---|---|---|
@@ -103,6 +113,7 @@ these can be answered from public documentation alone.
 | Q31 | What do the individual `MAP` collision-byte values mean? | The engine's collision (solid vs passable, one-way, hazards) needs per-value semantics, not a flat "non-zero = solid" guess | ⚠️ **partial, re-measured** — the "near-uniform" histogram was itself a misparse (read off the interleaved `MAP` bytes). On the true collision run (the `N` bytes after the `N` tile words, §2.4) the byte is `0x00` on **97.4 %** of 523,229 cells with 27 distinct values clustering in `0x80`–`0xF9`. Per-value semantics are still open; the engine's 0-vs-non-zero rule is unchanged |
 | Q32 | What do a `GNMY` entry's `flags` bits 8–9 and the optional extra word mean — and which entries are the player start, the level exit, and the collectables? | Finishes the M3 `spawn → … → next-level` loop: the engine must know which placement to spawn as the player and which to treat as the exit/collectable | ✅ **answered** — traced the *consumer* in `LOMAX.EXE` (2026-11-19): the spawn/collectable/exit identity is **not** the flags — it is the `NMY` record's **name**, looked up in an 89-entry name table (VA `0x464650`) into a per-type handler (VA `0x4647B8`, dispatched by `0x4126A0`). The player start is the **`Start`** type (the level-load scan at `0x40ED7C` finds the `record+0x16 == 0` node and builds the player on its plane, `0x40F856`); the level/plane exit is **`Exit`** (`0x427670` = proximity → level-complete; `Finish`/`Revive` are the sibling end-of-plane and checkpoint types); the collectable is **`Moneybag`** (`0x428190` = pickup). The **2-bit subfield** (bits 8–9 → entity `+0x62`) is a per-instance 2-bit *state* seed that handlers mutate; the **extra word** (bit 15 → placement `+0x4`) is an intra-plane *object reference* — post-pass `0x414DB7` rewrites it via `0x4165F0` to the Nth list node's pointer. Per-type link semantics stay `[H]` (`file-formats.md` §2.5/§2.8) |
 | Q33 | Which of the two `TTAB` flip bits (`0x2000` / `0x4000`) mirrors horizontally, and which vertically? | A wrong pairing still draws flipped art — mirrored about the wrong axis, which looks "almost right" and is easy to ship | compare a render of a flagged retail tile against the running game (screenshot diff), or trace the destination row/column stride in the copy loops at `0x415686`/`0x4156A8`; until then the decoder reads `0x2000` as horizontal and `0x4000` as vertical **by convention** (`[H]`, `file-formats.md` §2.4) |
+| Q34 | What do the five remaining bytes of an `NMY` keyframe (`{u8, u16, u16, u16}` after the sprite index) mean — sub-frame index, draw offset, flip/duration? | The animation scheduler (frame cycling by movement state) needs them; today only the first byte (the `ANIM` type_index) is mapped | trace the animation scheduler in `LOMAX.EXE` that consumes the 8-byte keyframes (the routine that reads them after the `NMY` reader); until then `decode_nmy` carries them verbatim and the engine renders the sprite's first frame only |
 
 **Opened by the LMX-7 reports (2026-11-17), resolved by the tile-pipeline pass
 (2026-11-18).** The LMX-7 `TTAB` framing — "8 bytes per 16×16 tile, four

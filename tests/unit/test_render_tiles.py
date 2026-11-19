@@ -17,6 +17,7 @@
 
 from __future__ import annotations
 
+import struct
 from pathlib import Path
 
 from lomax_modern import art
@@ -24,12 +25,14 @@ from lomax_modern.engine import (
     CELL_PX,
     camera,
     load_level,
+    load_player_sprite,
     new_game_state,
     render_tiles,
     run_slice,
 )
 from lomax_modern.engine.render import COLOUR_PLAYER, COLOUR_SKY
 from tests.fixtures.synth import (
+    anim_payload,
     build_container,
     cell_payload,
     gnmy_payload,
@@ -251,3 +254,94 @@ def test_run_slice_on_frame_emits_tile_art_not_the_grid(tmp_path: Path) -> None:
     assert len(captured) == 3
     assert all(frame.pixel(24, 24) == RED565 for frame in captured)
     assert final.pixel(24, 24) == RED565
+
+
+# ---------------------------------------------------------------------------
+# Player sprite (ANIM standing frame)
+# ---------------------------------------------------------------------------
+
+
+def _main_world_with_hero(sprite_type_index: int, pixels: bytes) -> bytes:
+    """A synthetic ``MAIN.WLD``: Hero -> STA1 -> one keyframe -> one ANIM sprite.
+
+    The ``NMY`` payload carries a single ``Hero`` record whose one animation is
+    tagged ``STA1`` (byte-swapped, as on disk) with one keyframe whose first
+    byte names ``sprite_type_index``; the ``ANIM`` chunk holds that sprite's
+    one raw frame.  This exercises the same resolution
+    :func:`lomax_modern.engine.level.load_player_sprite` performs on the retail
+    install.
+    """
+    name = b"Hero\0"
+    name_size = len(name)
+    name_size += -name_size % 4
+    nmy = bytearray()
+    nmy += struct.pack("<H", name_size)
+    nmy += name + b"\0" * (name_size - len(name))
+    nmy += struct.pack("<H", 0x0000)  # W_A
+    nmy += struct.pack("<H", 1)  # W_B = one animation
+    nmy += b"\0" * 2  # gap1
+    nmy += struct.pack("<I", struct.unpack("<I", b"1ATS")[0])  # tag -> "STA1"
+    nmy += struct.pack("<I", 20 + 8 * 1)  # size field == 20 + 8*frames
+    nmy += struct.pack("<H", 1)  # count2 = one frame
+    nmy += b"\0" * 18  # 9 x u16 fields
+    nmy += struct.pack("<BBHHH", sprite_type_index, 0, 0, 0, 0)  # one keyframe
+    nmy += b"\0" * 2  # u16 terminator
+    nmy += b"\0" * 2  # pad
+    anim = anim_payload(
+        frame_count=1,
+        packed=False,
+        width=4,
+        height=4,
+        type_index=sprite_type_index,
+        pixels=pixels,
+    )
+    return build_container(
+        [
+            ("WRLD", b"PS-X" + b"\0" * 4),
+            ("NMY", bytes(nmy)),
+            ("ANIM", anim),
+            ("END", b""),
+        ],
+        endian=">",
+    )
+
+
+def test_load_player_sprite_decodes_the_standing_frame(tmp_path: Path) -> None:
+    """Hero's STA1 keyframe resolves to the ANIM sprite and decodes to indices."""
+    pixels = bytes([1] * 16)  # 4x4 raw frame, all palette index 1
+    (tmp_path / "MAIN.WLD").write_bytes(_main_world_with_hero(5, pixels))
+    sprite = load_player_sprite(tmp_path / "MAIN.WLD")
+    assert sprite is not None
+    assert (sprite.width, sprite.height) == (4, 4)
+    assert sprite.indices == tuple([1] * 16)
+
+
+def test_load_player_sprite_returns_none_without_main(tmp_path: Path) -> None:
+    assert load_player_sprite(tmp_path / "MAIN.WLD") is None
+
+
+def test_render_tiles_blits_the_player_sprite_not_the_marker(tmp_path: Path) -> None:
+    """With a sibling MAIN.WLD, the standing sprite replaces the marker."""
+    world = _world(
+        4,
+        4,
+        cells=[RED_CELL],
+        records=[RED_TILE],
+        map_default=0,
+        palette_slot1={1: RED15, 2: BLUE15},
+    )
+    (tmp_path / "VILLAGE.WLD").write_bytes(world)
+    (tmp_path / "MAIN.WLD").write_bytes(_main_world_with_hero(5, bytes([2] * 16)))
+
+    level = load_level(tmp_path / "VILLAGE.WLD")
+    assert level.player_sprite is not None
+
+    state = new_game_state(level, spawn_x=0.0, spawn_y=0.0)
+    frame = render_tiles(level, state)
+
+    # The marker is gone: the sprite (palette index 2 -> blue) is drawn instead.
+    assert COLOUR_PLAYER not in frame.pixels
+    # Player box at (0,0) is 12x14; a 4x4 sprite is centred (x=4) with feet at
+    # the box bottom (y=10), so its top-left is (4, 10) in the frame.
+    assert frame.pixel(4, 10) == BLUE565
+    assert frame.pixel(7, 13) == BLUE565  # the sprite's bottom-right corner

@@ -12,7 +12,7 @@ verbatim and flagged, never guessed.
 """
 
 from .entities import Collectible, Exit, Input, Player
-from .level import CELL_PX, CollisionModel, Level, load_level
+from .level import CELL_PX, CollisionModel, Level, load_level, load_player_sprite
 from .render import (
     Frame,
     MarkerStyle,
@@ -44,6 +44,7 @@ __all__ = [
     "frame_to_rgba",
     "gnmy_marker",
     "load_level",
+    "load_player_sprite",
     "new_game_state",
     "overlay_gnmy",
     "pack_rgb565",
