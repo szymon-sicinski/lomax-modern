@@ -12,7 +12,11 @@ from pathlib import Path
 
 import pytest
 
+from lomax_modern import wld
+from lomax_modern.anim_nmy import decode_gnmy, decode_nmy
 from lomax_modern.engine import (
+    camera,
+    gnmy_type_colour,
     load_level,
     new_game_state,
     render,
@@ -94,3 +98,67 @@ def test_render_tiles_scrolls_the_village_playfield() -> None:
     assert report.frames >= 1
     assert report.final_position[0] > 320
     assert any(pixels != first[0] for pixels in first[1:])
+
+
+def _playfield_gnmy(world, playfield: int) -> list:
+    """Independently decode the playfield plane's GNMY placements (mirrors probe)."""
+    nmy = next((c for c in world.chunks if c.tag == "NMY"), None)
+    k_of = {}
+    if nmy is not None:
+        result = decode_nmy(nmy.payload)
+        if result is not None:
+            records, _ = result
+            k_of = {i: (rec.flags >> 4) & 0xF for i, rec in enumerate(records)}
+    plane = -1
+    entries = []
+    for c in world.chunks:
+        if c.tag == "HEAD":
+            plane += 1
+        elif c.tag == "GNMY" and plane == playfield:
+            decoded = decode_gnmy(c.payload, k_of)
+            if decoded is not None:
+                entries.extend(decoded[0])
+    return entries
+
+
+def test_render_tiles_overlays_gnmy_markers() -> None:
+    """The playfield's GNMY placements paint type-coloured markers in the frame."""
+    path = Path(GAME_DIR or "") / "WORLDS" / "VILLAGE.WLD"
+    if not path.is_file():
+        pytest.skip("VILLAGE.WLD not present in this install")
+
+    level = load_level(path)
+    # Loading is wired: the level carries exactly the playfield's placements.
+    expected = _playfield_gnmy(wld.parse_file(path), level.playfield)
+    assert len(level.gnmy) == len(expected)
+    assert len(level.gnmy) > 0
+    assert [(e.x, e.y, e.type_index) for e in level.gnmy] == [
+        (e.x, e.y, e.type_index) for e in expected
+    ]
+
+    state = new_game_state(level, spawn_x=0.0, spawn_y=0.0)
+    frame = render_tiles(level, state)
+    cam_x, cam_y = camera(level, state.player, frame.width, frame.height)
+
+    # Every in-view placement paints its type-coloured marker at its exact
+    # pixel — except inside the player marker, which is drawn last and wins.
+    px = int(state.player.x) - cam_x
+    py = int(state.player.y) - cam_y
+    in_view = 0
+    painted = 0
+    for entry in level.gnmy:
+        sx, sy = entry.x - cam_x, entry.y - cam_y
+        if not (0 <= sx < frame.width and 0 <= sy < frame.height):
+            continue
+        in_view += 1
+        if px <= sx < px + state.player.width and py <= sy < py + state.player.height:
+            continue
+        if frame.pixel(sx, sy) == gnmy_type_colour(entry.type_index):
+            painted += 1
+
+    print(
+        f"GNMY: {len(level.gnmy)} placements, {in_view} in view at spawn, "
+        f"{painted} markers painted"
+    )
+    assert in_view > 0
+    assert painted == in_view

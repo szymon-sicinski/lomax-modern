@@ -223,6 +223,11 @@ tick (input, gravity, axis-separated collision, collect, exit) to a 16-bit
   assembly (`[V]`, G1 — verified against a retail render) and the flip-axis
   pairing is this decoder's convention (`[H]`, Q33) — the first is measured,
   the second is flagged, neither is invented.
+- **GNMY density markers, no semantics.** `engine.render_tiles` also overlays
+  the playfield's `GNMY` placements as small markers at their pixel `(x, y)`
+  (`engine.overlay_gnmy`), colour-coded on `type_index` only. What an entry
+  *means* (spawn/collectable/exit) is Q32 unresolved, so the markers carry
+  position + type index and nothing names them.
 - **Entity placement is deferred.** Spawn, collectibles and exit are explicit
   (placeholder) in the slice; the real placements live in `GNMY`, whose entry
   layout is verified but whose spawn/exit/collectable *semantics* are

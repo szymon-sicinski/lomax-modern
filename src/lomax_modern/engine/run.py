@@ -65,6 +65,7 @@ class SliceReport:
     collected: int
     collected_total: int
     clean_exit: bool
+    gnmy_entries: int
     next_level: str | None = None
 
     def format(self) -> str:
@@ -94,6 +95,9 @@ class SliceReport:
             "with the HEAD palette (slot 1) and index-0 transparency; flip "
             "pairing [H] (Q33); the geometric collision grid stays on render() "
             "as a debug path",
+            f"GNMY markers: {self.gnmy_entries} placements drawn as "
+            "type-coloured markers (position + type index only; spawn/exit/"
+            "collectable meaning unresolved, Q32)",
         ]
         return "\n".join(lines)
 
@@ -173,6 +177,7 @@ def run_slice(
         collected=len(state.entities.collected),
         collected_total=len(state.entities.collectibles),
         clean_exit=True,
+        gnmy_entries=len(level.gnmy),
         next_level=next_level,
     )
     return report, final_frame
