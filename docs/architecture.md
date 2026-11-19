@@ -223,15 +223,18 @@ tick (input, gravity, axis-separated collision, collect, exit) to a 16-bit
   assembly (`[V]`, G1 — verified against a retail render) and the flip-axis
   pairing is this decoder's convention (`[H]`, Q33) — the first is measured,
   the second is flagged, neither is invented.
-- **GNMY density markers, no semantics.** `engine.render_tiles` also overlays
-  the playfield's `GNMY` placements as small markers at their pixel `(x, y)`
-  (`engine.overlay_gnmy`), colour-coded on `type_index` only. What an entry
-  *means* (spawn/collectable/exit) is Q32 unresolved, so the markers carry
-  position + type index and nothing names them.
+- **GNMY markers by NMY name.** `engine.render_tiles` also overlays the
+  playfield's `GNMY` placements as markers at their pixel `(x, y)`
+  (`engine.overlay_gnmy`), styled by the placement's `NMY` name: `Start`
+  (spawn), `Exit` (level exit) and `Moneybag` (collectable) get distinct
+  colours and sizes `[V]` (Q32), and every other name is one grey "other type"
+  bucket — the remaining handlers are unmapped, so no per-name glyph is
+  invented. `slice`'s console digest counts the four buckets by name.
 - **Entity placement is deferred.** Spawn, collectibles and exit are explicit
-  (placeholder) in the slice; the real placements live in `GNMY`, whose entry
-  layout is verified but whose spawn/exit/collectable *semantics* are
-  unresolved (Q32).
+  (placeholder) in the slice: the engine does not consume `GNMY` placements as
+  entities yet. Which placement is which is resolved `[V]` for
+  `Start`/`Exit`/`Moneybag` (Q32); turning them into the live spawn, exit and
+  collectables is the next engine step.
 
 ## 5. Future components and where they sit
 

@@ -261,16 +261,59 @@ ground/platforms, but **not** the "walkable more than chance" signature the
 demo plan assumed, so the coordinate→walkability claim stays **[H]**. Reproduce
 with `lomax-modern gnmy <dir>`.
 
-**Spawn/exit/collectable is not resolved by this reader.** Every entry becomes
-an identical sprite instance (type + position + flags + optional extra +
-params); nothing in the `GNMY` reader distinguishes a player start, a level
-exit or a collectable. The per-type placement counts are decisive on the
-"unique type" hypothesis: 74 distinct types are referenced, and **0 appear
-exactly once per world** (or per plane) — so the player start and level exit
-are *not* a single `NMY` type. The two remaining semantic candidates are the
-2-bit flags subfield (bits 8–9 → object `+0x12`) and the optional extra word
-(bit 15 → object `+0x4`); their meanings are not visible in this reader and
-are left as [`Q32`](research/05-open-questions.md).
+**Spawn/exit/collectable is resolved by the *consumer*, not this reader
+([V], Q32 closed 2026-11-19).** The reader turns every entry into a *placement*
+node (a linked-list element; struct below), and a later pass consumes them. The
+three candidate fields resolve as follows:
+
+* **The identity is the `NMY` record's *name*, not a flag.** The `NMY` reader
+  (`0x415199`) looks up each record's name — its first four bytes, byte-swapped
+  to ASCII — in an **89-entry name table at VA `0x464650`** and stores the
+  matched index at record slot `+0x16` (`0xFFFF` when the name is not in the
+  table). A spawn pass (`0x4126A0`) then dispatches that index through a
+  **function-pointer table at VA `0x4647B8`** (89 handlers, one per type). The
+  table's four-byte names are the game's object vocabulary; the retail level
+  data uses longer names that match on the first four bytes — `Start`→`Star`
+  (index 0), `Finish`→`Fini` (1), `Exit`→`Exit` (2), `Revive`→`Revi` (3),
+  `Moneybag`→`Mone` (57). Measured across the 9 retail
+  worlds: the **player start** is the type `Start` (present in all 9, ~once per
+  plane), the **level/plane exit** is `Exit` (`Finish`/`Revive` are the
+  sibling end-of-plane and checkpoint types), and the **collectable** is
+  `Moneybag`. The earlier "0 types once-per-world" observation was a *world*-scoped
+  heuristic; a plane-based level has a `Start`/`Exit`/`Finish` per *plane*, not
+  per world.
+* **The 2-bit flags subfield (bits 8–9) is a per-instance state seed, not an
+  enum.** The spawn pass copies `(flags & 0x300) >> 8` into the live entity's
+  `+0x62`, and the type handlers read and rewrite `+0x62` as a two-bit state
+  machine (0–3) across their update loops (`Mone` reads/increments it on
+  pickup, `Lock` resets it to 3, most handlers reset it to 3 at update entry).
+* **The bit-15 extra word is an intra-plane object reference, not an enum.**
+  After a plane's list is built, a post-pass (`0x414DB7`–`0x414E13`) rewrites
+  the raw `+0x4` value by calling `0x4165F0(head, extra)`, which walks the
+  plane's placement list `extra` steps (0-based) and returns the Nth node's
+  pointer. A bit-15 placement therefore names *another placement in the same
+  plane* (a switch→door, lock→key or teleporter→destination link); which types
+  link to which stays `[H]` (per-type, needs a runtime probe or per-handler
+  read).
+
+**Placement and entity structs ([V] offsets).** A `GNMY` entry becomes a
+*placement* node — `+0x0` next, `+0x4` extra (the resolved reference), `+0x8`
+`NMY` record pointer, `+0xC`/`+0xE` x/y, `+0x10` flags, `+0x12` the 2-bit
+field, `+0x16` plane index, `+0x1A…` the `K` params — and the spawn pass
+(`0x4126A0`) turns it into a 0x120-byte *entity* keeping the record at `+0x0`,
+a back-pointer to the placement at `+0x4`, x/y at `+0x3C`/`+0x40`,
+`flags & 0xFF00` at `+0x58`, the plane at `+0x5E`, `(flags >> 10) & 7` at
+`+0x60` and the 2-bit state at `+0x62`. The in-memory `NMY` record is `+0x0`
+animation list, `+0x4` name, `+0x14` `W_A >> 8`, `+0x16` type index, `+0x18`
+`K`, `+0x1A` `W_A & 0xF`, `+0x1C` the `0x100` MAIN bank bit.
+
+**The marker overlay consumes this mapping.** `engine.overlay_gnmy` draws the
+playfield's placements styled by their `NMY` name: `Start`, `Exit` and
+`Moneybag` get distinct colours and sizes **[V]**, and every other name is one
+grey "other type" bucket — the remaining 86 names' handlers are unmapped, so no
+per-name glyph is invented for them. The engine's *simulation* still spawns at
+a placeholder passable cell and does not turn these placements into entities;
+that is a separate step, not an open question.
 
 ### 2.6 `ANIM` / sprites **[V]**
 
@@ -329,6 +372,15 @@ virtual address + file offset:
 | `NMY` reader | `0x415199` | `0x14599` |
 | `File_Read` (reads N bytes into a buffer) | `0x416A70` | `0x15E70` |
 | byte-swap (`bswap`, big-endian→little-endian) | `0x416620` | `0x15A20` |
+| spawn pass (placement → 0x120-byte entity; dispatches `record+0x16`) | `0x4126A0` | `0x11AA0` |
+| arena allocator (bump allocator for placement/entity nodes) | `0x4165D0` | `0x159D0` |
+| placement-list resolver (extra word → Nth node, 0-based) | `0x4165F0` | `0x159F0` |
+| player-spawn plane scan (finds the type-0 `Start` placement) | `0x40ED7C` | `0xE17C` |
+| player build (uses the spawn plane index) | `0x40F856` | `0xEC56` |
+| `Exit` handler (proximity → level-complete flag) | `0x427670` | `0x26A70` |
+| `Mone` handler (collectable pickup) | `0x428190` | `0x27590` |
+| name→type table (89 four-byte names) — **data** | `0x464650` | — |
+| type handler table (89 function pointers) — **data** | `0x4647B8` | — |
 
 **Call chain.** The world loader (`0x4147E0`, called from `0x40836A` and
 `0x40EC2C`) opens the world file, then loops: it reads the 8-byte chunk header
@@ -360,6 +412,19 @@ for the palette index. That these are four distinct transforms is `[V]`; calling
 `0x415686` horizontal and `0x4156A8` vertical is the decoder's convention
 (`[H]`, Q33), not a pairing measured against the game's own output. The map word
 itself is consumed elsewhere as a direct tile index (Q20).
+
+**GNMY consumer chain (Q32).** After the loader builds each plane's placement
+list, a post-pass (`0x414DB7`–`0x414E13`) resolves every bit-15 entry's raw
+`+0x4` value into a pointer to the Nth list node via `0x4165F0`. At spawn time,
+`0x4126A0` walks the lists, allocates a 0x120-byte entity per placement, copies
+the placement fields into it, and calls the type handler at
+`0x4647B8[record+0x16]` (index `−1` → `0x434060`, the unknown-name fallback).
+The player is *not* spawned from this list: a separate level-load scan
+(`0x40ED7C`) walks each plane's list for the `record+0x16 == 0` node (the
+`Start` placement), records its plane in `0x52C540`, and `0x40F856` builds the
+player struct (`0x498F1C`) from that plane — so the player start is the `Start`
+placement's *plane*, and `Start`/`Exit`/`Finish`/`Revive`/`Moneybag` are the
+spawn / exit / checkpoint / collectable types respectively (§2.5).
 
 ## 3. `SFX/*.WAV` **[V]**
 

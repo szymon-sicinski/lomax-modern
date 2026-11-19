@@ -13,6 +13,7 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Callable
 
+from ..anim_nmy import placement_role
 from .entities import Collectible, Exit, Input
 from .level import Level, load_level
 from .render import Frame, render_tiles
@@ -66,6 +67,9 @@ class SliceReport:
     collected_total: int
     clean_exit: bool
     gnmy_entries: int
+    #: Placement count per ``NMY`` role: ``start``/``exit``/``moneybag`` are
+    #: Q32 **[V]**; ``other`` is every unmapped name (one bucket, no glyph).
+    gnmy_roles: dict[str, int]
     next_level: str | None = None
 
     def format(self) -> str:
@@ -79,11 +83,13 @@ class SliceReport:
                 f"{value:#04x}:{count}" for value, count in self.collision_histogram.items()
             ),
             f"spawn: ({self.spawn[0]:.1f}, {self.spawn[1]:.1f}) px "
-            "(placeholder -- the real spawn is a GNMY entry; entry layout "
-            "verified, spawn/exit/collectable semantics unverified, Q32)",
+            "(placeholder -- the engine still spawns at the first passable "
+            "cell; the real spawn is the `Start` GNMY placement [V], which the "
+            "engine does not consume yet)",
             f"collect: {self.collected}/{self.collected_total} "
-            "(placeholder -- the real positions are GNMY entries; entry layout "
-            "verified, spawn/exit/collectable semantics unverified, Q32)",
+            "(placeholder -- entity positions are synthetic; the real "
+            "collectables are the `Moneybag` GNMY placements [V], which the "
+            "engine does not consume yet)",
             f"result: {'reached exit' if self.complete else 'did not reach exit'} "
             f"after {self.ticks} ticks",
             f"frames: {self.frames} (fixed 60 Hz: one frame per tick)",
@@ -95,9 +101,12 @@ class SliceReport:
             "with the HEAD palette (slot 1) and index-0 transparency; flip "
             "pairing [H] (Q33); the geometric collision grid stays on render() "
             "as a debug path",
-            f"GNMY markers: {self.gnmy_entries} placements drawn as "
-            "type-coloured markers (position + type index only; spawn/exit/"
-            "collectable meaning unresolved, Q32)",
+            f"GNMY markers: {self.gnmy_entries} placements drawn by NMY name "
+            f"-- start {self.gnmy_roles.get('start', 0)}, "
+            f"exit {self.gnmy_roles.get('exit', 0)}, "
+            f"moneybag {self.gnmy_roles.get('moneybag', 0)}, "
+            f"other {self.gnmy_roles.get('other', 0)} "
+            "(Start/Exit/Moneybag [V]; the other names' handlers are unmapped)",
         ]
         return "\n".join(lines)
 
@@ -162,6 +171,7 @@ def run_slice(
 
     final_frame = captured if captured is not None else render_tiles(level, state)
     next_level = worlds[1] if state.complete and len(worlds) > 1 else None
+    gnmy_roles = collections.Counter(placement_role(e.name) for e in level.gnmy)
     report = SliceReport(
         world=world_name,
         planes=len(level.sections),
@@ -178,6 +188,7 @@ def run_slice(
         collected_total=len(state.entities.collectibles),
         clean_exit=True,
         gnmy_entries=len(level.gnmy),
+        gnmy_roles=dict(gnmy_roles),
         next_level=next_level,
     )
     return report, final_frame

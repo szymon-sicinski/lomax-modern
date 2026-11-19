@@ -19,9 +19,10 @@ The recovery and evidence are recorded in ``docs/file-formats.md`` §2.5/§2.6 a
 
 Payload fields are **little-endian** (the readers use plain ``mov`` on the words;
 only the chunk header's size — and the ``HEAD``/``WRLD`` fields — are byte-swapped
-big-endian).  This module reports structure only: it never returns a type name,
-an animation tag string, pixel data or any other game content, so it is safe to
-keep in the repository.
+big-endian).  This module reports structure plus each ``NMY`` record's **name**
+(the game's object vocabulary, matched on its first four bytes — Q32); it never
+returns animation tag strings, pixel data or any other game content, so it is
+safe to keep in the repository.
 """
 
 from __future__ import annotations
@@ -130,8 +131,9 @@ class NmyAnim:
 
 @dataclass(frozen=True)
 class NmyRecord:
-    """One ``NMY`` type record (structural only; the name is never kept)."""
+    """One ``NMY`` type record (structure plus the record's name)."""
 
+    name: str  # NUL-terminated name field, forward ASCII ("Start", "Moneybag")
     flags: int  # W_A
     anim_count: int  # W_B
     anims: tuple[NmyAnim, ...]
@@ -156,6 +158,13 @@ def decode_nmy(payload: bytes) -> tuple[list[NmyRecord], int] | None:
                 count2 x 8-byte frames {u8, u8, u16, u16, u16}
             u16 count0        # next name-field size (0 = end)
 
+    ``name`` is returned as forward ASCII: the bytes on disk read ``Start``,
+    ``Exit``, ``Moneybag``.  The loader loads them as a little-endian dword and
+    compares *that* to the name table's ASCII dwords, which is what the docs'
+    "byte-swapped to ASCII" describes — the string itself is never reversed.
+    Matching uses the first four bytes, exactly as the 89-entry table does
+    (``Start`` → ``Star``, ``Moneybag`` → ``Mone``; Q32).
+
     Returns ``(records, consumed)`` on success (``consumed`` is the byte offset
     just after the terminating ``u16`` zero), or ``None`` on a malformed stream.
     """
@@ -172,6 +181,7 @@ def decode_nmy(payload: bytes) -> tuple[list[NmyRecord], int] | None:
         nul = payload.find(b"\x00", name_start)
         if nul < 0 or nul >= name_start + advance:
             return None
+        name = payload[name_start:nul].decode("ascii", errors="replace")
         pos += advance
         if pos + 6 > len(payload):
             return None
@@ -195,12 +205,36 @@ def decode_nmy(payload: bytes) -> tuple[list[NmyRecord], int] | None:
                 return None
             pos += 8 * count2
             anims.append(NmyAnim(tag, size_field, count2))
-        records.append(NmyRecord(w_a, w_b, tuple(anims)))
+        records.append(NmyRecord(name, w_a, w_b, tuple(anims)))
         if pos + 2 > len(payload):
             return None
         count0 = struct.unpack_from("<H", payload, pos)[0]
         pos += 2
     return records, pos
+
+
+#: ``NMY`` name prefixes whose ``GNMY`` placement role Q32 evidenced **[V]**.
+#: The loader matches a record's name on its first four bytes against the
+#: 89-entry name table, so ``Start``/``Moneybag`` match as ``Star``/``Mone``.
+PLACEMENT_ROLES: dict[str, str] = {
+    "Star": "start",
+    "Exit": "exit",
+    "Mone": "moneybag",
+}
+
+
+def placement_role(name: str | None) -> str:
+    """The evidenced role of a ``GNMY`` placement from its ``NMY`` name.
+
+    Returns ``"start"``, ``"exit"`` or ``"moneybag"`` for the three roles Q32
+    resolved, and ``"other"`` for everything else — a missing/unknown name, a
+    name whose handler is unmapped, or a documented sibling this overlay does
+    not distinguish.  Matching is on the four-byte table prefix
+    (:data:`PLACEMENT_ROLES`), never on the whole string.
+    """
+    if not name:
+        return "other"
+    return PLACEMENT_ROLES.get(name[:4], "other")
 
 
 # ---------------------------------------------------------------------------
@@ -228,6 +262,10 @@ class GnmyEntry:
       values, ``K = (NMY record's W_A >> 4) & 0xF``.
     * ``extra`` **[V structure, H meaning]** — present iff ``flags & 0x8000``,
       stored to object ``+0x4``.
+    * ``name`` **[V]** — the ``NMY`` record's name, resolved by
+      :func:`lomax_modern.engine.level.load_level` from ``type_index`` (Q32).
+      :func:`decode_gnmy` leaves it ``None`` because it never reads the
+      ``NMY`` table itself.
     """
 
     size: int  # total entry length in bytes, as stored (0 terminates the list)
@@ -237,6 +275,7 @@ class GnmyEntry:
     flags: int  # bit 15 = extra u16 follows; bits 8-9 = a 2-bit subfield
     params: tuple[int, ...]  # K per-animation u16 values, K = (W_A >> 4) & 0xF
     extra: int | None  # present iff flags & 0x8000
+    name: str | None = None  # NMY record name (resolved by load_level, Q32)
 
     @property
     def structural_size(self) -> int:

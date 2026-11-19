@@ -157,15 +157,15 @@ playfield: 305x24 cells (4880x384 px)
 collision: byte 0 = passable, non-zero = solid [H]; per-value semantics (material/one-way/hazard) unresolved (Q31); the documented [D] bit-field is retracted
 collision-byte histogram (value: count): 0x00:5364, 0x01:774, 0x02:2, ... 0xff:1
                                           (256 entries elided here; the script prints them all)
-spawn: (0.0, 0.0) px (placeholder -- the real spawn is a GNMY entry; entry layout verified, spawn/exit/collectable semantics unverified, Q32)
-collect: 0/0 (placeholder -- the real positions are GNMY entries; entry layout verified, spawn/exit/collectable semantics unverified, Q32)
+spawn: (0.0, 0.0) px (placeholder -- the engine still spawns at the first passable cell; the real spawn is the `Start` GNMY placement [V], which the engine does not consume yet)
+collect: 0/0 (placeholder -- entity positions are synthetic; the real collectables are the `Moneybag` GNMY placements [V], which the engine does not consume yet)
 result: did not reach exit after 120 ticks
 frames: 120 (fixed 60 Hz: one frame per tick)
 final position: (180.0, 178.0) px
 next level: none (end of sequence or exit not reached)
 exit: clean
 tile art: composed -- map cell -> tile record resolved (Q20), each record blitted as four CELLs in 2x2 column-major order (V, G1) with the HEAD palette (slot 1) and index-0 transparency; flip pairing [H] (Q33); the geometric collision grid stays on render() as a debug path
-GNMY markers: 32 placements drawn as type-coloured markers (position + type index only; spawn/exit/collectable meaning unresolved, Q32)
+GNMY markers: 32 placements drawn by NMY name -- start 1, exit 1, moneybag 0, other 30 (Start/Exit/Moneybag [V]; the other names' handlers are unmapped)
 frames: 120 PNGs in demo-out/frames (frame_0000.png .. frame_0119.png)
 ```
 
@@ -173,9 +173,15 @@ frames: 120 PNGs in demo-out/frames (frame_0000.png .. frame_0119.png)
 no display, no window, no `LOMAX.EXE` — and writing one `frame_0000.png` …
 `frame_0119.png` per tick, so the movement is on disk instead of in one final
 still. Each frame is the composed tile art with the playfield's 32 `GNMY`
-placements overlaid as small type-coloured markers — position and type index
-only, since what a placement *means* (spawn/collectable/exit) is still
-unresolved (`Q32`).
+placements overlaid as markers styled by the placement's `NMY` name: `Start`
+(white 7×7), `Exit` (green 5×5) and `Moneybag` (orange 3×3) are distinct, and
+every other name is a grey 3×3 "other type" bucket (Q32 **[V]**; the remaining
+handlers are unmapped, so no glyph is invented for them). VILLAGE's playfield
+carries a `Start` and an `Exit` but no `Moneybag` placement in any of its
+planes, so the collectable count is 0 here — that is the data, not a missing
+decode. The `Start` marker is visible in the opening frames and the `Exit`
+marker only near the level's end (`--ticks 3000`), when the camera has
+scrolled that far.
 
 ## 5. `gif` — the frame sequence as one looping animation
 

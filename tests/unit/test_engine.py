@@ -430,26 +430,24 @@ def test_run_slice_reports_ticks_and_clean_exit(tmp_path) -> None:
     assert "resolved (Q20)" in text
     assert "unresolved (Q20)" not in text
     assert "retracted" in text
-    # Q23 (the NMY framing) and the GNMY entry layout are answered; the
-    # spawn/collect placeholders must blame only the Q32 semantics, never the
-    # layout, the position or the index mapping.
-    assert "the real spawn is a GNMY entry" in text
-    assert "the real positions are GNMY entries" in text
-    assert (
-        text.count("entry layout verified, spawn/exit/collectable semantics unverified, Q32")
-        == 2
-    )
+    # Q32 is answered: the spawn/collect placeholders now name the evidenced
+    # roles (Start/Exit/Moneybag) instead of blaming an open question.
+    assert "the real spawn is the `Start` GNMY placement [V]" in text
+    assert "the real collectables are the `Moneybag` GNMY placements [V]" in text
+    assert "does not consume" in text
+    assert "Start/Exit/Moneybag [V]" in text
     assert "Q23" not in text
     assert "entry meaning unverified" not in text
     assert "semantics unresolved" not in text
 
 
-def test_new_game_state_docstring_grades_gnmy_entry_meaning() -> None:
-    """The docstring must keep the verified layout and flag only Q32."""
+def test_new_game_state_docstring_states_the_resolved_roles() -> None:
+    """The docstring must record Q32's answer and that the engine defers it."""
     doc = new_game_state.__doc__ or ""
-    assert "entry layout is verified" in doc
     assert "Q32" in doc
-    assert "unverified" in doc
+    assert "Start" in doc and "Exit" in doc and "Moneybag" in doc
+    assert "does not consume" in doc
+    assert "entry layout is verified" in doc
     assert "what its ``u16 size`` spans" not in doc
     assert "Q23" not in doc
     assert "unresolved" not in doc

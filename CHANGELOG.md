@@ -8,6 +8,18 @@ Versioning: [Semantic Versioning](https://semver.org/).
 
 ### Added
 
+- GNMY markers now consume the `NMY` name Q32 resolved. `decode_nmy` returns
+  each record's `name` and `load_level` attaches it to every placement
+  (`GnmyEntry.name`); `engine.overlay_gnmy` styles `Start` (white 7×7),
+  `Exit` (green 5×5) and `Moneybag` (orange 3×3) distinctly, and every other
+  name falls into one grey 3×3 "other type" bucket — no glyph is invented for
+  the remaining 86 names. `slice`'s digest counts the four buckets by name.
+  The stale "Q32 unresolved" wording in `engine/run.py`, `engine/state.py`,
+  `engine/render.py`, `engine/level.py`, `docs/architecture.md` and
+  `docs/demo.md` is replaced with the resolved statement, and the
+  tracked-stale paragraph in `docs/file-formats.md` §2.5 is gone. Measured on
+  the retail install: VILLAGE carries `Start` 3 / `Exit` 1 / `Moneybag` 0
+  across its 15 planes, so its opening playfield shows no collectable marker.
 - `docs/roadmap/45-playable-level-plan.md` — the plan + budget for the next
   milestone, **one level fully playable** (C-playable): the scope table, a
   seven-card decomposition (NMY-name role classifier → Level semantics → input
@@ -70,6 +82,17 @@ Versioning: [Semantic Versioning](https://semver.org/).
   coordinates (3,584/3,593 on-map) — recovered from the reader at VA `0x414D16`
   (file offset `0x14116`) in `LOMAX.EXE` and validated on all 104 retail chunks
   (`docs/file-formats.md` §2.5). Read-only; accepts `$LOMAX_GAME_DIR`.
+- Q32 resolved (`docs/file-formats.md` §2.5/§2.8, `docs/research/05-open-questions.md`):
+  the `GNMY` flags' 2-bit subfield and bit-15 extra word are **not** a
+  spawn/collectable/exit enum. Tracing their consumer in `LOMAX.EXE` shows the
+  identity is the `NMY` record's **name**, resolved through an 89-entry name
+  table (VA `0x464650`) to a per-type handler (VA `0x4647B8`, dispatched by the
+  spawn pass at `0x4126A0`): `Start` is the player spawn (found by the level-load
+  scan at `0x40ED7C`), the level/plane exit is `Exit` (`0x427670`; `Finish`/
+  `Revive` are the end-of-plane and checkpoint types), `Moneybag` the collectable
+  (`0x428190`). The 2-bit field seeds a
+  per-instance 2-bit state (entity `+0x62`); the extra word is an intra-plane
+  object reference (rewritten to the Nth list node's pointer by `0x4165F0`).
 - `docs/roadmap/44-presenter-options.md` scopes the window presenter for demo
   option C: the minimum window, a ranked option table (default **ctypes + SDL2**,
   ≈$0.50 for 3 cards / ≈$0.66 for 4 with `epx-aa` parity), and the blit spike

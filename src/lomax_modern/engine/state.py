@@ -159,14 +159,15 @@ def new_game_state(
 ) -> GameState:
     """Build a fresh state; ``spawn`` defaults to the top-left passable cell.
 
-    The default spawn is a placeholder: the real spawn lives in the ``GNMY``
-    placements.  The ``GNMY`` entry layout is verified, including the position:
-    ``docs/file-formats.md`` §2.5 grades ``size``/``type``/``x``/``y`` all [V]
-    (``size`` is the entry's structural length, ``x``/``y`` are pixel
-    coordinates), and the type index -> ``NMY`` record mapping is [V] too.
-    What remains unverified is the *semantics*: which entry is the player start,
-    which is the level exit, and which is a collectable (Q32 in
-    ``docs/research/05-open-questions.md``), so the spawn stays a placeholder.
+    The default spawn is a placeholder: the engine still spawns at the first
+    passable cell and does not consume ``GNMY`` placements yet.  Their
+    semantics are resolved (Q32, ``docs/file-formats.md`` §2.5) **[V]**: the
+    player start is the ``Start`` placement, the level exit is ``Exit`` and the
+    collectable is ``Moneybag``, each matched on the ``NMY`` record's four-byte
+    name prefix.  The entry layout is verified, including the position
+    (``size``/``type``/``x``/``y`` are all [V]).  What is *not* done here is
+    turning those placements into entities — until a caller does, it supplies
+    ``spawn_x``/``spawn_y`` and the entity lists explicitly.
     """
     if spawn_x is None or spawn_y is None:
         sx, sy = first_passable_cell(level)
