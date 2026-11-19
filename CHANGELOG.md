@@ -63,6 +63,17 @@ Versioning: [Semantic Versioning](https://semver.org/).
   resolves one level of nesting, `doctor` matches retail names exactly,
   `measure` globs worlds recursively but probes folders at the root, `slice`
   expects `WORLDS/VILLAGE.WLD` literally.
+- Re-graded the caveats the CLI prints instead of calling `Q23`/`Q24`
+  unresolved: `art export` now reports `sprite frames: not exported`
+  (sprite-frame export is not implemented) and notes that the `ANIM` record
+  layout is verified 566/566 (`docs/file-formats.md` §2.6); the `slice`/`present`
+  spawn and collect lines and the `new_game_state` docstring now state that the
+  `GNMY` entry layout is verified — `size`/`type`/`x`/`y` all [V], with `size`
+  the entry length and `x`/`y` pixel coordinates (§2.5) — and only the
+  spawn/exit/collectable *semantics* are unverified (`Q32` in
+  `docs/research/05-open-questions.md`). The placeholder spawn itself is
+  unchanged. `wldscan` and `measure` docstrings no longer describe the `ANIM`
+  layout as unknown or unmeasured — those modules simply do not decode it.
 
 ### Fixed
 

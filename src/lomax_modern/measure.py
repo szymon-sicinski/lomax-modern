@@ -15,7 +15,9 @@ install, 2026-11-16, and reproducible with ``lomax-modern measure``):
 * ``CELL`` payloads are a whole number of 64-byte 8x8 cells.
 
 Anything beyond that — ``ANIM`` record layout, ``GNMY`` type names, palette
-indexing — is reported as an observation, never as a format.
+indexing — is not decoded by *this* module: it is reported as an observation,
+never as a format.  The framings themselves live in ``docs/file-formats.md``
+§2.5-§2.6 and are verified there, not here.
 """
 
 from __future__ import annotations

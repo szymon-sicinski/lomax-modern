@@ -439,7 +439,12 @@ def test_export_world_writes_sheets_and_reports_unresolved_links(tmp_path) -> No
 
     # The map -> tile link is unknown, and must say so (Q20).
     assert "map cell -> tile record: unresolved (Q20)" in text
-    assert "sprite frames: unresolved (Q24" in text
+    # The ANIM layout is verified (Q24 answered): the missing sheet is an
+    # unimplemented feature, and the report must not call the layout unknown.
+    assert "sprite frames: not exported" in text
+    assert "the ANIM record layout is verified" in text
+    assert "Q24" not in text
+    assert "layout unknown" not in text
     # No invented per-level tile count.
     assert all("unique" not in line or "no unique-tile count" in line for line in report.lines)
     # The palette slot choice is labelled a hypothesis, not a fact.
