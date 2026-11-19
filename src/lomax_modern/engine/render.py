@@ -3,8 +3,10 @@
 :func:`render_tiles` composes the visible tile art: it walks the visible
 ``MAP`` cells, resolves each ``tile_word`` to a ``TTAB`` record, blits the
 record's four ``CELL`` blocks (flips applied) with the ``HEAD`` palette and
-index-0 transparency into the 320x240 viewport, and overlays the player marker
-so the camera-follow and scrolling are visible.  :func:`render` remains the
+index-0 transparency into the 320x240 viewport, overlays the playfield's
+``GNMY`` placements as type-coloured density markers (position + ``type_index``
+only, Q32 unresolved), and finally the player marker so the camera-follow and
+scrolling are visible.  :func:`render` remains the
 *geometric* debug path: every non-zero collision cell is drawn in one colour
 and the player/entities as markers, with the unresolved bits (Q31) flagged in
 the report rather than painted.
@@ -67,6 +69,30 @@ COLOUR_SOLID = pack_rgb565(200, 200, 200)
 COLOUR_PLAYER = pack_rgb565(255, 220, 0)
 COLOUR_COLLECTIBLE = pack_rgb565(255, 140, 0)
 COLOUR_EXIT = pack_rgb565(0, 220, 0)
+
+#: Marker hues for GNMY placement markers, keyed on ``type_index`` modulo the
+#: table length.  The *meaning* of a ``GNMY`` type index (spawn/collectable/exit)
+#: is **Q32 unresolved** — these colours key the raw index only, so two entries
+#: whose indices are congruent modulo 8 share a colour.  Purely diagnostic.
+GNMY_MARKER_COLOURS = (
+    pack_rgb565(255, 0, 0),  # type_index % 8 == 0
+    pack_rgb565(0, 220, 0),  # == 1
+    pack_rgb565(0, 96, 255),  # == 2
+    pack_rgb565(255, 255, 0),  # == 3
+    pack_rgb565(255, 0, 255),  # == 4
+    pack_rgb565(0, 255, 255),  # == 5
+    pack_rgb565(255, 128, 0),  # == 6
+    pack_rgb565(160, 0, 255),  # == 7
+)
+
+
+def gnmy_type_colour(type_index: int) -> int:
+    """A distinct ``B5G6R5`` marker colour for a ``GNMY`` ``type_index`` (Q32).
+
+    Deterministic and purely a function of the index — the colour carries no
+    meaning beyond "these entries share a type index".
+    """
+    return GNMY_MARKER_COLOURS[type_index % len(GNMY_MARKER_COLOURS)]
 
 
 @dataclass
@@ -164,6 +190,28 @@ def render(
     return frame
 
 
+def overlay_gnmy(
+    frame: Framebuffer,
+    entries,
+    cam_x: int,
+    cam_y: int,
+) -> None:
+    """Draw one small marker per ``GNMY`` placement, coloured by ``type_index``.
+
+    ``entries`` are the playfield plane's :class:`lomax_modern.anim_nmy.GnmyEntry`
+    placements; each is drawn as a small 3x3 marker centred on its pixel
+    ``(x, y)``, camera-relative (``cam_x``/``cam_y`` are the viewport top-left
+    in level pixels).  Position and ``type_index`` only: what an entry *means*
+    (spawn/collectable/exit) is **Q32 unresolved**, so nothing here attaches
+    semantics.  A marker whose centre is off the viewport is clipped by the
+    buffer, not drawn.
+    """
+    for entry in entries:
+        sx = entry.x - cam_x
+        sy = entry.y - cam_y
+        frame.fill_rect(sx - 1, sy - 1, 3, 3, gnmy_type_colour(entry.type_index))
+
+
 def render_tiles(
     level: Level,
     state: GameState,
@@ -180,9 +228,10 @@ def render_tiles(
 
     The backdrop (transparent regions) is :data:`COLOUR_SKY`, a placeholder:
     the real parallax/sky layer is a separate plane this card does not draw.
-    The player marker is overlaid last so camera-follow and scrolling are
-    visible; no collectible/exit/GNMY markers are drawn here (that is a
-    separate density card).
+    The playfield's ``GNMY`` placements are overlaid as type-coloured density
+    markers (position + ``type_index`` only, Q32 unresolved — no
+    spawn/collectable/exit meaning is attached), then the player marker is
+    overlaid last so camera-follow and scrolling stay visible.
     """
     vw, vh = viewport
     cam_x, cam_y = camera(level, state.player, vw, vh)
@@ -209,6 +258,8 @@ def render_tiles(
                     cell_y * CELL_PX - cam_y,
                     layout="2x2",
                 )
+
+    overlay_gnmy(fb, level.gnmy, cam_x, cam_y)
 
     sx = int(state.player.x) - cam_x
     sy = int(state.player.y) - cam_y

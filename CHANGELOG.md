@@ -48,6 +48,14 @@ Versioning: [Semantic Versioning](https://semver.org/).
   `present`/`slice` frames) now emit tile art instead of the grey collision
   grid; `engine.render` stays as the geometric debug path. The 2x2 tile cell
   order (`[H]`, G1) and the flip-axis pairing (`[H]`, Q33) remain flagged.
+- `engine.overlay_gnmy` + `gnmy_type_colour` — the GNMY density markers: the
+  tile-art frame now overlays one small marker per `GNMY` placement at its
+  pixel `(x, y)`, colour-coded on `type_index` only (position + type index, no
+  semantics — what an entry *means* is Q32 unresolved, so nothing names a
+  spawn/collectable/exit). `load_level` decodes the playfield plane's `GNMY`
+  chunk into `Level.gnmy`; `slice` reports the marker count. 6 synthetic unit
+  tests + 1 opt-in real-install test (in-view marker count matches the
+  independently decoded placement count).
 - `gnmy` command: decodes the recovered `GNMY` entry layout (`u16 size/type/x/y/
   flags` + `K` params + optional extra) and reports the placement correlation —
   3,593 entries, `size == structural length` on 3,593/3,593, `x`/`y` as pixel
