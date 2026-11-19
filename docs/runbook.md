@@ -150,7 +150,7 @@ How to read it:
 | Line | Meaning |
 |---|---|
 | `world` | which `*.WLD` was loaded (`--world NAME` to pick another; default is `VILLAGE` when present, else the first file) |
-| `engine` | fixed 60 Hz tick count, frames produced, whether the placeholder exit was reached in `--ticks` |
+| `engine` | fixed 60 Hz tick count, frames produced, whether the `Exit` placement was reached in `--ticks` |
 | `profile` | modern (default) or authentic |
 | `filter` | `epx-aa` or `nearest`; switchable per run with `--filter` |
 | `source` / `surface` | the engine frame is **always** 320x240; `surface` is the presentation size |
@@ -161,10 +161,12 @@ How to read it:
 **A window now ships.** `present` computes the padded surface (and can write it
 as a PNG with `--frame`, or one PNG per tick with `--frames N --out DIR`);
 `lomax-modern window "<install>"` opens a live SDL2 window that letterboxes the
-engine frame and prints a HUD (`--seconds N`, `--world NAME`,
-`--modern`/`--authentic`). The native Win32/C presenter (packaging) is still
-future (`docs/architecture.md` §5). `present` is a presentation pipeline, not
-a game you can play with the keyboard — see §5.
+engine frame and prints a one-line HUD — `fps`, plane name, tile count, camera
+and `collect N/M`, the `Moneybag`s picked up over those on the playfield
+(`0/0` on a world with no `Moneybag` placement) — with `--seconds N`,
+`--world NAME`, `--modern`/`--authentic`. The native Win32/C presenter
+(packaging) is still future (`docs/architecture.md` §5). `present` is a
+presentation pipeline, not a game you can play with the keyboard — see §5.
 
 ## 5. Controls
 

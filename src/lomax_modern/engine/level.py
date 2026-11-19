@@ -17,7 +17,7 @@ from dataclasses import dataclass, replace
 from pathlib import Path
 
 from .. import art, wld
-from ..anim_nmy import GnmyEntry, decode_gnmy, decode_nmy
+from ..anim_nmy import GnmyEntry, decode_gnmy, decode_nmy, placement_role
 
 #: A ``MAP`` cell is a 16x16-pixel block (``docs/file-formats.md`` §2.4).
 CELL_PX = 16
@@ -113,6 +113,38 @@ class Level:
 
     def passable(self, cell_x: int, cell_y: int) -> bool:
         return not self.solid_at(cell_x, cell_y)
+
+    @property
+    def spawn(self) -> tuple[int, int] | None:
+        """Pixel ``(x, y)`` of the playfield's ``Start`` placement (Q32 **[V]**).
+
+        ``None`` when the plane carries no ``Start`` placement (or its ``NMY``
+        table is missing), in which case a caller falls back to the first
+        passable cell.  A level has at most one spawn; if several ``Start``
+        placements exist the first in file order wins.
+        """
+        for entry in self.gnmy:
+            if placement_role(entry.name) == "start":
+                return entry.x, entry.y
+        return None
+
+    @property
+    def collectables(self) -> tuple[tuple[int, int], ...]:
+        """Pixel ``(x, y)`` of every ``Moneybag`` placement, in file order."""
+        return tuple(
+            (entry.x, entry.y)
+            for entry in self.gnmy
+            if placement_role(entry.name) == "moneybag"
+        )
+
+    @property
+    def exits(self) -> tuple[tuple[int, int], ...]:
+        """Pixel ``(x, y)`` of every ``Exit`` placement, in file order."""
+        return tuple(
+            (entry.x, entry.y)
+            for entry in self.gnmy
+            if placement_role(entry.name) == "exit"
+        )
 
 
 def _decode_gnmy_per_plane(world: wld.World) -> tuple[tuple[GnmyEntry, ...], ...]:
