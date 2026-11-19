@@ -8,6 +8,14 @@ Versioning: [Semantic Versioning](https://semver.org/).
 
 ### Added
 
+- `docs/roadmap/45-playable-level-plan.md` — the plan + budget for the next
+  milestone, **one level fully playable** (C-playable): the scope table, a
+  seven-card decomposition (NMY-name role classifier → Level semantics → input
+  → `play` loop → sprite → physics → HUD, one reviewer pass each, one lead
+  synthesis), and the cost — **15 cards ≈ $2.48 off-peak** (high ≈$3.50, delta
+  ≈ +$0.99–$1.49 over the shipped C-animated). It prices the loop
+  `43-demo-plan.md` §6.2 had to leave open, now that Q32 is answered (the
+  `GNMY` identity is the `NMY` name, not the flags).
 - `lomax_modern.sdl_window` — the SDL2 window backend, first half of demo
   option C's presentation half: `open_window` opens a window at the configured
   surface, uploads a 320×240 `B5G6R5` buffer to an `SDL_PIXELFORMAT_RGB565`
