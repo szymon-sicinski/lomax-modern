@@ -73,6 +73,13 @@ Versioning: [Semantic Versioning](https://semver.org/).
   (`0x428190`). The 2-bit field seeds a
   per-instance 2-bit state (entity `+0x62`); the extra word is an intra-plane
   object reference (rewritten to the Nth list node's pointer by `0x4165F0`).
+- `anim_nmy.NmyRecord.name` + `anim_nmy.role(name)`: `decode_nmy` now surfaces
+  each record's `name` (the NUL-terminated name decoded to ASCII), and the pure
+  classifier `role(name)` maps its first four bytes to the Q32 identity —
+  `Star`→`start`, `Exit`→`exit`, `Fini`→`finish`, `Revi`→`revive`,
+  `Mone`→`moneybag`, anything else (including a shorter name) `unknown` — so
+  `Start`/`Moneybag` resolve through their `Star`/`Mone` prefixes. Structure
+  only, no pixel decode; the name is a four-byte fact, not a copied string table.
 - `docs/roadmap/44-presenter-options.md` scopes the window presenter for demo
   option C: the minimum window, a ranked option table (default **ctypes + SDL2**,
   ≈$0.50 for 3 cards / ≈$0.66 for 4 with `epx-aa` parity), and the blit spike

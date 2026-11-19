@@ -19,9 +19,11 @@ The recovery and evidence are recorded in ``docs/file-formats.md`` §2.5/§2.6 a
 
 Payload fields are **little-endian** (the readers use plain ``mov`` on the words;
 only the chunk header's size — and the ``HEAD``/``WRLD`` fields — are byte-swapped
-big-endian).  This module reports structure only: it never returns a type name,
-an animation tag string, pixel data or any other game content, so it is safe to
-keep in the repository.
+big-endian).  The only *content* this module reports is an ``NMY`` record's name
+— a short ASCII identifier whose first four bytes are the object's identity
+(Q32, ``docs/file-formats.md`` §2.5), surfaced as a fact, never as a copied
+string table.  It never returns pixel data, a decoded animation tag or any
+other game content, so it is safe to keep in the repository.
 """
 
 from __future__ import annotations
@@ -130,8 +132,15 @@ class NmyAnim:
 
 @dataclass(frozen=True)
 class NmyRecord:
-    """One ``NMY`` type record (structural only; the name is never kept)."""
+    """One ``NMY`` type record (structural fields plus the record name).
 
+    ``name`` is the NUL-terminated name decoded to ASCII.  Its first four bytes
+    are the object's identity (Q32, ``docs/file-formats.md`` §2.5): the retail
+    data uses longer names that match on those four bytes (``Start``→``Star``,
+    ``Moneybag``→``Mone``, ...), which :func:`role` classifies.
+    """
+
+    name: str
     flags: int  # W_A
     anim_count: int  # W_B
     anims: tuple[NmyAnim, ...]
@@ -144,7 +153,7 @@ def decode_nmy(payload: bytes) -> tuple[list[NmyRecord], int] | None:
 
         u16 count0            # name-field size; 0 terminates the table
         repeat:
-            name (NUL-terminated, skipped by (count0>>1)*2 bytes)
+            name (NUL-terminated ASCII; the reader skips (count0>>1)*2 bytes)
             u16 W_A           # flags word
             u16 W_B           # animation count
             u16 gap1          # 2 bytes, not read (always 0 in retail data)
@@ -157,7 +166,8 @@ def decode_nmy(payload: bytes) -> tuple[list[NmyRecord], int] | None:
             u16 count0        # next name-field size (0 = end)
 
     Returns ``(records, consumed)`` on success (``consumed`` is the byte offset
-    just after the terminating ``u16`` zero), or ``None`` on a malformed stream.
+    just after the terminating ``u16`` zero; each record's ``name`` is the
+    decoded NUL-terminated name), or ``None`` on a malformed stream.
     """
     if len(payload) < 2:
         return None
@@ -172,6 +182,7 @@ def decode_nmy(payload: bytes) -> tuple[list[NmyRecord], int] | None:
         nul = payload.find(b"\x00", name_start)
         if nul < 0 or nul >= name_start + advance:
             return None
+        name = payload[name_start:nul].decode("ascii")
         pos += advance
         if pos + 6 > len(payload):
             return None
@@ -195,12 +206,37 @@ def decode_nmy(payload: bytes) -> tuple[list[NmyRecord], int] | None:
                 return None
             pos += 8 * count2
             anims.append(NmyAnim(tag, size_field, count2))
-        records.append(NmyRecord(w_a, w_b, tuple(anims)))
+        records.append(NmyRecord(name, w_a, w_b, tuple(anims)))
         if pos + 2 > len(payload):
             return None
         count0 = struct.unpack_from("<H", payload, pos)[0]
         pos += 2
     return records, pos
+
+
+#: ``name[:4]`` → role, the Q32 identity prefixes (docs/file-formats.md §2.5).
+_ROLE_OF_PREFIX: dict[str, str] = {
+    "Star": "start",
+    "Exit": "exit",
+    "Fini": "finish",
+    "Revi": "revive",
+    "Mone": "moneybag",
+}
+
+
+def role(name: str) -> str:
+    """Classify an ``NMY`` record name by its four-byte prefix (Q32).
+
+    The spawn/collectable/exit identity is the record's name resolved through
+    an 89-entry name table (``docs/file-formats.md`` §2.5).  Retail data uses
+    longer names that match on the first four bytes — ``Start``→``Star`` (player
+    spawn), ``Finish``→``Fini`` (end-of-plane), ``Exit``→``Exit`` (level exit),
+    ``Revive``→``Revi`` (checkpoint), ``Moneybag``→``Mone`` (collectable).
+
+    Returns ``"start"``, ``"exit"``, ``"finish"``, ``"revive"``, ``"moneybag"``
+    or ``"unknown"`` (any other name, including one shorter than four bytes).
+    """
+    return _ROLE_OF_PREFIX.get(name[:4], "unknown")
 
 
 # ---------------------------------------------------------------------------

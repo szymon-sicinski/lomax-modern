@@ -4,7 +4,14 @@ from __future__ import annotations
 
 import struct
 
-from lomax_modern.anim_nmy import decode_anim, decode_gnmy, decode_nmy, probe_anim_nmy, probe_gnmy
+from lomax_modern.anim_nmy import (
+    decode_anim,
+    decode_gnmy,
+    decode_nmy,
+    probe_anim_nmy,
+    probe_gnmy,
+    role,
+)
 from tests.fixtures.synth import (
     anim_payload,
     build_container,
@@ -100,6 +107,44 @@ def test_nmy_non_nul_terminated_name_rejected() -> None:
     # name field with no NUL inside the skipped bytes
     payload = struct.pack("<H", 8) + b"ABCDEFGH" + b"\x00\x00\x00\x00"
     assert decode_nmy(payload) is None
+
+
+def test_nmy_record_carries_its_name() -> None:
+    payload = nmy_payload([("Start", 0), ("Moneybag", 1)], trailer=2)
+    records, consumed = decode_nmy(payload)
+    assert records is not None
+    assert [r.name for r in records] == ["Start", "Moneybag"]
+    assert len(payload) - consumed == 2
+
+
+def test_role_maps_documented_prefixes() -> None:
+    assert role("Star") == "start"
+    assert role("Exit") == "exit"
+    assert role("Fini") == "finish"
+    assert role("Revi") == "revive"
+    assert role("Mone") == "moneybag"
+
+
+def test_role_longer_name_uses_first_four_bytes() -> None:
+    # a name longer than four bytes resolves through its four-byte prefix
+    assert role("Start") == "start"  # "Star"
+    assert role("Moneybag") == "moneybag"  # "Mone"
+    assert role("Finish") == "finish"  # "Fini"
+    assert role("Revive") == "revive"  # "Revi"
+
+
+def test_role_unknown_and_short_names() -> None:
+    assert role("ScrollMap") == "unknown"
+    assert role("Pots") == "unknown"
+    assert role("") == "unknown"
+    assert role("Ex") == "unknown"
+
+
+def test_decode_nmy_names_classify_end_to_end() -> None:
+    # unknown + longer-than-four-byte names in one synthetic payload
+    payload = nmy_payload([("Start", 0), ("Moneybag", 0), ("Pots", 0)], trailer=2)
+    records, _ = decode_nmy(payload)
+    assert [role(r.name) for r in records] == ["start", "moneybag", "unknown"]
 
 
 # ---------------------------------------------------------------------------
