@@ -1,9 +1,10 @@
 # 44. Window presenter — options, effort and the spike that settles it
 
-[`43-demo-plan.md`](43-demo-plan.md) refuses to price demo option **C** (playable
-demo) because its presentation half has no measured basis: today `present`
-renders a frame and writes a PNG, and [`../architecture.md`](../architecture.md)
-§5 marks the Win32/C presenter as "future" without saying what it would take.
+[`43-demo-plan.md`](43-demo-plan.md) **refused** to price demo option **C** (playable
+demo) because its presentation half had no measured basis: `present` rendered a
+frame and wrote a PNG, and [`../architecture.md`](../architecture.md) §5 marked the
+Win32/C presenter as "future" without saying what it would take. This note supplied
+that missing half — §6.1 of the demo plan now prices the window row against it.
 This note replaces that blank with a scoped, optioned estimate of **the window
 only** — not menus, not audio sync, not the controller (that is M5) — so `lead`
 can cost C's presentation half honestly in the successor card.
