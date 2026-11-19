@@ -94,7 +94,10 @@ def test_export_one_world_writes_sheets(tmp_path) -> None:
     print(text)
 
     assert "map cell -> tile record: resolved" in text
-    assert "sprite frames: unresolved (Q24" in text
+    # Q24 (the ANIM layout) is answered; the sheet is missing because
+    # sprite-frame export is not implemented, not because the layout is open.
+    assert "sprite frames: not exported" in text
+    assert "Q24" not in text
     assert report.files and all(p.is_file() and p.stat().st_size > 0 for p in report.files)
     for sheet in report.files:
         assert sheet.read_bytes().startswith(png.SIGNATURE)

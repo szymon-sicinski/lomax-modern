@@ -467,11 +467,21 @@ def test_export_world_writes_sheets_and_reports_resolved_links(tmp_path) -> None
     # The map -> tile link is known: a map word is a direct TTAB record index.
     assert "map cell -> tile record: resolved" in text
     assert "direct TTAB record index (Q20)" in text
-    assert "sprite frames: unresolved (Q24" in text
+    assert "unresolved (Q20)" not in text
+    # The ANIM layout is verified (Q24 answered): the missing sheet is an
+    # unimplemented feature, and the report must not call the layout unknown.
+    assert "sprite frames: not exported" in text
+    assert "the ANIM record layout is verified" in text
+    assert "Q24" not in text
+    assert "layout unknown" not in text
     # The corrected 16-byte TTAB framing, not the retired 8-byte stride.
     assert "records of 16 B" in text
-    # The palette slot choice now points at the flag word's bits 8-11 (Q8).
+    # The palette slot choice now points at the flag word's bits 8-11 (Q8),
+    # and is still labelled a hypothesis, not a fact.
     assert "flag words name slots in bits 8-11" in text
+    assert "hypothesis H" in text and "Q8" in text
+    # No invented per-level tile count.
+    assert all("unique" not in line or "no unique-tile count" in line for line in report.lines)
     # Nothing that looks like a file digest.
     assert not re.search(r"[0-9a-f]{64}", text)
 
