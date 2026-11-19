@@ -299,7 +299,7 @@ class Framebuffer:
         """Draw a ``TTAB`` record as its four cells, in ``layout`` order.
 
         ``"strip"`` places the four cells side by side (stored order, 32x8);
-        ``"2x2"`` assembles the documented 16x16 tile (cell order ``[H]``).
+        ``"2x2"`` assembles the 16x16 tile in **column-major** order (``[V]``).
         Each cell honours its flag word's flip; a cell index outside the bank
         is left empty (background), never repaired.
         """
@@ -311,8 +311,11 @@ class Framebuffer:
             if layout == "strip":
                 dx, dy = slot * CELL_PIXELS, 0
             else:
-                dx = (slot % 2) * CELL_PIXELS
-                dy = (slot // 2) * CELL_PIXELS
+                # Column-major: slot 0/1 fill the left column, 2/3 the right.
+                # Verified against a retail render -- row-major produces visible
+                # vertical striping because cells from different columns meet.
+                dx = (slot // 2) * CELL_PIXELS
+                dy = (slot % 2) * CELL_PIXELS
             self.blit_cell(
                 cells[cell_slot.index],
                 palette,

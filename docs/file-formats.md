@@ -148,6 +148,13 @@ measurement settles); every count below is reproduced by that command.
   same pairing (`art.py`, `renderer.py`, `native/renderer.h`), but that pairing
   is a convention: nothing has compared a render of a flagged tile against the
   game. Only "bits 13–14 flip the cell" is measured. The pairing is Q33.
+- **Cell order inside a record [V, G1]**: the four cells assemble **column-major**
+  — slot 0 top-left, slot 1 bottom-left, slot 2 top-right, slot 3 bottom-right.
+  Measured by rendering a retail plane both ways: row-major produces visible
+  vertical striping (cells from different columns meet), column-major is
+  continuous art — palm fronds, stone platforms and foliage line up with no
+  seams. `renderer.py`, `art.py`, `conformance.py` and `native/renderer.c` all
+  use column-major; this closes G1, which had stood open since WP-3.
 - **`TTAB` palette nibble [V]**: flag bits 8–11 select a palette (0–15). Retail
   data uses only 0–3: `1` on 124,118 cells, `0` on 21,116, `2` on 2,913, `3` on
   2,097 — consistent with the "palette 1 non-empty in 101/104 `HEAD`s"

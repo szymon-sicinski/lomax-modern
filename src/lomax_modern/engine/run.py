@@ -90,9 +90,10 @@ class SliceReport:
             f"next level: {self.next_level or 'none (end of sequence or exit not reached)'}",
             f"exit: {'clean' if self.clean_exit else 'ERROR'}",
             "tile art: composed -- map cell -> tile record resolved (Q20), each "
-            "record blitted as four CELLs (2x2 order [H], G1) with the HEAD "
-            "palette (slot 1) and index-0 transparency; flip pairing [H] "
-            "(Q33); the geometric collision grid stays on render() as a debug path",
+            "record blitted as four CELLs in 2x2 column-major order (V, G1) "
+            "with the HEAD palette (slot 1) and index-0 transparency; flip "
+            "pairing [H] (Q33); the geometric collision grid stays on render() "
+            "as a debug path",
         ]
         return "\n".join(lines)
 
