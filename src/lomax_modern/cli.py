@@ -852,7 +852,7 @@ def build_parser() -> argparse.ArgumentParser:
         "probe-tiles",
         help=(
             "validate the recovered MAP/TTAB/CELL tile pipeline and report counts "
-            "(read-only; closes Q20/Q21/Q22)"
+            "(read-only; closes Q20/Q21/Q22, leaves Q33 open)"
         ),
     )
     p_tiles.add_argument("game_dir", help="folder containing LOMAX.EXE")

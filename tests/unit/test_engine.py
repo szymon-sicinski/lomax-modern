@@ -61,7 +61,7 @@ def _world_bytes(
         ("NMY", b"\0" * 16),
         ("PARA", b"\0" * 8),
         ("HEAD", head_payload(width_units, height_units)),
-        ("TTAB", ttab_payload([[0, 0, 0, 0]])),
+        ("TTAB", ttab_payload([[0, 0, 0, 0, 0, 0, 0, 0]])),
         ("MAP", map_payload(width_units, height_units, cells=cells)),
         ("GNMY", gnmy_payload((0,))),
         ("MACR", b"\0" * 8),
@@ -426,7 +426,9 @@ def test_run_slice_reports_ticks_and_clean_exit(tmp_path) -> None:
     assert report.world == "VILLAGE"
     assert frame.width == 320 and frame.height == 240
     text = report.format()
-    assert "unresolved (Q20)" in text
+    # The corrected MAP/TTAB layout resolves Q20 on this branch.
+    assert "resolved (Q20)" in text
+    assert "unresolved (Q20)" not in text
     assert "retracted" in text
     # Q23 (the NMY framing) and the GNMY entry layout are answered; the
     # spawn/collect placeholders must blame only the Q32 semantics, never the

@@ -90,7 +90,8 @@ class SliceReport:
             f"next level: {self.next_level or 'none (end of sequence or exit not reached)'}",
             f"exit: {'clean' if self.clean_exit else 'ERROR'}",
             "tile art: decoded (CELL/TTAB) but not placed on the map -- "
-            "map cell -> tile record unresolved (Q20)",
+            "map cell -> tile record resolved (Q20); the engine draws the "
+            "collision layer",
         ]
         return "\n".join(lines)
 

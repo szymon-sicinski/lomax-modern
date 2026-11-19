@@ -369,11 +369,11 @@ def test_nearest_presentation_equals_the_scaler_block_replication() -> None:
 
 
 def test_out_of_bank_cell_index_is_skipped_in_both_depths() -> None:
-    """The fourth cell of the strip tile indexes outside the bank: leave it empty."""
+    """The fourth cell of the out-of-bank strip tile is left empty."""
     scene = scenes()[0]
     frame16 = render(scene, Depth.BPP16)
     frame24 = render(scene, Depth.BPP24)
-    tile = scene.tiles[-1]
+    tile = scene.tiles[2]  # indices (0, 1, 2, 9): slot 3 is out of bank
     assert tile.record.cell_indices[-1] >= len(tile.cells)
     x0 = tile.x + 3 * 8
     for y in range(tile.y, tile.y + 8):

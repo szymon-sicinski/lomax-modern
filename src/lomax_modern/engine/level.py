@@ -31,7 +31,8 @@ OUT_OF_BOUNDS_COLLISION = 0xFF
 class CollisionModel:
     """Map a raw ``MAP`` collision byte to gameplay solidity.
 
-    The third byte of every ``MAP`` cell is preserved verbatim; its per-value
+    The ``N`` collision bytes that follow the ``N`` tile words are preserved
+    verbatim; their per-value
     semantics are **unresolved** (Q31).  The only robust invariant measured
     across all 104 retail planes is *0 vs non-zero*: byte ``0`` is passable and
     every non-zero byte is treated as solid.  That rule is a **hypothesis [H]**,

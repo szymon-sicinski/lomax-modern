@@ -1,40 +1,41 @@
-"""Decode `TTAB` / `CELL` / `MAP` and export sprite sheets as PNG.
+"""Decode ``TTAB`` / ``CELL`` / ``MAP`` and export sprite sheets as PNG.
 
 Confidence, per claim (see ``docs/file-formats.md``):
 
 **Verified against the retail install (V)**
 
-* ``TTAB`` payloads are a whole number of 8-byte records; a record is four
-  big-endian ``u16`` cell indices (75,122 records / 300,488 words in 9 files).
-* ``CELL`` payloads are a whole number of 64-byte records (14,974 in 9 files).
-* ``MAP`` is 3 bytes per 16x16 cell plus 0-3 zero pad bytes to a multiple of 4,
-  and the cell count follows from the sibling ``HEAD`` dimensions.
-* A ``TTAB`` word is a 13-bit index in the low bits with ``0x2000``/``0x4000``
-  set on some words; ``0x8000`` is never set.  Words are **preserved verbatim**
-  including indices past the world's ``CELL`` count (``BONUS.WLD`` uses index
-  256 with 251 cells -- Q22), never clamped.
+* ``MAP`` is ``N`` big-endian ``u16`` tile words — each a **direct index** into
+  the plane's ``TTAB`` record array — then ``N`` collision bytes, padded to a
+  multiple of 4 (523,229 map words / 0 out-of-bank across 104 planes).
+* ``TTAB`` payloads are a whole number of 16-byte records; a record is four
+  ``[index word, flag word]`` cells (37,561 records = 150,244 cells).
+* ``CELL`` payloads are a whole number of 64-byte records (14,974).
+* A ``TTAB`` index word is a full 16-bit ``CELL`` index (all in-bank).  Its
+  paired flag word carries both a flip (bits 13-14) and a palette (bits 8-11,
+  0-15; retail uses 0-3).  Words are **preserved verbatim** — Q22's "index 256"
+  was the flag word ``0x0100`` misread as a 13-bit index, so no out-of-bank
+  index exists.
+* That bits 13-14 are the flip pair is ``[V]``: exactly three combinations
+  occur (``0x2000`` on 15,787 cells, ``0x4000`` on 1,783, ``0x6000`` on 716) and
+  every other high bit is zero across all 150,244 retail cells.
 
 **Hypothesis (H), and therefore printed as such by the exporter**
 
 * A ``CELL`` record is 8x8 palette indices, row-major, index 0 transparent.
   The container only says "64 bytes"; the full byte range is used, which rules
   out packed 4-bpp pixels, and 64 = 8x8 is the square reading.
-* Which of the ten ``HEAD`` palette slots a cell uses.  The tile word has no
-  free bit for a palette, so the slot must come from elsewhere (Q8).  Measured
-  observation: slot 1 renders natural art for ``VILLAGE``/``HAUNTED``/
-  ``TITLE`` where slot 0 renders a hue-shifted variant, and slot 1 is the only
-  slot non-empty in 101 of 104 ``HEAD`` blocks.  Slot 1 is the default; it is
-  an observation, not a proof of what the engine loads.
+* Which of the ten ``HEAD`` palette slots a cell uses is named by its flag
+  word's bits 8-11 (Q8, narrowed from "the container names no slot").  The
+  exporter decodes and counts the flag-word palette, but still draws the sheet
+  with its default slot (1): slot selection is counted, not yet switched.
+* *Which* of those two bits is horizontal and which is vertical.  The decoder
+  reads ``0x2000`` as horizontal and ``0x4000`` as vertical, but that pairing has
+  not been confirmed against a render of the game — only "these bits flip the
+  cell" is ``[V]``.  The pairing is Q33, the same open question the docs and the
+  C port carry.
 * The order of the four cells inside a ``TTAB`` record (G1, open).  The default
   tile sheet therefore draws each record as its four cells **in stored order**
   and labels the 2x2 assembly an explicit option.
-
-**Unresolved, and reported as unresolved**
-
-* How a ``MAP`` cell names a ``TTAB`` record (Q20) -- prints
-  ``map cell -> tile record: unresolved``.
-* What the ``TTAB`` flags ``0x2000``/``0x4000`` mean (Q21) -- counted, not
-  interpreted.
 
 **Verified, but not exported by this module**
 
@@ -59,17 +60,25 @@ CELL_SIZE = 64
 #: Pixels per side of a ``CELL`` block.
 CELL_PIXELS = 8
 
-#: ``u16`` cell-index words per ``TTAB`` record (a 16x16 tile, four 8x8 cells).
-TILE_WORDS = 4
+#: Cells (8x8 blocks) per ``TTAB`` record (a 16x16 tile, four 8x8 cells).
+TILE_CELLS = 4
+
+#: ``u16`` words per ``TTAB`` record: four ``[index word, flag word]`` pairs.
+TILE_WORDS = TILE_CELLS * 2
 
 #: Bytes per ``TTAB`` record.
 TILE_SIZE = TILE_WORDS * 2
 
-#: Mask for the 13-bit cell index inside a ``TTAB`` word.
-TILE_INDEX_MASK = 0x1FFF
+#: Flip flags live in bits 13-14 of a ``TTAB`` *flag* word (``[V]``: only these
+#: three combinations occur across 150,244 retail cells; every other high bit 0).
+FLIP_MASK = 0x6000
+#: The axis pairing below is a convention (``[H]``), not a measurement: which
+#: bit mirrors which axis has not been confirmed against the game's own output.
+FLIP_H = 0x2000  # horizontal flip (convention, [H])
+FLIP_V = 0x4000  # vertical flip (convention, [H])
 
-#: Flag bits observed in ``TTAB`` words; their meaning is open (Q21).
-TILE_FLAGS = (0x2000, 0x4000, 0x8000)
+#: Palette index lives in bits 8-11 of a ``TTAB`` *flag* word.
+PALETTE_MASK = 0x0F00
 
 #: Palette index that is the transparent key.
 TRANSPARENT_INDEX = 0
@@ -197,53 +206,66 @@ def decode_cells(chunk: wld.Chunk) -> tuple[Cell, ...]:
 
 
 @dataclass(frozen=True)
-class TileWord:
-    """One ``u16`` of a ``TTAB`` record, kept verbatim.
+class TileSlot:
+    """One cell of a ``TTAB`` record: a 16-bit ``CELL`` index plus its flag word.
 
-    ``index`` is the 13-bit cell index; ``reserved`` holds the remaining bits so
-    a writer can re-emit the word unchanged.
+    ``index`` is the full 16-bit ``CELL`` index (not a 13-bit mask); ``flags``
+    carries a flip in bits 13-14 and a palette in bits 8-11.  Both words are
+    kept verbatim so a writer re-emits the record unchanged.
     """
 
-    raw: int
+    index: int
+    flags: int
+
+    def __post_init__(self) -> None:
+        if not 0 <= self.index < 0x10000:
+            raise ArtError(f"tile cell index {self.index:#06x} does not fit in a u16")
+        if not 0 <= self.flags < 0x10000:
+            raise ArtError(f"tile flag word {self.flags:#06x} does not fit in a u16")
 
     @property
-    def index(self) -> int:
-        return self.raw & TILE_INDEX_MASK
+    def flip(self) -> int:
+        """The flip bits 13-14: ``0x2000``, ``0x4000``, or both.
+
+        That these bits flip the cell is ``[V]``; that ``0x2000`` is the
+        horizontal one is an unconfirmed convention (``[H]``).
+        """
+        return self.flags & FLIP_MASK
 
     @property
-    def reserved(self) -> int:
-        return self.raw & ~TILE_INDEX_MASK & 0xFFFF
-
-    def has_flag(self, bit: int) -> bool:
-        if bit not in TILE_FLAGS:
-            raise ArtError(f"unknown TTAB flag {bit:#06x}; known: {TILE_FLAGS}")
-        return bool(self.raw & bit)
+    def palette(self) -> int:
+        """The palette index in bits 8-11 (0-15)."""
+        return (self.flags & PALETTE_MASK) >> 8
 
 
 @dataclass(frozen=True)
 class TileRecord:
-    """A 16x16 tile as four cell-index words, in stored order."""
+    """A 16x16 tile as four ``[index, flag]`` cells, in stored order.
+
+    ``index`` is the record's ordinal in the ``TTAB`` array; a ``MAP`` word is
+    a direct index into that array.
+    """
 
     index: int
-    words: tuple[TileWord, ...]
+    slots: tuple[TileSlot, ...]
 
     def __post_init__(self) -> None:
-        if len(self.words) != TILE_WORDS:
+        if len(self.slots) != TILE_CELLS:
             raise ArtError(
-                f"tile record holds {len(self.words)} words, expected {TILE_WORDS}"
+                f"tile record holds {len(self.slots)} cells, expected {TILE_CELLS}"
             )
 
     @property
     def cell_indices(self) -> tuple[int, ...]:
-        return tuple(word.index for word in self.words)
+        return tuple(slot.index for slot in self.slots)
 
     def to_bytes(self) -> bytes:
-        """Re-emit the record unchanged (flags and out-of-bank indices included)."""
-        return b"".join(struct.pack(">H", word.raw) for word in self.words)
+        """Re-emit the record unchanged (index and flag words verbatim)."""
+        return b"".join(struct.pack(">HH", slot.index, slot.flags) for slot in self.slots)
 
 
 def decode_tiles(chunk: wld.Chunk) -> tuple[TileRecord, ...]:
-    """Split a ``TTAB`` chunk into 8-byte records of four big-endian ``u16``."""
+    """Split a ``TTAB`` chunk into 16-byte records of four ``[index, flag]`` cells."""
     if chunk.tag != "TTAB":
         raise ArtError(f"decode_tiles() needs a TTAB chunk, got {chunk.tag!r}")
     if len(chunk.payload) % TILE_SIZE:
@@ -251,18 +273,21 @@ def decode_tiles(chunk: wld.Chunk) -> tuple[TileRecord, ...]:
             f"TTAB payload is {len(chunk.payload)} bytes, not a multiple of {TILE_SIZE}"
         )
     words = struct.unpack(">" + "H" * (len(chunk.payload) // 2), chunk.payload)
-    return tuple(
-        TileRecord(
-            index=record,
-            words=tuple(TileWord(raw=value) for value in words[record * 4 : record * 4 + 4]),
+    records: list[TileRecord] = []
+    for record in range(len(chunk.payload) // TILE_SIZE):
+        base = record * TILE_WORDS
+        slots = tuple(
+            TileSlot(index=words[base + 2 * cell], flags=words[base + 2 * cell + 1])
+            for cell in range(TILE_CELLS)
         )
-        for record in range(len(words) // TILE_WORDS)
-    )
+        records.append(TileRecord(index=record, slots=slots))
+    return tuple(records)
 
 
 @dataclass(frozen=True)
 class MapCell:
-    """One 16x16 map position: a tile word plus a collision byte, verbatim."""
+    """One 16x16 map position: a tile word (a direct ``TTAB`` index) plus a
+    collision byte, verbatim."""
 
     tile_word: int
     collision: int
@@ -290,9 +315,11 @@ class MapPlane:
 def decode_map(map_chunk: wld.Chunk, head_chunk: wld.Chunk) -> MapPlane:
     """Decode a ``MAP`` payload, using the sibling ``HEAD`` for the geometry.
 
-    ``3 * cells + pad`` must equal the payload size (0 <= pad <= 3, all zero);
-    that cross-check is what makes the plane geometry ``[V]`` rather than a
-    guess, so a mismatch raises instead of being padded away.
+    The recovered layout is ``N`` big-endian ``u16`` tile words (each a direct
+    ``TTAB`` record index) then ``N`` collision bytes, padded to a multiple of
+    4.  ``2 * cells + cells + pad`` must equal the payload size (0 <= pad <= 3,
+    all zero); that cross-check is what makes the plane geometry ``[V]`` rather
+    than a guess, so a mismatch raises instead of being padded away.
     """
     if map_chunk.tag != "MAP":
         raise ArtError(f"decode_map() needs a MAP chunk, got {map_chunk.tag!r}")
@@ -302,7 +329,7 @@ def decode_map(map_chunk: wld.Chunk, head_chunk: wld.Chunk) -> MapPlane:
     width_cells = width_units * 8 // 16
     height_cells = height_units * 8 // 16
     cells = width_cells * height_cells
-    body = cells * 3
+    body = cells * 3  # 2 bytes tile word + 1 byte collision, per cell
     pad = len(map_chunk.payload) - body
     if not 0 <= pad <= 3 or pad != (-body % 4):
         raise ArtError(
@@ -313,14 +340,13 @@ def decode_map(map_chunk: wld.Chunk, head_chunk: wld.Chunk) -> MapPlane:
     pad_bytes = payload[body:]
     if any(pad_bytes):
         raise ArtError(f"MAP pad bytes are not zero: {pad_bytes.hex()}")
+    words = struct.unpack(">" + "H" * cells, payload[: 2 * cells])
+    collisions = payload[2 * cells : 3 * cells]
     return MapPlane(
         width_cells=width_cells,
         height_cells=height_cells,
         cells=tuple(
-            MapCell(
-                tile_word=struct.unpack(">H", payload[i * 3 : i * 3 + 2])[0],
-                collision=payload[i * 3 + 2],
-            )
+            MapCell(tile_word=words[i], collision=collisions[i])
             for i in range(cells)
         ),
         pad=pad_bytes,
@@ -442,6 +468,16 @@ def cell_rows(cell: Cell) -> list[list[int]]:
     ]
 
 
+def flipped_rows(cell: Cell, flip: int) -> list[list[int]]:
+    """The cell's rows mirrored by ``flip`` (``FLIP_H`` / ``FLIP_V`` / both)."""
+    rows = cell_rows(cell)
+    if flip & FLIP_H:
+        rows = [row[::-1] for row in rows]
+    if flip & FLIP_V:
+        rows = rows[::-1]
+    return rows
+
+
 def cell_sheet(
     cells: tuple[Cell, ...],
     palette: Palette,
@@ -485,8 +521,8 @@ def tile_sheet(
 
     ``layout="2x2"`` arranges them as the documented 16x16 tile, which uses an
     order the data does not prove (G1) and is therefore never the default.
-    Cells whose index falls outside the world's ``CELL`` bank are left empty --
-    drawing something else would hide Q22.
+    Each cell honours its flag word's flip (``FLIP_H``/``FLIP_V``); a cell
+    index outside the world's ``CELL`` bank is left empty.
     """
     if not records:
         raise ArtError("tile_sheet() needs at least one record")
@@ -496,15 +532,15 @@ def tile_sheet(
         raise ArtError(f"columns must be >= 1, got {columns}")
     if scale < 1:
         raise ArtError(f"scale must be >= 1, got {scale}")
-    cell_w = CELL_PIXELS * (TILE_WORDS if layout == "strip" else 2) * scale
+    cell_w = CELL_PIXELS * (TILE_CELLS if layout == "strip" else 2) * scale
     cell_h = CELL_PIXELS * (1 if layout == "strip" else 2) * scale
     rows = (len(records) + columns - 1) // columns
     canvas = _Canvas(columns * cell_w, rows * cell_h, background)
     for n, record in enumerate(records):
         origin_x = (n % columns) * cell_w
         origin_y = (n // columns) * cell_h
-        for slot, index in enumerate(record.cell_indices):
-            if index >= len(cells):
+        for slot, cell_slot in enumerate(record.slots):
+            if cell_slot.index >= len(cells):
                 continue
             if layout == "strip":
                 dx, dy = slot * CELL_PIXELS * scale, 0
@@ -512,7 +548,11 @@ def tile_sheet(
                 dx = (slot % 2) * CELL_PIXELS * scale
                 dy = (slot // 2) * CELL_PIXELS * scale
             canvas.paste_indexed(
-                cell_rows(cells[index]), palette, origin_x + dx, origin_y + dy, scale=scale
+                flipped_rows(cells[cell_slot.index], cell_slot.flip),
+                palette,
+                origin_x + dx,
+                origin_y + dy,
+                scale=scale,
             )
     return canvas.image()
 
@@ -526,9 +566,9 @@ def map_field_image(
 ) -> Image:
     """A 1-pixel-per-cell view of one raw ``MAP`` byte.
 
-    ``channel="collision"`` draws the third byte, ``"word-hi"``/``"word-lo"``
-    the two bytes of the tile word.  Values are drawn verbatim as greyscale:
-    the field's meaning (Q20/Q6) is not invented here, only made visible.
+    ``channel="collision"`` draws the collision byte, ``"word-hi"``/``"word-lo"``
+    the two bytes of the tile word (a direct ``TTAB`` record index).  Values are
+    drawn verbatim as greyscale: the field is made visible, never re-derived.
     """
     if channel not in ("collision", "word-hi", "word-lo"):
         raise ArtError(f"channel must be collision/word-hi/word-lo, got {channel!r}")
@@ -605,17 +645,6 @@ def check_output_dir(out_dir: str | Path, world_path: str | Path) -> None:
     refuse_into_game_folder(out)
 
 
-def _count_out_of_bank(
-    records: tuple[TileRecord, ...], cell_count: int
-) -> dict[int, int]:
-    counts: dict[int, int] = {}
-    for record in records:
-        for word in record.words:
-            if word.index >= cell_count:
-                counts[word.index] = counts.get(word.index, 0) + 1
-    return counts
-
-
 def export_world(
     world_path: str | Path,
     out_dir: str | Path,
@@ -656,7 +685,7 @@ def export_world(
         f"chunks: {len(world)} ({len(sections)} planes)",
         (
             f"palette: HEAD slot {palette_slot} of {PALETTE_SLOT_COUNT} "
-            f"(hypothesis H -- the container names no slot, Q8; "
+            f"(flag words name slots in bits 8-11, Q8, hypothesis H; "
             f"non-empty slots in this HEAD: "
             f"{', '.join(str(s) for s in non_empty) or 'none'})"
         ),
@@ -673,41 +702,46 @@ def export_world(
     )
 
     total_records = sum(len(section.tiles) for section in sections)
-    flag_counts = {bit: 0 for bit in TILE_FLAGS}
-    out_of_bank: dict[int, int] = {}
-    referenced: set[int] = set()
+    flip_counts = {"H": 0, "V": 0, "both": 0, "none": 0}
+    palette_counts: dict[int, int] = {}
+    index_out_of_bank = 0
     for section in sections:
         for record in section.tiles:
-            for word in record.words:
-                if word.index < len(cells):
-                    referenced.add(word.index)
-                for bit in TILE_FLAGS:
-                    if word.has_flag(bit):
-                        flag_counts[bit] += 1
-        for index, count in _count_out_of_bank(section.tiles, len(cells)).items():
-            out_of_bank[index] = out_of_bank.get(index, 0) + count
+            for slot in record.slots:
+                if slot.flip == FLIP_H:
+                    flip_counts["H"] += 1
+                elif slot.flip == FLIP_V:
+                    flip_counts["V"] += 1
+                elif slot.flip == FLIP_MASK:
+                    flip_counts["both"] += 1
+                else:
+                    flip_counts["none"] += 1
+                palette_counts[slot.palette] = palette_counts.get(slot.palette, 0) + 1
+                if slot.index >= len(cells):
+                    index_out_of_bank += 1
 
     lines.append(
         f"TTAB: {total_records} records of {TILE_SIZE} B "
-        f"(four big-endian u16 cell indices, 13-bit index) -- "
+        f"(four [index word, flag word] cells, 16-bit CELL index) -- "
         f"record-level count only, not map-referenced tiles"
     )
     lines.append(
-        "TTAB flags preserved verbatim: "
-        + ", ".join(f"{bit:#06x} on {flag_counts[bit]} words" for bit in TILE_FLAGS)
-        + " (meaning unresolved, Q21)"
+        "TTAB flag words: "
+        f"flip H on {flip_counts['H']} cells, V on {flip_counts['V']}, "
+        f"both on {flip_counts['both']}, none on {flip_counts['none']}; "
+        + "palette (bits 8-11) "
+        + ", ".join(f"slot {k}: {v}" for k, v in sorted(palette_counts.items()))
     )
-    if out_of_bank:
-        detail = ", ".join(
-            f"index {index} referenced {count}x" for index, count in sorted(out_of_bank.items())
-        )
+    if index_out_of_bank:
         lines.append(
-            f"TTAB out-of-bank indices preserved verbatim, not repaired: {detail} "
-            f"(CELL bank holds {len(cells)} records, Q22)"
+            f"TTAB out-of-bank CELL indices: {index_out_of_bank} "
+            f"(CELL bank holds {len(cells)} records)"
         )
     else:
         lines.append(
-            f"TTAB out-of-bank indices: none (CELL bank holds {len(cells)} records, Q22)"
+            f"TTAB out-of-bank CELL indices: none "
+            f"(CELL bank holds {len(cells)} records, Q22 answered -- "
+            f"a flag word is not an index)"
         )
 
     for plane_no, section in enumerate(sections):
@@ -741,25 +775,36 @@ def export_world(
         )
     )
 
+    map_cell_count = sum(s.plane.cell_count for s in sections)
     distinct_words = {
         cell.tile_word for section in sections for cell in section.plane.cells
     }
+    referenced: set[int] = set()
+    map_out_of_bank = 0
+    for section in sections:
+        for cell in section.plane.cells:
+            if 0 <= cell.tile_word < len(section.tiles):
+                referenced.add(cell.tile_word)
+            else:
+                map_out_of_bank += 1
     lines.append(
-        f"MAP: {sum(s.plane.cell_count for s in sections)} cells "
-        f"(3 B each: 16-bit tile word + collision byte), "
+        f"MAP: {map_cell_count} cells "
+        f"(2 B tile word + 1 B collision byte, split: N words then N bytes), "
         f"{len(distinct_words)} distinct tile words; "
         f"map sheet shows the raw {map_channel} byte as greyscale, no art"
     )
     lines.append(
-        f"distinct TTAB cell indices referenced: {len(referenced)} of {len(cells)} records"
+        f"map cell -> tile record: resolved -- map word is a direct TTAB record "
+        f"index (Q20); {map_out_of_bank} of {map_cell_count} map words fall "
+        f"outside their plane's TTAB range"
     )
-    lines.append("map cell -> tile record: unresolved (Q20)")
+    lines.append(
+        f"distinct TTAB records referenced via MAP: "
+        f"{len(referenced)} of {total_records}"
+    )
     lines.append(
         "sprite frames: not exported (sprite-frame export is not implemented; "
         "the ANIM record layout is verified -- docs/file-formats.md 2.6)"
-    )
-    lines.append(
-        "note: no unique-tile count is reported, because MAP->TTAB is unresolved (Q20)"
     )
 
     return ExportReport(
