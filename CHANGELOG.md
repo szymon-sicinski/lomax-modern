@@ -8,6 +8,14 @@ Versioning: [Semantic Versioning](https://semver.org/).
 
 ### Added
 
+- The `window` HUD line now ends with `collect N/M` — `Moneybag`s picked up
+  over those on the playfield (P7 of
+  `docs/roadmap/45-playable-level-plan.md` §1.1), so progress is visible while
+  playing: `fps=60.1 plane=MEDIEVAL tiles=7920 camera=(57,385) collect 0/2`.
+  Counts come from the live state (`Entities.collected` / `collectibles`), not
+  a second store; a world with no `Moneybag` placement reads `collect 0/0`
+  rather than a percentage. Measured read-only on the retail install: ED and
+  MEDIEVAL report `0/2` at spawn and `1/2` after one pickup, VILLAGE `0/0`.
 - `lomax_modern.input` — the pure keyboard → `Input` mapping, the keyboard
   half of M5 (P3 of `docs/roadmap/45-playable-level-plan.md` §1.1):
   `Keymap.update(held, pressed)` folds two keycode sets into one `Input`,

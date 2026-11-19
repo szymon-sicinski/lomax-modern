@@ -164,6 +164,19 @@ def test_window_authentic_is_320x240_at_1x(tmp_path, monkeypatch, capsys) -> Non
     assert "at 1x" in out
 
 
+def test_hud_line_prints_collect_count() -> None:
+    """The HUD formatter appends ``collect N/M`` (P7) — synthetic counts only."""
+    line = cli._hud_line(59.9, "ED", 300, 12, 34, 1, 2)
+    assert line == "fps=59.9 plane=ED tiles=300 camera=(12,34) collect 1/2"
+
+
+def test_hud_line_collect_count_at_spawn_and_when_empty() -> None:
+    # spawn: nothing picked up yet
+    assert cli._hud_line(60.0, "MEDIEVAL", 300, 0, 0, 0, 2).endswith("collect 0/2")
+    # a world with no Moneybag placements must read 0/0, not crash or read 100%
+    assert cli._hud_line(60.0, "VILLAGE", 300, 0, 0, 0, 0).endswith("collect 0/0")
+
+
 def test_window_hud_prints_fps_plane_tiles_camera(tmp_path, monkeypatch, capsys) -> None:
     root = build_install(tmp_path / "game")
     # A clock that advances 1.0 s per read makes the ~1/s HUD fire deterministically.
@@ -186,6 +199,8 @@ def test_window_hud_prints_fps_plane_tiles_camera(tmp_path, monkeypatch, capsys)
     assert "tiles=300" in out
     assert "camera=(0,0)" in out
     assert "fps=" in out
+    # The synthetic world has no Moneybag placement, so the counter reads 0/0.
+    assert "collect 0/0" in out
 
 
 def test_window_missing_sdl2_prints_one_line_and_exits_1(tmp_path, monkeypatch, capsys) -> None:
