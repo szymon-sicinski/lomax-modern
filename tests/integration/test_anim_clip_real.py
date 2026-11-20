@@ -61,7 +61,7 @@ def test_walk_clip_resolves_to_10_composited_poses() -> None:
         pytest.skip("MAIN.WLD not present in this install")
     world = wld.parse_file(path)
     poses = anim_clip.resolve_poses(world, record_name="Hero", clip_tag="WALK")
-    # 22 keyframes = 10 stride poses x 2 layers (sprite 34 legs + 33 body) plus
+    # 22 keyframes = 10 stride poses x 2 layers (byte 34 overlay + byte 33 body) plus
     # 2 contact keyframes (sprite 169, absent).  The contact step is dropped, so
     # exactly 10 composited poses remain, one per stride step 1..10.
     assert [p.pose for p in poses] == list(range(1, 11))

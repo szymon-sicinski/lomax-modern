@@ -212,16 +212,17 @@ MEDIEVAL 68, TITLE 22, VILLAGE 49, WEST 53** — each equals that world's maximu
 exactly the "records == max type index + 1" falsifier named for Q23.
 
 The 8-byte per-frame record (each `{u8, u8, u16, u16, u16}`) is an animation
-keyframe: its **first byte is the referenced `ANIM` type_index** **[V]** —
-across every `NMY` animation on the retail install, 3,124 of 3,156 keyframes
-whose first byte is ≤ 147 resolve to a same-world `ANIM` chunk (the remaining
-32 are global-bank/cross-world references, since `MAIN.WLD`'s bank carries the
-`0x100` flag). The other five bytes (a sub-frame/sequence index and three
-words — draw offset, flip/duration flags) are read by the animation scheduler
-and are not yet mapped (Q34). This is what lets
+keyframe: its **first byte is the referenced `ANIM` sprite slot, 1-based**
+(`type_index = byte - 1`) **[V]** — across the 9 retail worlds' `NMY`
+animations, 4,789 of 4,891 keyframes resolve to a same-world `ANIM` chunk
+under that read (97.9 %; the rest are global-bank/absent bytes such as `169`,
+since `MAIN.WLD`'s bank carries the `0x100` flag). Reading it 0-based lands
+every clip on the neighbouring chunk — the off-by-one behind the wrong sprite
+labels (§2.6.1). The other five bytes (`step`, a sub-frame selector, two signed
+draw offsets and a flag word) are mapped in §2.6.1 (Q34). This is what lets
 `lomax_modern.engine.level.load_player_sprite` find the player's standing
-frame: `MAIN.WLD`'s `Hero` record, its `STA1` ("stand") animation, and the
-first keyframe's sprite index.
+frame: `MAIN.WLD`'s `Hero` record, its `STA1` ("stand") animation, and that
+clip's **whole-body layer** (sprite byte 27 → `type_index` 26, 44×47–49).
 
 **`GNMY`** entries reference those records directly, one per placed object
 (3,593 entries across 104 chunks). The loader walks them **structurally** — its
@@ -368,8 +369,8 @@ the loop at `0x415F18` that expands a frame into an 8-bit index buffer):
 Index 0 is the transparent key (the same rule the tile blit uses); the caller
 applies a `HEAD` palette slot to the indices. `lomax-modern` decodes this with
 `lomax_modern.anim_nmy.decode_anim_pixels`, and the player's standing frame is
-the first keyframe of `MAIN.WLD`'s `Hero` → `STA1` animation (a 54×41 raw
-sprite).
+the whole-body layer of `MAIN.WLD`'s `Hero` → `STA1` animation (sprite byte 27
+→ `type_index` 26, 44×47–49 — see §2.6.1 for the 1-based byte).
 
 The documented "`SpriteFrame` is 0x38 bytes" `[S2]` is **not the on-disk unit** —
 it is the in-memory stride the loader allocates per frame (`0x38` bytes in RAM);
@@ -382,40 +383,54 @@ The 8-byte keyframe (`{u8, u8, u16, u16, u16}`) is resolved against the retail
 install:
 
 ```
-u8 sprite   # ANIM type_index (0..147 in MAIN.WLD)        [V]
-u8 step     # stride pose index; step-1 selects the chunk's own frame  [V, see below]
+u8 sprite   # ANIM sprite slot, 1-based: type_index = sprite - 1   [V]
+u8 step     # stride pose index; step-1 selects the chunk's own frame;
+            # step 0 draws nothing (resolver returns NULL)          [V]
 i16 dx      # signed horizontal draw offset               [V structure]
 i16 dy      # signed vertical draw offset, y-up           [V]
 u16 flags   # per-frame flag word; bit 0x80's role is unresolved     [H]
 ```
 
-**Chunk ↔ clip mapping `[V]`.** A keyframe's first byte is a direct index into
-the world's `ANIM` bank (`type_index` 0..147 in `MAIN.WLD`): 148/154 distinct
-sprite bytes resolve and **0/148** chunks are unreferenced. The spike card's
-"148 `ANIM` chunks vs 142 declared animations" is **not** a six-orphan gap — the
-two numbers are different units. 148 is the number of *sprite images* (`ANIM`
-chunks); 142 is the number of *clips* (the sum of every `NMY` record's `W_B`),
-and a clip references many sprites through its keyframes. Six sprite bytes do
-**not** resolve in any world's bank — `148, 169, 236, 240, 247, 248` — and are
-kept as explicit gaps. `169` is the hero's shared contact pose (used by
-`WALK`/`RUN`/`BRAK`/`SPIN`/… and `Krug.CLAY`); its pixels are not in any `.WLD`
-(they are likely embedded in `LOMAX.EXE`), so `WALK`'s two contact keyframes
-stay unresolved (Q34).
+**Chunk ↔ clip mapping `[V]`.** A keyframe's first byte is **1-based**: it is
+the slot the `ANIM` reader stored the chunk in, `type_index + 1`. The reader
+bumps the index (`inc edi` at VA `0x414A9A`) before storing the chunk's frame
+array at `sprite_table[bank | index]` (`0x414B52`/`0x414B54`), and the frame
+resolver reads a keyframe's raw byte into that same table with **no** offset
+before its NULL check (VA `0x4163E4`–`0x4163FC`; sprite byte 0 and step 0 both
+return NULL, `0x4163CB`/`0x4163D3`). So `sprite byte S` selects
+`type_index S - 1`, and byte 0 is the "no sprite" sentinel.
+
+Measured across all 9 retail worlds (4,891 keyframes): **4,789 resolve
+(97.9 %)** under that read, and **0 `ANIM` chunks are unreferenced** in every
+world — each world's bank is exactly the set of chunks its own clips point at.
+`MAIN.WLD`'s **148** is the number of *sprite images* (`ANIM` chunks,
+`type_index` 0–147); the **142** an earlier card compared it against is the
+number of *clips* (the sum of every `NMY` record's `W_B`) — different units, not
+a six-orphan gap. 160 distinct sprite bytes occur; 13 do not resolve in any
+world's bank —
+`0, 106, 169, 222, 236, 240, 242, 244, 247, 248, 249, 254, 255` (byte 0 × 9
+keyframes) — and are kept as explicit gaps. Reading the byte 0-based shifts
+**every** clip onto its *neighbouring* chunk, which is why `WALK` looked like a
+18×23/16×17 pair and the maintainer's six state labels were all wrong: the
+0-based read gave `RUN` the 54×57 art that is really `SPIN`'s. `169` is the
+hero's shared contact pose (used by `WALK`/`RUN`/`BRAK`/`SPIN`/… and
+`Krug.CLAY`); its pixels are not in any `.WLD` (they are likely embedded in
+`LOMAX.EXE`), so `WALK`'s two contact keyframes stay unresolved (Q34).
 
 **Pose structure `[V]` (step grouping and paint order); the `0x80` bit's
 meaning `[H]`.** `Hero.WALK` is **10 stride poses × 2 sprite layers**, not 22
 independent frames. Grouping the 22 keyframes by their second byte (`step`)
-gives exactly two keyframes per `step` 1..10 — a **base** layer (sprite 33, the
-whole character) and a smaller **overlay** layer (sprite 34, the head) — plus
-two `step 0` contact keyframes (sprite 169). Sprite 33 has exactly 10 frames and
-sprite 34's first 10 frames are used, so `step - 1` selects the matching frame
-of each layer: the two keyframes sharing a `step` are one composite pose, not
-two separate frames. The compositor paints the **base first, then the overlay**
-on top, so the head's detail is never buried. `flags 0x80` appears on the
-smaller overlay in 9/10 steps (step 6's body keyframe 12 is `0x00`), so the
-bit's exact role — a second-layer marker, a flip flag, or a priority hint — is
-still **[H]**, not settled; the paint order is derived from layer *size*, not
-from the flag.
+gives exactly two keyframes per `step` 1..10 — a **base** layer (sprite byte
+33 → `type_index` 32, 36–42 × 44–48, the whole character) and a smaller
+**overlay** layer (sprite byte 34 → `type_index` 33, 18–26 × 17–24) — plus two
+`step 0` contact keyframes (sprite byte 169). `type_index` 32 has exactly 10
+frames and 33's first 10 frames are used, so `step - 1` selects the matching
+frame of each layer: the two keyframes sharing a `step` are one composite pose,
+not two separate frames. The compositor paints the **base first, then the
+overlay** on top. `flags 0x80` sits on the **base** keyframe in 9/10 steps
+(step 6's base keyframe 12 is `0x00`), so the bit's exact role — a pose-run
+terminator, a flip flag, or a priority hint — is still **[H]**, not settled;
+the paint order is derived from layer *size*, not from the flag.
 
 **Timing `[H]`.** No keyframe field and none of the animation's 9 `u16` params
 carry a per-frame hold: `dx`/`dy` are small signed offsets, `flags` is a flag
@@ -427,27 +442,34 @@ animation, ~5 cycles/s) and stuttered by construction. Q36.
 
 **The moving player draws `RUN`, one whole-body sprite per step `[V]` structure,
 `[H]` layer choice.** `Hero.RUN` is 26 keyframes over **12 steps**: per step a
-**whole-body** sprite (**24**, frames 50–56 × 56–57 — head, torso, arms and legs
-in one image) plus a much smaller companion (**23**, 26×13–26×17, which alone
-has the 12 frames the clip needs). Measured on the retail install: at the
-recorded `(dx, -dy)` the companion's opaque pixels land on the body layer's
-pixels **0–8 %** of the time, under the top-left anchor *and* under a
-bottom-left anchor, and its offset sits **25 px to the figure's left**, level
-with its head — so compositing the two floats a detached fragment beside the
-character rather than completing a body. `engine.render_tiles` therefore blits
-the whole-body layer only (`anim_clip.resolve_body_poses`, chosen by content
-bounding box, not by a hard-coded sprite id); what the companion is — a second
-facing, an effect, a limb drawn on another path — is open (**Q37**). `WALK` is
-**not** the moving clip: its layers are leg-sized (18×23 / 16×17).
+**whole-body** layer (sprite byte **23** → `type_index` 22, 60×34 one image of
+head, torso, arms and legs) plus a smaller companion (sprite byte **24** →
+`type_index` 23, 26×13–34×14). Measured on the retail install at the recorded
+`(dx, -dy)`, the companion's opaque pixels land **on** the body layer's pixels
+**39–97 %** of the time (WALK's pair: 65–100 %) — it is a genuine overlay on the
+character, not a detached fragment. The 0-based read made it look detached
+(0–8 %) because it paired each clip's overlay with its *neighbour's* body;
+`docs/file-formats.md` §2.6.1's `RUN`/`SPIN` swap is the same mistake. The
+engine's moving player still blits the whole-body layer alone
+(`anim_clip.resolve_body_poses`, chosen by content bounding box, not by a
+hard-coded sprite id) because that renders a complete figure on its own; what
+the overlay depicts is open (**Q37**). The `anim-clip` strips composite both
+layers (`anim_clip.resolve_poses`), and they too render one coherent character
+per pose. `WALK` is the slow-walk clip (`|vx| ≤ 2.0` at VA `0x411F79`), not the
+moving clip.
 
 **Frame selector when a clip has more steps than its chunk has frames `[H]`.**
-`step` indexes the chunk 1-based (`step - 1`), which is exact for `WALK` (10
-steps over sprite 33's 10 frames) but overruns `RUN` (12 steps over sprite 24's
-**8** frames). The selector therefore wraps modulo the frame count
-(`anim_clip.frame_for_step`, Q36). Measured: clamping instead repeats the final
-frame for **5 of RUN's 12 steps**, which freezes the animation for those steps;
-wrapping gives all 12 steps a distinct frame. Which rule the original uses is
-not yet traced.
+`step` indexes the chunk 1-based (`step - 1`), which is exact for the two clips
+this card renders: `WALK` (10 steps over `type_index` 32's 10 frames) and `RUN`
+(12 steps over `type_index` 22's 12 frames). It is **not** exact everywhere:
+**45 of 691** retail clips declare a step beyond at least one of their layers'
+frame counts (`Hero.STA2`: 10 steps over `type_index` 27's 7 frames). The
+selector therefore wraps modulo the frame count
+(`anim_clip.frame_for_step`, Q36) instead of clamping, so such a clip keeps
+moving rather than freezing on its last frame. Which rule the original uses is
+not yet traced, so the wrap is a chosen convention **[H]**; `step == 0` is the
+one case the resolver settles: it returns NULL (VA `0x4163D3`), so nothing is
+drawn.
 
 **Alignment `[V]` structure, `[H]` anchor.** `dx`/`dy` are signed offsets with
 the game's **y-up** axis — the sprite decompressor at VA `0x415E30` negates the

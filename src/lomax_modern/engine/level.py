@@ -22,8 +22,6 @@ from ..anim_nmy import (
     AnimPixels,
     GnmyEntry,
     anim_tag_name,
-    decode_anim,
-    decode_anim_pixels,
     decode_gnmy,
     decode_nmy,
     placement_role,
@@ -46,12 +44,11 @@ PLAYER_NMY_NAME = "Hero"
 PLAYER_STAND_ANIM = "STA1"
 
 #: The animation tag whose steps drive the player's **moving** animation.  It is
-#: the clip with a whole-body sprite per step (``RUN``: sprite 24, 54x57 — a
-#: complete character).  ``WALK`` is *not* used: its layers are leg-sized
-#: (18x23 / 16x17) and what the original uses that clip for is under research —
-#: see ``docs/research/05-open-questions.md`` and ``docs/file-formats.md``
-#: §2.6.1.  ``anim_clip.resolve_body_poses`` turns the clip into renderable
-#: whole-body frames.
+#: the clip with a whole-body sprite per step (``RUN``: sprite byte 23 →
+#: ``type_index`` 22, 60x34 — a complete character).  ``WALK`` is the slow-walk
+#: clip the original enters below 2.0 px/tick (speed gate at VA ``0x411F79``);
+#: ``anim_clip.resolve_body_poses`` turns the clip into renderable whole-body
+#: frames.  See ``docs/file-formats.md`` §2.6.1.
 PLAYER_MOVE_ANIM = "RUN"
 
 
@@ -59,10 +56,13 @@ def load_player_sprite(main_world_path: str | Path) -> AnimPixels | None:
     """Decode the player's standing frame from ``MAIN.WLD``'s global bank.
 
     The player is the ``NMY`` record named :data:`PLAYER_NMY_NAME`; its
-    standing pose is the first keyframe of the :data:`PLAYER_STAND_ANIM`
-    animation.  Each keyframe's first byte is the referenced ``ANIM``
-    type_index (``anim_nmy.NmyAnim.frames``, measured ~99% on the retail
-    install), so the standing sprite is that chunk's first frame, decoded to
+    standing pose is the first keyframe's stride pose of the
+    :data:`PLAYER_STAND_ANIM` animation.  A keyframe's first byte is a
+    **1-based** sprite slot (``type_index + 1``, see
+    :func:`lomax_modern.anim_clip.chunk_index_for_sprite`), so the standing
+    sprite is the **whole-body layer** of that step — the largest of the step's
+    layers, exactly as :func:`lomax_modern.anim_clip.resolve_body_poses` picks
+    it (``STA1``: sprite byte 27 → ``type_index`` 26, 44×47–49) — decoded to
     palette indices.  The indexed layer is returned — the caller applies its
     own ``HEAD`` palette.
 
@@ -93,18 +93,15 @@ def load_player_sprite(main_world_path: str | Path) -> AnimPixels | None:
     )
     if stand is None or not stand.frames:
         return None
-    sprite_index = stand.frames[0][0]
-    anim = None
-    for chunk in world.chunks:
-        if chunk.tag != "ANIM":
-            continue
-        decoded = decode_anim(chunk.payload)
-        if decoded is not None and decoded.type_index == sprite_index:
-            anim = decoded
-            break
-    if anim is None:
+    poses = anim_clip.resolve_body_poses(
+        world, record_name=PLAYER_NMY_NAME, clip_tag=PLAYER_STAND_ANIM
+    )
+    if not poses:
         return None
-    return decode_anim_pixels(anim, 0)
+    # The clip's first keyframe names the step the character stands in.
+    step = stand.frames[0][1]
+    pose = next((p for p in poses if p.step == step), poses[0])
+    return pose.pixels
 
 
 def load_move_poses(main_world_path: str | Path) -> tuple[anim_clip.BodyPose, ...]:

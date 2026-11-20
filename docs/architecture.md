@@ -243,10 +243,12 @@ tick (input, gravity, axis-separated collision, collect, exit) to a 16-bit
   packed 4-bit (low nibble first, `[V]` from the sprite decompressor at VA
   `0x415E30`) or raw 8-bit pixels to palette indices, and `load_player_sprite`
   resolves that frame from `MAIN.WLD`'s `Hero` → `STA1` animation (the
-  keyframe's first byte is the referenced `ANIM` type_index). The indexed
+  keyframe's first byte is a **1-based** `ANIM` sprite slot, `type_index =
+  byte - 1`; the standing pose is that step's whole-body layer). The indexed
   sprite is blitted through the level's `HEAD` palette; a synthetic world
-  without `MAIN.WLD` falls back to the marker. Animation (frame cycling) is a
-  deferred follow-up; the keyframe's other five bytes stay unmapped (Q34).
+  without `MAIN.WLD` falls back to the marker. The moving player cycles the
+  `RUN` clip's 12 whole-body poses (`anim_clip.resolve_body_poses`); the
+  keyframe's remaining fields are mapped in `file-formats.md` §2.6.1 (Q34).
 
 ## 5. Future components and where they sit
 

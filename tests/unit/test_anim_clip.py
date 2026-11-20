@@ -94,31 +94,67 @@ def _world_with_clip(
 
 
 def test_resolve_clip_maps_sprite_step_offsets_and_flags() -> None:
-    """A keyframe's 8 bytes map to sprite type_index, step-1, signed dx/dy, flags."""
+    """A keyframe's 8 bytes map to the 1-based sprite slot, step-1, dx/dy, flags."""
     world = _world_with_clip(
         (
-            (0, 1, 6, -1, 2),  # sprite 0, sub-frame 0, dx +6, dy -1, flags 2
-            (1, 2, -6, -57, 0x80),  # sprite 1, sub-frame 1, dx -6, dy -57
+            (1, 1, 6, -1, 2),  # byte 1 -> type_index 0, sub-frame 0, dx +6, dy -1
+            (2, 2, -6, -57, 0x80),  # byte 2 -> type_index 1, sub-frame 1, dx -6
         )
     )
     frames = anim_clip.resolve_clip(world, record_name="Hero", clip_tag="WALK")
     assert len(frames) == 2
     first, second = frames
-    assert first.sprite_index == 0
+    assert first.sprite_index == 1
     assert first.sub_frame == 0
     assert (first.dx, first.dy, first.flags) == (6, -1, 2)
     assert first.resolved and first.pixels is not None
     assert (first.pixels.width, first.pixels.height) == (8, 8)
 
-    assert second.sprite_index == 1
+    assert second.sprite_index == 2
     assert second.sub_frame == 1  # step 2 -> the chunk's second frame
     assert (second.dx, second.dy, second.flags) == (-6, -57, 0x80)
     assert second.resolved and second.pixels is not None
     assert (second.pixels.width, second.pixels.height) == (4, 4)
 
 
+def test_sprite_byte_is_one_based() -> None:
+    """Byte 1 selects ``type_index`` 0, byte 2 selects 1, byte 0 selects nothing."""
+    world = _world_with_clip(
+        ((1, 1, 0, 0, 0x01), (2, 1, 0, 0, 0x01), (0, 1, 0, 0, 0x01)),
+    )
+    frames = anim_clip.resolve_clip(world, record_name="Hero", clip_tag="WALK")
+    assert [f.resolved for f in frames] == [True, True, False]
+    # byte 1 -> type_index 0 (the 8x8 fixture sprite), byte 2 -> type_index 1.
+    assert (frames[0].pixels.width, frames[0].pixels.height) == (8, 8)
+    assert (frames[1].pixels.width, frames[1].pixels.height) == (4, 4)
+    # Byte 0 is the "no sprite" sentinel: no type_index -1, so nothing is drawn.
+    assert frames[2].pixels is None
+
+
+def test_step_zero_draws_nothing() -> None:
+    """``step == 0`` is a marker keyframe, not frame 0 (VA ``0x4163D3``)."""
+    world = _world_with_clip(
+        ((1, 0, 0, 0, 0x02), (1, 1, 0, 0, 0x01)),
+        sprites={
+            0: anim_payload(
+                frame_count=3, packed=False, width=4, height=4,
+                type_index=0, pixels=b"\x05" * 48,
+            ),
+        },
+    )
+    frames = anim_clip.resolve_clip(world, record_name="Hero", clip_tag="WALK")
+    assert [f.resolved for f in frames] == [False, True]
+    assert frames[0].pixels is None
+    # The step-0 keyframe must not surface as a pose either.
+    poses = anim_clip.resolve_poses(world, record_name="Hero", clip_tag="WALK")
+    assert [p.pose for p in poses] == [1]
+    bodies = anim_clip.resolve_body_poses(world, record_name="Hero", clip_tag="WALK")
+    assert [b.step for b in bodies] == [1]
+
+
 def test_resolve_clip_marks_unresolved_sprite_as_gap() -> None:
     """A sprite byte outside the ANIM bank stays visible, not silently dropped."""
+    # Byte 99 -> type_index 98, which this world's bank does not carry.
     world = _world_with_clip(((99, 1, 0, 0, 0),))
     frames = anim_clip.resolve_clip(world, record_name="Hero", clip_tag="WALK")
     assert len(frames) == 1
@@ -128,13 +164,13 @@ def test_resolve_clip_marks_unresolved_sprite_as_gap() -> None:
 
 
 def test_resolve_clip_missing_record_or_clip_is_empty() -> None:
-    world = _world_with_clip(((0, 1, 0, 0, 0),))
+    world = _world_with_clip(((1, 1, 0, 0, 0),))
     assert anim_clip.resolve_clip(world, record_name="Nobody", clip_tag="WALK") == ()
     assert anim_clip.resolve_clip(world, record_name="Hero", clip_tag="RUN") == ()
 
 
 def test_mirrored_is_an_exact_horizontal_flip() -> None:
-    world = _world_with_clip(((0, 1, 0, 0, 0),))
+    world = _world_with_clip(((1, 1, 0, 0, 0),))
     frames = anim_clip.resolve_clip(world, record_name="Hero", clip_tag="WALK")
     pixels = frames[0].pixels
     flipped = anim_clip.mirrored(pixels)
@@ -151,7 +187,7 @@ def test_clip_rgba_frames_is_one_buffer_per_keyframe_and_deterministic() -> None
     palette_words[5] = 0x7FFF  # white
     palette_words[7] = 0x001F  # red
     world = _world_with_clip(
-        ((0, 1, 0, 0, 0), (1, 1, 0, 0, 0), (0, 1, 0, 0, 0)),
+        ((1, 1, 0, 0, 0), (2, 1, 0, 0, 0), (1, 1, 0, 0, 0)),
         sprites={
             0: anim_payload(
                 frame_count=1, packed=False, width=8, height=8,
@@ -178,7 +214,7 @@ def test_clip_rgba_frames_is_one_buffer_per_keyframe_and_deterministic() -> None
 
 
 def test_clip_strip_has_one_cell_per_keyframe() -> None:
-    world = _world_with_clip(((0, 1, 0, 0, 0), (99, 1, 0, 0, 0)))
+    world = _world_with_clip(((1, 1, 0, 0, 0), (99, 1, 0, 0, 0)))
     frames = anim_clip.resolve_clip(world, record_name="Hero", clip_tag="WALK")
     palette = art.head_palette(
         next(c for c in world.chunks if c.tag == "HEAD"), art.DEFAULT_PALETTE_SLOT
@@ -196,7 +232,7 @@ def test_four_bit_fixture_decodes_deterministically_through_the_clip() -> None:
     payload = anim_payload(
         frame_count=1, packed=True, width=4, height=1, type_index=7, pixels=data
     )
-    world = _world_with_clip(((7, 1, 0, 0, 0),), sprites={7: payload})
+    world = _world_with_clip(((8, 1, 0, 0, 0),), sprites={7: payload})
     frames = anim_clip.resolve_clip(world, record_name="Hero", clip_tag="WALK")
     assert frames[0].pixels is not None
     assert frames[0].pixels.indices == (2, 1, 4, 3)
@@ -204,13 +240,13 @@ def test_four_bit_fixture_decodes_deterministically_through_the_clip() -> None:
 
 def test_resolve_poses_composites_layers_at_dx_neg_dy() -> None:
     """Two layers sharing a step composite at (dx, -dy), base then overlay."""
-    # Sprite 0 (overlay) at dx=0, dy=-1; sprite 1 (base) at dx=-4, dy=0.
+    # Sprite byte 1 (overlay) at dx=0, dy=-1; byte 2 (base) at dx=-4, dy=0.
     # Under (dx, -dy) the overlay sits at y=+1 (below) and the base at y=0
     # (above); they do not overlap, so paint order does not change the result.
     world = _world_with_clip(
         (
-            (0, 1, 0, -1, 0x01),  # overlay layer
-            (1, 1, -4, 0, 0x80),  # base layer, same step
+            (1, 1, 0, -1, 0x01),  # overlay layer -> type_index 0
+            (2, 1, -4, 0, 0x80),  # base layer -> type_index 1, same step
         ),
         sprites={
             0: anim_payload(
@@ -237,13 +273,13 @@ def test_resolve_poses_composites_layers_at_dx_neg_dy() -> None:
 
 def test_resolve_poses_paints_base_first_then_overlay() -> None:
     """A smaller overlay paints on top of a larger base at their offsets."""
-    # Base = sprite 1 (a 2-pixel row, content area 2); overlay = sprite 0 (one
-    # pixel, content area 1).  Both land at the same screen position, so the
-    # overlay (painted last) must win where they overlap.
+    # Base = byte 2 / type_index 1 (a 2-pixel row, content area 2); overlay =
+    # byte 1 / type_index 0 (one pixel, content area 1).  Both land at the same
+    # screen position, so the overlay (painted last) must win where they overlap.
     world = _world_with_clip(
         (
-            (0, 1, 0, 0, 0x01),  # overlay (smaller)
-            (1, 1, 0, 0, 0x80),  # base (larger), same step
+            (1, 1, 0, 0, 0x01),  # overlay (smaller) -> type_index 0
+            (2, 1, 0, 0, 0x80),  # base (larger) -> type_index 1, same step
         ),
         sprites={
             0: anim_payload(
@@ -269,12 +305,12 @@ def test_resolve_poses_paints_base_first_then_overlay() -> None:
 
 def test_resolve_poses_drops_a_step_with_an_unresolved_layer() -> None:
     """A step that references a sprite outside the bank (contact pose) is dropped."""
-    # Sprite 0 at step 1 resolves; sprite 99 at step 0 does not.  Step 0 is the
-    # contact pose and must not yield a half-drawn figure.
+    # Byte 99 at step 0 resolves neither the sprite nor a step; byte 1 at step 1
+    # resolves.  Step 0 is the contact pose and must not yield a half-drawn figure.
     world = _world_with_clip(
         (
-            (99, 0, 0, 0, 0x02),  # contact pose, unresolvable sprite 99
-            (0, 1, 0, 0, 0x01),  # stride pose, resolvable
+            (99, 0, 0, 0, 0x02),  # contact pose, unresolvable sprite
+            (1, 1, 0, 0, 0x01),  # stride pose, resolvable
         ),
         sprites={
             0: anim_payload(
@@ -292,7 +328,7 @@ def test_pose_rgba_frames_is_one_buffer_per_pose() -> None:
     palette_words = [0] * 256
     palette_words[5] = 0x7FFF  # white
     world = _world_with_clip(
-        ((0, 1, 0, 0, 0x01),),
+        ((1, 1, 0, 0, 0x01),),
         sprites={
             0: anim_payload(
                 frame_count=1, packed=False, width=4, height=2,
@@ -316,7 +352,7 @@ def test_pose_rgba_frames_is_one_buffer_per_pose() -> None:
 
 def test_pose_strip_has_one_cell_per_pose() -> None:
     world = _world_with_clip(
-        ((0, 1, 0, 0, 0x01),),
+        ((1, 1, 0, 0, 0x01),),
         sprites={
             0: anim_payload(
                 frame_count=1, packed=False, width=4, height=2,
@@ -342,23 +378,25 @@ def test_frame_for_step_is_one_based_and_wraps() -> None:
     """``step`` indexes the chunk 1-based and wraps when steps exceed frames.
 
     Measured on the retail install (``docs/file-formats.md`` §2.6.1): ``RUN``
-    declares 12 steps over sprite 24's 8 frames, so the last four steps must not
-    freeze on the final frame.
+    declares 12 steps over sprite byte 23's (``type_index`` 22) 12 frames, so a
+    wrap is the chosen rule when a clip overruns its chunk.
     """
     assert anim_clip.frame_for_step(1, 10) == 0  # first step -> first frame
     assert anim_clip.frame_for_step(10, 10) == 9  # last step -> last frame
     assert anim_clip.frame_for_step(8, 8) == 7
     assert anim_clip.frame_for_step(9, 8) == 0  # wraps instead of clamping
     assert anim_clip.frame_for_step(12, 8) == 3
-    assert anim_clip.frame_for_step(5, 0) == 0  # a frame-less chunk cannot index
+    # step 0 draws nothing at all: not frame 0, not the last frame (VA 0x4163D3).
+    assert anim_clip.frame_for_step(0, 10) is None
+    assert anim_clip.frame_for_step(5, 0) is None  # a frame-less chunk cannot index
 
 
 def test_resolve_clip_wraps_a_step_past_the_last_frame() -> None:
     """A keyframe whose step exceeds the chunk's frames wraps, never clamps."""
     world = _world_with_clip(
         (
-            (0, 1, 0, 0, 0x01),
-            (0, 9, 0, 0, 0x01),
+            (1, 1, 0, 0, 0x01),
+            (1, 9, 0, 0, 0x01),
         ),
         sprites={0: _anim_with_frames(0, (b"\x01" * 16, b"\x02" * 16), width=4, height=4)},
     )
@@ -373,14 +411,14 @@ def test_resolve_clip_wraps_a_step_past_the_last_frame() -> None:
 def test_resolve_body_poses_keeps_the_whole_body_layer_only() -> None:
     """Per step, the pose is the layer with the larger content box — not a composite.
 
-    ``Hero.RUN``'s steps carry a whole-body sprite (54x57) plus a 26x13
-    companion; the companion is measured clear of the figure at its recorded
-    offset, so the player must be drawn from the body layer alone (Q37).
+    ``Hero.RUN``'s steps carry a whole-body sprite (sprite byte 23 → ``type_index``
+    22, 60×34) plus a 26×13 companion (byte 24 → ``type_index`` 23); the body is
+    the larger layer, so the engine's per-step sprite is that one.
     """
     world = _world_with_clip(
         (
-            (0, 1, 0, 0, 0x80),  # small companion, 1x1
-            (1, 1, -2, 0, 0x01),  # whole body, 4x4
+            (1, 1, 0, 0, 0x80),  # small companion, 1x1 -> type_index 0
+            (2, 1, -2, 0, 0x01),  # whole body, 4x4 -> type_index 1
         ),
         sprites={
             0: anim_payload(
@@ -397,7 +435,7 @@ def test_resolve_body_poses_keeps_the_whole_body_layer_only() -> None:
     assert len(poses) == 1
     pose = poses[0]
     assert pose.step == 1
-    assert pose.sprite_index == 1  # the whole-body layer, by content area
+    assert pose.sprite_index == 2  # the whole-body layer's byte, by content area
     assert (pose.pixels.width, pose.pixels.height) == (4, 4)
     assert pose.dx == -2 and pose.dy == 0  # the layer's own recorded offsets
     assert pose.pixels.indices == (7,) * 16
@@ -406,8 +444,8 @@ def test_resolve_body_poses_keeps_the_whole_body_layer_only() -> None:
 def test_resolve_body_poses_is_one_pose_per_step_in_step_order() -> None:
     world = _world_with_clip(
         (
-            (0, 2, 0, 0, 0x01),
-            (0, 1, 0, 0, 0x01),
+            (1, 2, 0, 0, 0x01),
+            (1, 1, 0, 0, 0x01),
         ),
         sprites={0: _anim_with_frames(0, (b"\x01" * 16, b"\x02" * 16), width=4, height=4)},
     )
@@ -417,11 +455,11 @@ def test_resolve_body_poses_is_one_pose_per_step_in_step_order() -> None:
 
 
 def test_resolve_body_poses_drops_a_step_with_an_unresolved_sprite() -> None:
-    """The shared contact pose (sprite 169 on retail) is dropped, not drawn."""
+    """The shared contact pose (sprite byte 169 on retail) is dropped, not drawn."""
     world = _world_with_clip(
         (
-            (99, 0, 0, 0, 0x02),  # contact pose: sprite outside the bank
-            (0, 1, 0, 0, 0x01),
+            (99, 0, 0, 0, 0x02),  # contact pose: sprite byte outside the bank
+            (1, 1, 0, 0, 0x01),
         ),
         sprites={
             0: anim_payload(
@@ -435,7 +473,7 @@ def test_resolve_body_poses_drops_a_step_with_an_unresolved_sprite() -> None:
 
 
 def test_resolve_body_poses_is_empty_when_the_clip_is_absent() -> None:
-    world = _world_with_clip(((0, 1, 0, 0, 0x01),))
+    world = _world_with_clip(((1, 1, 0, 0, 0x01),))
     assert anim_clip.resolve_body_poses(
         world, record_name="Hero", clip_tag="RUN"
     ) == ()

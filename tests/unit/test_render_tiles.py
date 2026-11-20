@@ -279,8 +279,9 @@ def _main_world_with_hero(sprite_type_index: int, pixels: bytes) -> bytes:
 
     The ``NMY`` payload carries a single ``Hero`` record whose one animation is
     tagged ``STA1`` (byte-swapped, as on disk) with one keyframe whose first
-    byte names ``sprite_type_index``; the ``ANIM`` chunk holds that sprite's
-    one raw frame.  This exercises the same resolution
+    byte is the ``ANIM`` sprite slot (1-based: ``sprite_type_index + 1``) and
+    whose ``step`` is 1; the ``ANIM`` chunk holds that sprite's one raw frame.
+    This exercises the same resolution
     :func:`lomax_modern.engine.level.load_player_sprite` performs on the retail
     install.
     """
@@ -297,7 +298,9 @@ def _main_world_with_hero(sprite_type_index: int, pixels: bytes) -> bytes:
     nmy += struct.pack("<I", 20 + 8 * 1)  # size field == 20 + 8*frames
     nmy += struct.pack("<H", 1)  # count2 = one frame
     nmy += b"\0" * 18  # 9 x u16 fields
-    nmy += struct.pack("<BBHHH", sprite_type_index, 0, 0, 0, 0)  # one keyframe
+    nmy += struct.pack(
+        "<BBHHH", sprite_type_index + 1, 1, 0, 0, 0
+    )  # one keyframe: 1-based slot, step 1
     nmy += b"\0" * 2  # u16 terminator
     nmy += b"\0" * 2  # pad
     anim = anim_payload(
@@ -453,9 +456,8 @@ def _main_world_with_clips(
 def test_move_clip_is_run_and_the_whole_body_sprite(tmp_path: Path) -> None:
     """The moving player is wired to ``RUN``'s full-body sprite, not ``WALK``.
 
-    ``WALK``'s layers are leg-sized on retail (18x23 / 16x17) and what the
-    original uses that clip for is still open; the engine must read the clip
-    whose per-step layer is a whole character.
+    ``WALK`` is the slow-walk clip (speed gate at VA ``0x411F79``); the engine
+    must read the clip whose per-step layer is a whole character.
     """
     assert PLAYER_MOVE_ANIM == "RUN"
     run_sprite = anim_payload(
@@ -469,15 +471,16 @@ def test_move_clip_is_run_and_the_whole_body_sprite(tmp_path: Path) -> None:
     (tmp_path / "MAIN.WLD").write_bytes(
         _main_world_with_clips(
             (
-                ("RUN", ((5, 1, -6, -44, 0x01), (5, 2, -6, -47, 0x01))),
-                ("WALK", ((7, 1, 0, 0, 0x01),)),
+                # Keyframe sprite bytes are 1-based: 6 -> type_index 5, 8 -> 7.
+                ("RUN", ((6, 1, -6, -44, 0x01), (6, 2, -6, -47, 0x01))),
+                ("WALK", ((8, 1, 0, 0, 0x01),)),
             ),
             (run_sprite, walk_sprite),
         )
     )
     poses = load_move_poses(tmp_path / "MAIN.WLD")
     assert [p.step for p in poses] == [1, 2]
-    assert {p.sprite_index for p in poses} == {5}
+    assert {p.sprite_index for p in poses} == {6}
     assert [(p.pixels.width, p.pixels.height) for p in poses] == [(6, 8), (6, 8)]
     # step 1 -> frame 0, step 2 -> frame 1 (one-based selector, in range here)
     assert [p.sub_frame for p in poses] == [0, 1]
@@ -523,7 +526,8 @@ def test_moving_player_draws_the_run_pose_through_the_sprite_slot(
     )
     (tmp_path / "MAIN.WLD").write_bytes(
         _main_world_with_clips(
-            (("RUN", ((5, 1, 0, 0, 0x01),)),),
+            # Keyframe sprite bytes are 1-based: 6 -> type_index 5.
+            (("RUN", ((6, 1, 0, 0, 0x01),)),),
             (
                 anim_payload(
                     frame_count=1, packed=False, width=4, height=4, type_index=5,
@@ -570,8 +574,10 @@ def test_moving_player_advances_a_pose_per_hold_and_idles_identically(
     (tmp_path / "MAIN.WLD").write_bytes(
         _main_world_with_clips(
             (
-                ("RUN", ((5, 1, 0, 0, 0x01), (5, 2, 0, 0, 0x01))),
-                (PLAYER_STAND_ANIM, ((6, 1, 0, 0, 0x01),)),
+                # Keyframe sprite bytes are 1-based: 6 -> type_index 5,
+                # 7 -> type_index 6.
+                ("RUN", ((6, 1, 0, 0, 0x01), (6, 2, 0, 0, 0x01))),
+                (PLAYER_STAND_ANIM, ((7, 1, 0, 0, 0x01),)),
             ),
             (
                 anim_frames_payload(
@@ -637,7 +643,7 @@ def test_moving_player_mirrors_the_pose_for_the_facing(tmp_path: Path) -> None:
     )
     (tmp_path / "MAIN.WLD").write_bytes(
         _main_world_with_clips(
-            (("RUN", ((5, 1, 0, 0, 0x01),)),),
+            (("RUN", ((6, 1, 0, 0, 0x01),)),),
             (
                 anim_payload(
                     frame_count=1, packed=False, width=4, height=4, type_index=5,
