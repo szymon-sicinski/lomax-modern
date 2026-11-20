@@ -292,18 +292,17 @@ def render_tiles(
     sprite = level.player_sprite
     moving = state.player.vx != 0.0
     if moving and level.walk_frames:
-        # Walk cycle: one keyframe per movement tick, flipped to the facing
-        # direction.  The keyframe's signed draw offsets (dx, dy) are applied on
-        # top of the standing anchor (feet at the collision-box bottom, centred)
-        # -- the anchor convention is graded [H] in docs/file-formats.md 2.6.
-        clip_frame = level.walk_frames[
-            state.player.anim_frame % len(level.walk_frames)
-        ]
-        pixels = clip_frame.pixels
+        # Walk cycle: one composited pose per movement tick, flipped to the
+        # facing direction.  Each pose is the legs+body composite on one shared
+        # canvas (see anim_clip.resolve_poses); the canvas is anchored with its
+        # bottom at the collision-box bottom and centred, the same convention
+        # the standing sprite uses (docs/file-formats.md 2.6.1 [H]).
+        pose = level.walk_frames[state.player.anim_frame % len(level.walk_frames)]
+        pixels = pose.pixels
         if state.player.facing < 0:
             pixels = anim_clip.mirrored(pixels)
-        sx = int(state.player.centre_x - pixels.width / 2 + clip_frame.dx) - cam_x
-        sy = int(state.player.y + state.player.height - pixels.height + clip_frame.dy) - cam_y
+        sx = int(state.player.centre_x - pixels.width / 2) - cam_x
+        sy = int(state.player.y + state.player.height - pixels.height) - cam_y
         fb.blit_sprite(pixels.indices, pixels.width, pixels.height, palette, sx, sy)
     elif sprite is None:
         # No global bank (synthetic world): fall back to the player marker so

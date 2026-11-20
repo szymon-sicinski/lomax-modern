@@ -979,6 +979,10 @@ def _cmd_anim_clip(args: argparse.Namespace) -> int:
     Read-only on the install: the only writes are the frame PNGs, the preview
     strip and the GIF, all into ``--out``, refused when it would land inside the
     game folder (:func:`lomax_modern.art.refuse_into_game_folder`).
+
+    Each output frame is a *composited stride pose* — every sprite layer of one
+    ``step`` painted at its recorded ``(dx, -dy)`` offset — not a single
+    keyframe layer, so the strip/GIF show a whole character walking.
     """
     game_dir = args.game_dir or os.environ.get("LOMAX_GAME_DIR")
     if not game_dir:
@@ -1018,11 +1022,17 @@ def _cmd_anim_clip(args: argparse.Namespace) -> int:
             file=sys.stderr,
         )
         return 1
-    frames = anim_clip.resolve_clip(
+    keyframes = anim_clip.resolve_clip(
         world, record_name=args.record, clip_tag=args.name
     )
-    if not frames:
-        print(f"error: {args.record}.{args.name} has no keyframes", file=sys.stderr)
+    poses = anim_clip.resolve_poses(
+        world, record_name=args.record, clip_tag=args.name
+    )
+    if not poses:
+        print(
+            f"error: {args.record}.{args.name} has no compositable poses",
+            file=sys.stderr,
+        )
         return 1
     head = next((c for c in world.chunks if c.tag == "HEAD"), None)
     if head is None:
@@ -1030,8 +1040,8 @@ def _cmd_anim_clip(args: argparse.Namespace) -> int:
         return 1
     palette = head_palette(head, DEFAULT_PALETTE_SLOT)
     try:
-        width, height, rgba_frames = anim_clip.clip_rgba_frames(frames, palette)
-        strip = anim_clip.clip_strip(frames, palette)
+        width, height, rgba_frames = anim_clip.pose_rgba_frames(poses, palette)
+        strip = anim_clip.pose_strip(poses, palette)
     except ArtError as exc:
         print(f"error: {exc}", file=sys.stderr)
         return 1
@@ -1049,19 +1059,18 @@ def _cmd_anim_clip(args: argparse.Namespace) -> int:
         print(f"error: cannot write GIF: {exc}", file=sys.stderr)
         return 1
 
-    resolved = sum(1 for f in frames if f.resolved)
-    unresolved = [f for f in frames if not f.resolved]
+    unresolved = sorted({f.sprite_index for f in keyframes if not f.resolved})
     lines = [
         f"world: {world_path.name}",
-        f"clip: {args.record}.{args.name} ({len(frames)} keyframes)",
-        f"resolved: {resolved}/{len(frames)} keyframes "
-        f"(sprite byte -> ANIM type_index)",
+        f"clip: {args.record}.{args.name} ({len(keyframes)} keyframes -> "
+        f"{len(poses)} composited poses)",
+        f"poses: {len(poses)} frames, each a stride pose of its sprite layers "
+        f"painted at (dx, -dy)",
     ]
     if unresolved:
-        sprites = sorted({f.sprite_index for f in unresolved})
         lines.append(
-            f"unresolved sprites (not in this world's ANIM bank): {sprites} -- "
-            f"{len(unresolved)} frame(s) written blank"
+            f"unresolved sprites (not in this world's ANIM bank): {unresolved} "
+            f"-- the contact pose; those keyframes are dropped, not half-drawn"
         )
     lines.append(
         f"frames: {len(rgba_frames)} PNGs in {out_dir} (frame_0000.png .. "
@@ -1070,8 +1079,9 @@ def _cmd_anim_clip(args: argparse.Namespace) -> int:
     lines.append(f"strip: {stem}_strip.png")
     lines.append(f"gif: {stem}.gif ({args.fps} fps)")
     lines.append(
-        "alignment: dx/dy are the keyframe's signed draw offsets, flags bit "
-        "0x80 the flip flag -- see docs/file-formats.md 2.6 (anchor convention [H])"
+        "alignment: dx/dy are signed draw offsets with the game's y-up axis; "
+        "each pose composites its layers at (dx, -dy) -- docs/file-formats.md "
+        "2.6.1 (anchor [H])"
     )
     print("\n".join(lines))
     return 0

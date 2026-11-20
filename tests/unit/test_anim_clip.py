@@ -181,3 +181,102 @@ def test_four_bit_fixture_decodes_deterministically_through_the_clip() -> None:
     frames = anim_clip.resolve_clip(world, record_name="Hero", clip_tag="WALK")
     assert frames[0].pixels is not None
     assert frames[0].pixels.indices == (2, 1, 4, 3)
+
+
+def test_resolve_poses_composites_layers_at_dx_neg_dy() -> None:
+    """Two layers sharing a step composite at (dx, -dy), body over legs."""
+    # Sprite 0 (legs, flags 0x01) at dx=0, dy=-1; sprite 1 (body, flags 0x80)
+    # at dx=-4, dy=0.  Under (dx, -dy) the legs sit at y=+1 (below) and the
+    # body at y=0 (above); the body paints over the legs in keyframe order.
+    world = _world_with_clip(
+        (
+            (0, 1, 0, -1, 0x01),  # legs layer
+            (1, 1, -4, 0, 0x80),  # body layer, same step
+        ),
+        sprites={
+            0: anim_payload(
+                frame_count=1, packed=False, width=4, height=2,
+                type_index=0, pixels=b"\x05" + b"\x00" * 7,
+            ),
+            1: anim_payload(
+                frame_count=1, packed=False, width=4, height=2,
+                type_index=1, pixels=b"\x07" + b"\x00" * 7,
+            ),
+        },
+    )
+    poses = anim_clip.resolve_poses(world, record_name="Hero", clip_tag="WALK")
+    assert len(poses) == 1
+    pose = poses[0]
+    assert pose.pose == 1
+    # Union content bbox: body pixel at screen (-4, 0), legs pixel at (0, 1).
+    assert (pose.pixels.width, pose.pixels.height) == (5, 2)
+    # Body pixel (index 7) at screen (-4, 0) -> canvas (0, 0).
+    assert pose.pixels.at(0, 0) == 7
+    # Legs pixel (index 5) at screen (0, 1) -> canvas (4, 1).
+    assert pose.pixels.at(4, 1) == 5
+
+
+def test_resolve_poses_drops_a_step_with_an_unresolved_layer() -> None:
+    """A step that references a sprite outside the bank (contact pose) is dropped."""
+    # Sprite 0 at step 1 resolves; sprite 99 at step 0 does not.  Step 0 is the
+    # contact pose and must not yield a half-drawn figure.
+    world = _world_with_clip(
+        (
+            (99, 0, 0, 0, 0x02),  # contact pose, unresolvable sprite 99
+            (0, 1, 0, 0, 0x01),  # stride pose, resolvable
+        ),
+        sprites={
+            0: anim_payload(
+                frame_count=1, packed=False, width=4, height=2,
+                type_index=0, pixels=b"\x05" + b"\x00" * 7,
+            ),
+        },
+    )
+    poses = anim_clip.resolve_poses(world, record_name="Hero", clip_tag="WALK")
+    assert [p.pose for p in poses] == [1]
+    assert poses[0].pixels is not None
+
+
+def test_pose_rgba_frames_is_one_buffer_per_pose() -> None:
+    palette_words = [0] * 256
+    palette_words[5] = 0x7FFF  # white
+    world = _world_with_clip(
+        ((0, 1, 0, 0, 0x01),),
+        sprites={
+            0: anim_payload(
+                frame_count=1, packed=False, width=4, height=2,
+                type_index=0, pixels=b"\x05" + b"\x00" * 7,
+            ),
+        },
+        head=head_payload(16, 16, endian=">", palettes=[[0] * 256, palette_words]),
+    )
+    poses = anim_clip.resolve_poses(world, record_name="Hero", clip_tag="WALK")
+    palette = art.head_palette(
+        next(c for c in world.chunks if c.tag == "HEAD"), art.DEFAULT_PALETTE_SLOT
+    )
+    width, height, buffers = anim_clip.pose_rgba_frames(poses, palette)
+    assert len(buffers) == 1
+    assert width == poses[0].pixels.width
+    assert height == poses[0].pixels.height
+    assert len(buffers[0]) == width * height * 4
+    # The single white pixel renders opaque (alpha 255).
+    assert any(buffers[0])
+
+
+def test_pose_strip_has_one_cell_per_pose() -> None:
+    world = _world_with_clip(
+        ((0, 1, 0, 0, 0x01),),
+        sprites={
+            0: anim_payload(
+                frame_count=1, packed=False, width=4, height=2,
+                type_index=0, pixels=b"\x05" + b"\x00" * 7,
+            ),
+        },
+    )
+    poses = anim_clip.resolve_poses(world, record_name="Hero", clip_tag="WALK")
+    palette = art.head_palette(
+        next(c for c in world.chunks if c.tag == "HEAD"), art.DEFAULT_PALETTE_SLOT
+    )
+    strip = anim_clip.pose_strip(poses, palette)
+    assert strip.width == (poses[0].pixels.width + 1) * 1
+    assert strip.height == poses[0].pixels.height

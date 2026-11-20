@@ -104,12 +104,15 @@ def load_player_sprite(main_world_path: str | Path) -> AnimPixels | None:
     return decode_anim_pixels(anim, 0)
 
 
-def load_walk_clip(main_world_path: str | Path) -> tuple[anim_clip.ClipFrame, ...]:
-    """Resolve the player's ``WALK`` clip from ``MAIN.WLD``'s global bank.
+def load_walk_clip(main_world_path: str | Path) -> tuple[anim_clip.PoseFrame, ...]:
+    """Resolve the player's ``WALK`` clip to one composited pose per stride.
 
-    Returns one :class:`lomax_modern.anim_clip.ClipFrame` per *resolvable*
-    keyframe (unresolved sprites — the hero's shared contact pose, sprite byte
-    169 — are dropped so the walk cycles the leg sub-sprites only).  ``()`` when
+    Returns one :class:`lomax_modern.anim_clip.PoseFrame` per resolvable stride
+    ``step`` (10 for ``Hero.WALK``), each the composite of that step's two
+    sprite layers — legs (sprite 34) and body (sprite 33) — painted at their
+    recorded ``(dx, -dy)`` screen offsets into one shared canvas (see
+    :func:`lomax_modern.anim_clip.resolve_poses`).  The contact pose (step 0,
+    sprite byte 169) is not in any ``.WLD`` bank and is dropped.  ``()`` when
     ``MAIN.WLD`` is absent or does not resolve; the renderer then falls back to
     the standing sprite.
     """
@@ -120,12 +123,8 @@ def load_walk_clip(main_world_path: str | Path) -> tuple[anim_clip.ClipFrame, ..
         world = wld.parse_file(source)
     except (OSError, wld.WLDError):
         return ()
-    return tuple(
-        frame
-        for frame in anim_clip.resolve_clip(
-            world, record_name=PLAYER_NMY_NAME, clip_tag=PLAYER_WALK_ANIM
-        )
-        if frame.resolved and frame.pixels is not None
+    return anim_clip.resolve_poses(
+        world, record_name=PLAYER_NMY_NAME, clip_tag=PLAYER_WALK_ANIM
     )
 
 
@@ -193,10 +192,11 @@ class Level:
     #: to the player marker.
     player_sprite: AnimPixels | None = None
     #: The player's resolved ``WALK`` clip (see :func:`load_walk_clip`), one
-    #: :class:`lomax_modern.anim_clip.ClipFrame` per resolvable keyframe, in
-    #: clip order.  Empty when ``MAIN.WLD`` is absent; the renderer falls back
-    #: to the standing sprite while moving.
-    walk_frames: tuple[anim_clip.ClipFrame, ...] = ()
+    #: :class:`lomax_modern.anim_clip.PoseFrame` per stride step (10 for
+    #: ``Hero.WALK``), each the composite of that step's two sprite layers on
+    #: one shared canvas.  Empty when ``MAIN.WLD`` is absent; the renderer
+    #: falls back to the standing sprite while moving.
+    walk_frames: tuple[anim_clip.PoseFrame, ...] = ()
 
     @property
     def plane(self) -> art.MapPlane:

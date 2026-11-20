@@ -383,10 +383,10 @@ install:
 
 ```
 u8 sprite   # ANIM type_index (0..147 in MAIN.WLD)        [V]
-u8 step     # stride counter; step-1 selects the chunk's own frame  [H, see below]
+u8 step     # stride pose index; step-1 selects the chunk's own frame  [V, see below]
 i16 dx      # signed horizontal draw offset               [V structure]
-i16 dy      # signed vertical draw offset                 [V structure]
-u16 flags   # per-frame flag word; bit 0x80 marks the second stride pose  [H]
+i16 dy      # signed vertical draw offset, y-up           [V]
+u16 flags   # per-frame flag word; bit 0x80 marks the second layer   [V]
 ```
 
 **Chunk ↔ clip mapping `[V]`.** A keyframe's first byte is a direct index into
@@ -402,28 +402,42 @@ kept as explicit gaps. `169` is the hero's shared contact pose (used by
 (they are likely embedded in `LOMAX.EXE`), so `WALK`'s two contact keyframes
 stay unresolved (Q34).
 
+**Pose structure `[V]`.** `Hero.WALK` is **10 stride poses × 2 sprite layers**,
+not 22 independent frames. Grouping the 22 keyframes by their second byte
+(`step`) gives exactly two keyframes per `step` 1..10 — a *legs* layer (sprite
+34, `flags 0x0001`) and a *body* layer (sprite 33, `flags 0x0080`) — plus two
+`step 0` contact keyframes (sprite 169). Sprite 33 has exactly 10 frames and
+sprite 34's first 10 frames are used, so `step - 1` selects the matching frame
+of each layer: the two keyframes sharing a `step` are one composite pose, not
+two separate frames. `flags 0x80` is the **second-layer marker** (drawn on top
+of the `0x01` layer), *not* a "second stride pose" or a flip flag.
+
 **Timing `[H]`.** No keyframe field and none of the animation's 9 `u16` params
 carry a per-frame hold: `dx`/`dy` are small signed offsets, `flags` is a flag
 word and `step` a monotonic stride counter. The engine therefore advances one
-keyframe per 60 Hz tick of horizontal movement (feet stay locked to the ground
-— no sliding); this is a **chosen constant**, not a measured rate.
+pose per 60 Hz tick of horizontal movement (feet stay locked to the ground —
+no sliding); this is a **chosen constant**, not a measured rate.
 
-**Alignment `[V]` structure, `[H]` convention.** `dx`/`dy` are signed offsets
-(`WALK` keyframe 0 reads `+6, −1`). The flag word's bit `0x80` marks the second
-stride pose of each pair — every stride clip (`WALK`/`RUN`/`BRAK`/`SPIN`/`DUCK`)
-alternates its two stride sprites with `flags` 1 and `0x80` — which is
-consistent with a horizontal flip flag, but the pairing is not yet confirmed
-against a render. The exact anchor (which point on the collision box the
-offsets are relative to) is also not yet confirmed, so `engine.render_tiles`
-draws the walk frame with its feet at the collision-box bottom, applies `dx`/`dy`
-on top, and mirrors the whole frame by the player's facing direction — all
-graded `[H]`.
+**Alignment `[V]` structure, `[H]` anchor.** `dx`/`dy` are signed offsets with
+the game's **y-up** axis — the sprite decompressor at VA `0x415E30` negates the
+frame height before storing it (`neg ecx` at `0x415FF9`), so a layer is drawn at
+screen position `(dx, -dy)`, which is what puts the legs *below* the body. Each
+pose composites its two layers at those offsets into one canvas (the clip's
+union content bounding box, so every pose shares a canvas and there is no
+per-pose jitter); `anim_clip.resolve_poses` does this and the composite is
+verified to form a **single connected figure** (one 4-connected component per
+pose on the retail install). The exact anchor — which point on the collision box
+the offsets are relative to — is still not confirmed, so
+`engine.render_tiles` anchors the composite like the standing sprite: bottom at
+the collision-box bottom, horizontally centred, mirrored by the player's facing
+direction. Anchor and facing convention are graded `[H]`. The `ANIM` frame's
+`d`/`e` words (carried verbatim as `field_d`/`field_e`) look like per-frame
+registration offsets but their sign and role are unresolved (Q35).
 
 `lomax-modern anim-clip <install> --world MAIN --name WALK --out DIR` renders
-the clip's 22 keyframes as PNGs plus a strip and a GIF. `Hero.WALK` resolves to
-20/22 frames — the leg sub-sprites 33/34, each keyed by `step-1` into the
-chunk's own 10/15-frame animation; the two contact frames (sprite 169) are
-written blank and reported.
+the clip's **10 composited poses** as PNGs plus a strip and a GIF, each a whole
+walking character. The two contact keyframes (sprite 169) are reported as
+unresolved and dropped, not half-drawn.
 
 ### 2.7 Palette rules that bite any art pipeline
 
