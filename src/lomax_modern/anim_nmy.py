@@ -81,7 +81,7 @@ def decode_anim(payload: bytes) -> AnimDecode | None:
         u16 b            # copied verbatim
         u16 n            # frame count
         u16 flags        # bit 15 = packed (4-bit) pixels
-        u16 type_index   # animation slot key; a keyframe's sprite byte is type_index + 1
+        u16 type_index   # animation slot key (sprite byte = type_index, 0-based)
         u16 pad          # skipped by the reader
         n x frame:
             i16 width
@@ -203,12 +203,10 @@ class NmyAnim:
     ``frames`` is one entry per 8-byte per-frame record.  Each is the raw
     ``(sprite, b1, w2, w3, w4)`` tuple decoded ``u8, u8, u16, u16, u16``.  Only
     the first byte is mapped: ``sprite`` is the referenced ``ANIM``
-    ``type_index`` **+ 1** (the ``ANIM`` reader stores each chunk at slot
-    ``type_index + 1``, so a keyframe's sprite byte is 1-based — see
-    ``docs/file-formats.md`` §2.6.1).  ``b1``/``w2``/``w3``/``w4`` are carried
-    verbatim; their meaning (sub-frame index, draw offset, flip/duration flags)
-    is read by the animation scheduler, not this module, and is left unresolved
-    here.
+    ``type_index`` directly (0-based — see ``docs/file-formats.md`` §2.6.1).
+    ``b1``/``w2``/``w3``/``w4`` are carried verbatim; their meaning (sub-frame
+    index, draw offset, flip/duration flags) is read by the animation scheduler,
+    not this module, and is left unresolved here.
     """
 
     tag: int  # 4-byte identifier (byte-swapped ASCII on disk)

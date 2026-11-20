@@ -78,48 +78,24 @@ def test_resolve_clip_maps_sprite_step_offsets_and_flags() -> None:
     """A keyframe's 8 bytes map to sprite type_index, step-1, signed dx/dy, flags."""
     world = _world_with_clip(
         (
-            (1, 1, 6, -1, 2),  # sprite 1 -> type_index 0, sub-frame 0, dx +6, dy -1
-            (2, 2, -6, -57, 0x80),  # sprite 2 -> type_index 1, sub-frame 1
+            (0, 1, 6, -1, 2),  # sprite 0, sub-frame 0, dx +6, dy -1, flags 2
+            (1, 2, -6, -57, 0x80),  # sprite 1, sub-frame 1, dx -6, dy -57
         )
     )
     frames = anim_clip.resolve_clip(world, record_name="Hero", clip_tag="WALK")
     assert len(frames) == 2
     first, second = frames
-    assert first.sprite_index == 1
+    assert first.sprite_index == 0
     assert first.sub_frame == 0
     assert (first.dx, first.dy, first.flags) == (6, -1, 2)
     assert first.resolved and first.pixels is not None
     assert (first.pixels.width, first.pixels.height) == (8, 8)
 
-    assert second.sprite_index == 2
+    assert second.sprite_index == 1
     assert second.sub_frame == 1  # step 2 -> the chunk's second frame
     assert (second.dx, second.dy, second.flags) == (-6, -57, 0x80)
     assert second.resolved and second.pixels is not None
     assert (second.pixels.width, second.pixels.height) == (4, 4)
-
-
-def test_sprite_byte_is_type_index_plus_one() -> None:
-    """The keyframe sprite byte S resolves to the chunk with type_index S-1.
-
-    Pins the off-by-one: the ``ANIM`` reader stores each chunk at slot
-    ``type_index + 1`` (VA 0x414A9A/0x414B54) and the draw path looks the sprite
-    byte up at that slot with no offset (VA 0x4163FC).  A 0-based read decodes
-    the neighbouring chunk, which produced ``WALK``'s phantom "5x smaller
-    fragments".
-    """
-    world = _world_with_clip(
-        ((2, 1, 0, 0, 0),),  # sprite byte 2 -> type_index 1
-        sprites={
-            0: anim_payload(frame_count=1, packed=False, width=1, height=1, type_index=0, pixels=b"\x03"),
-            1: anim_payload(frame_count=1, packed=False, width=2, height=2, type_index=1, pixels=b"\x05" + b"\x00" * 3),
-        },
-    )
-    frames = anim_clip.resolve_clip(world, record_name="Hero", clip_tag="WALK")
-    assert len(frames) == 1
-    assert frames[0].resolved and frames[0].pixels is not None
-    # sprite byte 2 -> type_index 1 -> the 2x2 chunk (index 5), not the 1x1.
-    assert (frames[0].pixels.width, frames[0].pixels.height) == (2, 2)
-    assert frames[0].pixels.indices[0] == 5
 
 
 def test_resolve_clip_marks_unresolved_sprite_as_gap() -> None:
@@ -133,13 +109,13 @@ def test_resolve_clip_marks_unresolved_sprite_as_gap() -> None:
 
 
 def test_resolve_clip_missing_record_or_clip_is_empty() -> None:
-    world = _world_with_clip(((1, 1, 0, 0, 0),))
+    world = _world_with_clip(((0, 1, 0, 0, 0),))
     assert anim_clip.resolve_clip(world, record_name="Nobody", clip_tag="WALK") == ()
     assert anim_clip.resolve_clip(world, record_name="Hero", clip_tag="RUN") == ()
 
 
 def test_mirrored_is_an_exact_horizontal_flip() -> None:
-    world = _world_with_clip(((1, 1, 0, 0, 0),))
+    world = _world_with_clip(((0, 1, 0, 0, 0),))
     frames = anim_clip.resolve_clip(world, record_name="Hero", clip_tag="WALK")
     pixels = frames[0].pixels
     flipped = anim_clip.mirrored(pixels)
@@ -156,7 +132,7 @@ def test_clip_rgba_frames_is_one_buffer_per_keyframe_and_deterministic() -> None
     palette_words[5] = 0x7FFF  # white
     palette_words[7] = 0x001F  # red
     world = _world_with_clip(
-        ((1, 1, 0, 0, 0), (2, 1, 0, 0, 0), (1, 1, 0, 0, 0)),
+        ((0, 1, 0, 0, 0), (1, 1, 0, 0, 0), (0, 1, 0, 0, 0)),
         sprites={
             0: anim_payload(
                 frame_count=1, packed=False, width=8, height=8,
@@ -183,7 +159,7 @@ def test_clip_rgba_frames_is_one_buffer_per_keyframe_and_deterministic() -> None
 
 
 def test_clip_strip_has_one_cell_per_keyframe() -> None:
-    world = _world_with_clip(((1, 1, 0, 0, 0), (99, 1, 0, 0, 0)))
+    world = _world_with_clip(((0, 1, 0, 0, 0), (99, 1, 0, 0, 0)))
     frames = anim_clip.resolve_clip(world, record_name="Hero", clip_tag="WALK")
     palette = art.head_palette(
         next(c for c in world.chunks if c.tag == "HEAD"), art.DEFAULT_PALETTE_SLOT
@@ -201,7 +177,7 @@ def test_four_bit_fixture_decodes_deterministically_through_the_clip() -> None:
     payload = anim_payload(
         frame_count=1, packed=True, width=4, height=1, type_index=7, pixels=data
     )
-    world = _world_with_clip(((8, 1, 0, 0, 0),), sprites={7: payload})
+    world = _world_with_clip(((7, 1, 0, 0, 0),), sprites={7: payload})
     frames = anim_clip.resolve_clip(world, record_name="Hero", clip_tag="WALK")
     assert frames[0].pixels is not None
     assert frames[0].pixels.indices == (2, 1, 4, 3)
@@ -214,8 +190,8 @@ def test_resolve_poses_composites_layers_at_dx_neg_dy() -> None:
     # (above); they do not overlap, so paint order does not change the result.
     world = _world_with_clip(
         (
-            (1, 1, 0, -1, 0x01),  # overlay layer
-            (2, 1, -4, 0, 0x80),  # base layer, same step
+            (0, 1, 0, -1, 0x01),  # overlay layer
+            (1, 1, -4, 0, 0x80),  # base layer, same step
         ),
         sprites={
             0: anim_payload(
@@ -247,8 +223,8 @@ def test_resolve_poses_paints_base_first_then_overlay() -> None:
     # overlay (painted last) must win where they overlap.
     world = _world_with_clip(
         (
-            (1, 1, 0, 0, 0x01),  # overlay (smaller)
-            (2, 1, 0, 0, 0x80),  # base (larger), same step
+            (0, 1, 0, 0, 0x01),  # overlay (smaller)
+            (1, 1, 0, 0, 0x80),  # base (larger), same step
         ),
         sprites={
             0: anim_payload(
@@ -279,7 +255,7 @@ def test_resolve_poses_drops_a_step_with_an_unresolved_layer() -> None:
     world = _world_with_clip(
         (
             (99, 0, 0, 0, 0x02),  # contact pose, unresolvable sprite 99
-            (1, 1, 0, 0, 0x01),  # stride pose, resolvable
+            (0, 1, 0, 0, 0x01),  # stride pose, resolvable
         ),
         sprites={
             0: anim_payload(
@@ -297,7 +273,7 @@ def test_pose_rgba_frames_is_one_buffer_per_pose() -> None:
     palette_words = [0] * 256
     palette_words[5] = 0x7FFF  # white
     world = _world_with_clip(
-        ((1, 1, 0, 0, 0x01),),
+        ((0, 1, 0, 0, 0x01),),
         sprites={
             0: anim_payload(
                 frame_count=1, packed=False, width=4, height=2,
@@ -321,7 +297,7 @@ def test_pose_rgba_frames_is_one_buffer_per_pose() -> None:
 
 def test_pose_strip_has_one_cell_per_pose() -> None:
     world = _world_with_clip(
-        ((1, 1, 0, 0, 0x01),),
+        ((0, 1, 0, 0, 0x01),),
         sprites={
             0: anim_payload(
                 frame_count=1, packed=False, width=4, height=2,

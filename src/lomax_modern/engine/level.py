@@ -47,13 +47,11 @@ PLAYER_NMY_NAME = "Hero"
 PLAYER_STAND_ANIM = "STA1"
 
 #: The animation tag whose keyframes drive the player's movement cycle.  The
-#: draw-path trace (``docs/file-formats.md`` §2.6.1) showed the keyframe sprite
-#: byte is the ``ANIM`` ``type_index`` **+ 1** (the ``ANIM`` reader stores each
-#: chunk at slot ``type_index + 1``), so ``RUN``'s base is sprite 23 → type_index
-#: 22 (60×34) and ``WALK``'s base is sprite 33 → type_index 32 (36×46) — both
-#: full-body.  ``RUN`` is used for movement because the ground-truth screenshot
-#: shows the hero mid-lunge; the game has both a walk and a run clip selected by
-#: ground speed, and the exact threshold is not yet traced.  Each keyframe
+#: spike measured the core clips against the retail install and a ground-truth
+#: screenshot: ``RUN``'s base sprite (byte 24 → type_index 24) is a full-body
+#: 54×57 frame, while ``WALK``'s two sprites (33 → 18×23, 34 → 16×17) are both
+#: small fragments with no full-body sprite (``docs/file-formats.md`` §2.6.1,
+#: Q36), so the moving player renders ``RUN``, not ``WALK``.  Each keyframe
 #: references an ``ANIM`` chunk plus a signed draw offset and a flag word;
 #: ``anim_clip.resolve_poses`` turns the clip into renderable poses.
 PLAYER_RUN_ANIM = "RUN"
@@ -64,13 +62,12 @@ def load_player_sprite(main_world_path: str | Path) -> AnimPixels | None:
 
     The player is the ``NMY`` record named :data:`PLAYER_NMY_NAME`; its standing
     pose is :data:`PLAYER_STAND_ANIM`.  Each keyframe's first byte is the
-    referenced ``ANIM`` ``type_index`` **+ 1** (``docs/file-formats.md`` §2.6.1),
-    so a keyframe resolves to the chunk whose ``type_index`` is that byte minus
-    one.  ``STA1``'s first stride pose pairs a small head overlay (sprite 28 →
-    type_index 27, 14×23) with the full body (sprite 27 → type_index 26, 44×49,
-    flags ``0x80`` = the pose-run terminator); the standing sprite is the
-    **body** — the largest sprite in the clip — decoded to palette indices.  The
-    indexed layer is returned — the caller applies its own ``HEAD`` palette.
+    referenced ``ANIM`` ``type_index`` directly (0-based; ``docs/file-formats.md``
+    §2.6.1).  ``STA1`` pairs a full body (sprite 28 → type_index 28, 54×41) with
+    a small head overlay (sprite 27 → type_index 27, 14×23); the standing sprite
+    is the **body** — the largest sprite in the clip — decoded to palette
+    indices.  The indexed layer is returned — the caller applies its own
+    ``HEAD`` palette.
 
     Returns ``None`` when ``MAIN.WLD`` is absent or does not resolve; the
     renderer then falls back to the player marker, so a synthetic world
@@ -99,7 +96,7 @@ def load_player_sprite(main_world_path: str | Path) -> AnimPixels | None:
     )
     if stand is None or not stand.frames:
         return None
-    # Resolve every sprite the clip references (sprite byte = type_index + 1)
+    # Resolve every sprite the clip references (sprite byte = type_index, 0-based)
     # and pick the *largest* frame as the body — STA1's head overlay is far
     # smaller than its body, so this returns the standing body, not the overlay.
     chunks: dict[int, AnimDecode] = {}
@@ -108,7 +105,7 @@ def load_player_sprite(main_world_path: str | Path) -> AnimPixels | None:
             continue
         decoded = decode_anim(chunk.payload)
         if decoded is not None:
-            chunks[decoded.type_index + 1] = decoded
+            chunks[decoded.type_index] = decoded
     best: AnimPixels | None = None
     best_area = -1
     for sprite, _step, _w2, _w3, _w4 in stand.frames:
@@ -130,17 +127,17 @@ def load_run_clip(main_world_path: str | Path) -> tuple[anim_clip.PoseFrame, ...
 
     Returns one :class:`lomax_modern.anim_clip.PoseFrame` per resolvable stride
     ``step`` (12 for ``Hero.RUN``), each the composite of that step's two
-    sprite layers — the full body (sprite 23 → type_index 22, 48–62×34–43) and
-    the overlay (sprite 24 → type_index 23, 24–34×13–17) — painted at their
-    recorded ``(dx, -dy)`` screen offsets into one shared canvas (see
+    sprite layers — the full body (sprite 24 → type_index 24, 54×57) and the
+    overlay (sprite 23 → type_index 23, 26×13) — painted at their recorded
+    ``(dx, -dy)`` screen offsets into one shared canvas (see
     :func:`lomax_modern.anim_clip.resolve_poses`).  The contact pose (step 0,
     sprite byte 169) is not in any ``.WLD`` bank and is dropped.  ``()`` when
     ``MAIN.WLD`` is absent or does not resolve; the renderer then falls back to
     the standing sprite.
 
     ``RUN`` is the movement clip the ground-truth screenshot confirms (the hero
-    mid-lunge); ``WALK`` is a full-body clip too once the sprite byte is read as
-    ``type_index + 1``.
+    mid-lunge); ``WALK``'s two sprites are both small fragments (Q36), so it is
+    not used for movement here.
     """
     source = Path(main_world_path)
     if not source.is_file():
