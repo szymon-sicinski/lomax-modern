@@ -8,6 +8,19 @@ Versioning: [Semantic Versioning](https://semver.org/).
 
 ### Added
 
+- **`Hero.WALK` animated end to end (animation spike).** A new `anim-clip`
+  command renders any `NMY` clip to per-frame PNGs plus a preview strip and a
+  GIF: `lomax-modern anim-clip <install> --world MAIN --name WALK --out DIR`.
+  The engine now draws the player as the `WALK` cycle while moving — one
+  keyframe per 60 Hz tick of movement, flipped to the facing direction —
+  instead of the static standing sprite. The keyframe record is resolved
+  (`docs/file-formats.md` §2.6.1): byte 0 is the `ANIM` `type_index` **[V]**,
+  then a stride counter, two signed draw offsets and a flag word whose bit
+  `0x80` marks the second stride pose **[H]**. `Hero.WALK` resolves 20/22 frames
+  (the two contact frames reference the shared pose `169`, which is not in any
+  `.WLD` bank and stays an explicit gap, Q34); the anchor the offsets are
+  relative to and the per-frame hold remain hypotheses.
+
 - **C-playable milestone closed (S1).** The one-playable-level plan
   (`docs/roadmap/45-playable-level-plan.md` §8) landed end to end: all seven
   implementation cards (P1–P7) are merged and verified by execution on `main` —

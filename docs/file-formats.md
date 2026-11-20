@@ -376,6 +376,55 @@ it is the in-memory stride the loader allocates per frame (`0x38` bytes in RAM);
 the on-disk framing is the one above, and no chunk is an array of `0x38`-byte
 records (re-measured: 0/566 chunk sizes are multiples of 0x38).
 
+### 2.6.1 The `NMY` keyframe record, and the `Hero.WALK` clip (2026-11-20)
+
+The 8-byte keyframe (`{u8, u8, u16, u16, u16}`) is resolved against the retail
+install:
+
+```
+u8 sprite   # ANIM type_index (0..147 in MAIN.WLD)        [V]
+u8 step     # stride counter; step-1 selects the chunk's own frame  [H, see below]
+i16 dx      # signed horizontal draw offset               [V structure]
+i16 dy      # signed vertical draw offset                 [V structure]
+u16 flags   # per-frame flag word; bit 0x80 marks the second stride pose  [H]
+```
+
+**Chunk ↔ clip mapping `[V]`.** A keyframe's first byte is a direct index into
+the world's `ANIM` bank (`type_index` 0..147 in `MAIN.WLD`): 148/154 distinct
+sprite bytes resolve and **0/148** chunks are unreferenced. The spike card's
+"148 `ANIM` chunks vs 142 declared animations" is **not** a six-orphan gap — the
+two numbers are different units. 148 is the number of *sprite images* (`ANIM`
+chunks); 142 is the number of *clips* (the sum of every `NMY` record's `W_B`),
+and a clip references many sprites through its keyframes. Six sprite bytes do
+**not** resolve in any world's bank — `148, 169, 236, 240, 247, 248` — and are
+kept as explicit gaps. `169` is the hero's shared contact pose (used by
+`WALK`/`RUN`/`BRAK`/`SPIN`/… and `Krug.CLAY`); its pixels are not in any `.WLD`
+(they are likely embedded in `LOMAX.EXE`), so `WALK`'s two contact keyframes
+stay unresolved (Q34).
+
+**Timing `[H]`.** No keyframe field and none of the animation's 9 `u16` params
+carry a per-frame hold: `dx`/`dy` are small signed offsets, `flags` is a flag
+word and `step` a monotonic stride counter. The engine therefore advances one
+keyframe per 60 Hz tick of horizontal movement (feet stay locked to the ground
+— no sliding); this is a **chosen constant**, not a measured rate.
+
+**Alignment `[V]` structure, `[H]` convention.** `dx`/`dy` are signed offsets
+(`WALK` keyframe 0 reads `+6, −1`). The flag word's bit `0x80` marks the second
+stride pose of each pair — every stride clip (`WALK`/`RUN`/`BRAK`/`SPIN`/`DUCK`)
+alternates its two stride sprites with `flags` 1 and `0x80` — which is
+consistent with a horizontal flip flag, but the pairing is not yet confirmed
+against a render. The exact anchor (which point on the collision box the
+offsets are relative to) is also not yet confirmed, so `engine.render_tiles`
+draws the walk frame with its feet at the collision-box bottom, applies `dx`/`dy`
+on top, and mirrors the whole frame by the player's facing direction — all
+graded `[H]`.
+
+`lomax-modern anim-clip <install> --world MAIN --name WALK --out DIR` renders
+the clip's 22 keyframes as PNGs plus a strip and a GIF. `Hero.WALK` resolves to
+20/22 frames — the leg sub-sprites 33/34, each keyed by `step-1` into the
+chunk's own 10/15-frame animation; the two contact frames (sprite 169) are
+written blank and reported.
+
 ### 2.7 Palette rules that bite any art pipeline
 
 Because index 0 is the transparent key and real white lives at 0x7FFE,

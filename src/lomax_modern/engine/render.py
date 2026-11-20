@@ -30,6 +30,7 @@ import struct
 from dataclasses import dataclass
 
 from ..anim_nmy import placement_role
+from .. import anim_clip
 from ..art import DEFAULT_PALETTE_SLOT
 from ..renderer import Framebuffer, head_palette565
 from .entities import Player
@@ -289,14 +290,32 @@ def render_tiles(
     overlay_gnmy(fb, level.gnmy, cam_x, cam_y)
 
     sprite = level.player_sprite
-    if sprite is None:
+    moving = state.player.vx != 0.0
+    if moving and level.walk_frames:
+        # Walk cycle: one keyframe per movement tick, flipped to the facing
+        # direction.  The keyframe's signed draw offsets (dx, dy) are applied on
+        # top of the standing anchor (feet at the collision-box bottom, centred)
+        # -- the anchor convention is graded [H] in docs/file-formats.md 2.6.
+        clip_frame = level.walk_frames[
+            state.player.anim_frame % len(level.walk_frames)
+        ]
+        pixels = clip_frame.pixels
+        if state.player.facing < 0:
+            pixels = anim_clip.mirrored(pixels)
+        sx = int(state.player.centre_x - pixels.width / 2 + clip_frame.dx) - cam_x
+        sy = int(state.player.y + state.player.height - pixels.height + clip_frame.dy) - cam_y
+        fb.blit_sprite(pixels.indices, pixels.width, pixels.height, palette, sx, sy)
+    elif sprite is None:
         # No global bank (synthetic world): fall back to the player marker so
         # camera-follow stays visible without a sprite.
         sx = int(state.player.x) - cam_x
         sy = int(state.player.y) - cam_y
         fb.fill_rect(sx, sy, state.player.width, state.player.height, COLOUR_PLAYER)
     else:
-        # Centre the sprite on the player's collision box; feet at its bottom.
+        # Standing pose: centre the sprite on the player's collision box; feet
+        # at its bottom.  Flipped to the facing direction.
+        if state.player.facing < 0:
+            sprite = anim_clip.mirrored(sprite)
         sx = int(state.player.centre_x - sprite.width / 2) - cam_x
         sy = int(state.player.y + state.player.height - sprite.height) - cam_y
         fb.blit_sprite(sprite.indices, sprite.width, sprite.height, palette, sx, sy)

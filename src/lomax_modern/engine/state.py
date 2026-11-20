@@ -103,6 +103,16 @@ def step_player(level: Level, player: Player, inp: Input) -> None:
     else:
         player.vx = 0.0
 
+    # Walk-cycle bookkeeping: one keyframe per tick of horizontal movement, so
+    # the animation stays in lockstep with the feet (no sliding).  The facing is
+    # the sign of the last non-zero velocity; the frame index cycles the resolved
+    # WALK clip when the player moves and resets when they stand still.
+    if player.vx != 0.0:
+        player.facing = 1 if player.vx > 0 else -1
+        player.anim_frame += 1
+    else:
+        player.anim_frame = 0
+
     if inp.jump and player.on_ground:
         player.vy = JUMP_SPEED
         player.on_ground = False
