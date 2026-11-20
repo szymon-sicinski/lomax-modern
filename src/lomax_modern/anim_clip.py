@@ -5,19 +5,36 @@ keyframe of a named ``NMY`` animation to the ``ANIM`` sprite it references,
 decodes that sprite's pixels, and composites the clip's stride poses, so a
 caller can render a whole walking character without re-deriving the mapping.
 
-The mapping is the one ``docs/file-formats.md`` §2.5/§2.6 already grade: the
-keyframe's first byte is the referenced ``ANIM`` ``type_index`` **[V]** (3,124/3,156
-same-world resolutions on the retail install), and the second byte is that
-chunk's own frame selector (``step - 1``, clamped into the chunk's frame range).
-The remaining three words are the signed draw offsets ``dx``/``dy`` and the
-per-frame flag word ``flags``.  A stride pose is the keyframes that share one
-``step`` value — for ``Hero.WALK`` a **base** layer (sprite 33, the whole
-character) and a smaller **overlay** layer (sprite 34, the head) — and
-:func:`resolve_poses` composites them at their recorded offsets, painting the
-base first and the overlay on top.  The game's vertical axis points up (the
+The mapping is recovered from the ``ANIM`` reader and the draw path, and it
+settles the spike's core question: a keyframe's first byte is the referenced
+``ANIM`` ``type_index`` **plus one** (1-based).  The ``ANIM`` reader stores each
+chunk in the sprite array at slot ``type_index + 1`` (``inc edi`` at VA
+``0x414A9A``, store at ``0x414B54`` to ``[eax*4+0x59E960]``), and the draw path
+looks a keyframe's sprite byte up at that same slot with **no** offset (VA
+``0x4163FC``/``0x4164DB``/``0x40C63C``) — so ``sprite byte S`` references the
+chunk with ``type_index S-1``, and ``S = 0`` is the "no sprite" sentinel.
+Reading the byte as a 0-based ``type_index`` decodes the *neighbouring* chunk;
+that is exactly why ``Hero.WALK`` looked like two 18×23/16×17 fragments (its
+base byte 33 is really ``type_index`` 32, 36×46).  The second byte is that
+chunk's own frame selector (``step - 1``, clamped into the chunk's frame
+range); the remaining three words are the signed draw offsets ``dx``/``dy`` and
+the per-frame flag word ``flags`` (bit ``0x80`` = last keyframe of a pose run).
+
+A stride pose is the keyframes that share one ``step`` value.  Under the 1-based
+mapping **every** core clip pairs a full-body base with a small overlay: ``RUN``
+= sprite 23 → type_index 22 (60×34 body) + 24 → 23 (26×13), ``STA1`` = 27 → 26
+(44×49) + 28 → 27 (14×23), ``WALK`` = 33 → 32 (36×46) + 34 → 33 (18×23),
+``SPIN`` = 25 → 24 (54×57) + 26 → 25 (30×14), ``TUMB`` = 43 → 42 (44×42) + 44 →
+43 (28×9).  The engine animates the moving player with ``RUN`` (the ground-truth
+screenshot shows the hero mid-lunge), and ``WALK`` is a full-body clip too once
+the byte is read as 1-based (``docs/file-formats.md`` §2.6.1).
+
+:func:`resolve_poses` composites each pose's layers at their recorded offsets,
+painting the largest layer first.  The game's vertical axis points up (the
 sprite decompressor at VA ``0x415E30`` negates the frame height), so a layer
-draws at screen position ``(dx, -dy)``, which is what puts the head above the
-body.
+draws at screen position ``(dx, -dy)``.  The contact-pose sprite byte 169
+(→ ``type_index`` 168) is absent from every ``.WLD`` bank (Q34) and its steps
+are dropped, never half-drawn.
 
 Nothing here reads game bytes into the repository: every decode happens at run
 time against the caller's own ``.WLD``.
@@ -47,7 +64,8 @@ def _signed(word: int) -> int:
 class ClipFrame:
     """One keyframe of an ``NMY`` animation, resolved to pixel indices.
 
-    ``sprite_index`` is the keyframe's sprite byte (the ``ANIM`` ``type_index``);
+    ``sprite_index`` is the keyframe's first byte — the referenced ``ANIM``
+    ``type_index`` **plus one** (1-based; see :func:`sprite_map`).
     ``sub_frame`` is the ``ANIM`` chunk's own frame selected by ``step - 1``.
     ``dx``/``dy`` are the signed draw offsets and ``flags`` the flag word.  When
     the sprite byte does not resolve to an ``ANIM`` chunk, ``resolved`` is
@@ -69,14 +87,14 @@ class ClipFrame:
 class PoseFrame:
     """One composited stride pose: every layer of one ``step`` at its offset.
 
-    ``pose`` is the keyframe's second byte (``step``, 1..10 for ``WALK``).  A
-    stride pose is *two* keyframes that share a ``step`` value — a **base**
-    layer (sprite 33, the whole character) and a smaller **overlay** layer
-    (sprite 34, the head) — and ``pixels`` is the composite of those layers
+    ``pose`` is the keyframe's second byte (``step``).  A stride pose is the
+    keyframes that share a ``step`` value — for ``WALK`` a full-body base layer
+    (sprite 33 → type_index 32, 36×46) and a smaller overlay (sprite 34 →
+    type_index 33, 18×23) — and ``pixels`` is the composite of those layers
     painted at their recorded signed draw offsets into a canvas sized to the
-    clip's union content bounding box.  The base (the largest layer) is painted
-    first and any overlay on top.  Every pose therefore shares one canvas, so
-    the clip can be blitted pose to pose without per-pose jitter.  Index 0 is
+    clip's union content bounding box.  The larger layer is painted first and
+    smaller overlays on top.  Every pose therefore shares one canvas, so the
+    clip can be blitted pose to pose without per-pose jitter.  Index 0 is
     transparent.  A ``step`` whose layers do not all resolve (the contact pose,
     sprite byte 169) is dropped rather than half-drawn.
     """
@@ -86,14 +104,24 @@ class PoseFrame:
 
 
 def sprite_map(world: wld.World) -> dict[int, AnimDecode]:
-    """Map each ``ANIM`` chunk's ``type_index`` to its decoded chunk."""
+    """Map each ``ANIM`` chunk's *sprite slot* (``type_index + 1``) to its chunk.
+
+    The keyframe's first byte is **not** the ``ANIM`` ``type_index`` directly:
+    the ``ANIM`` reader stores each chunk in the sprite array at slot
+    ``type_index + 1`` (``inc edi`` at VA ``0x414A9A`` then ``0x414B54`` stores
+    to ``[eax*4+0x59E960]``), and the draw path looks a keyframe's sprite byte up
+    at that same slot with no offset (VA ``0x4163FC``/``0x4164DB``/``0x40C63C``).
+    A keyframe sprite byte ``S`` therefore references the chunk whose
+    ``type_index`` is ``S - 1``.  Keying the map by ``type_index + 1`` makes
+    ``sprites[S]`` the chunk the game actually draws for sprite byte ``S``.
+    """
     result: dict[int, AnimDecode] = {}
     for chunk in world.chunks:
         if chunk.tag != "ANIM":
             continue
         decoded = decode_anim(chunk.payload)
         if decoded is not None:
-            result[decoded.type_index] = decoded
+            result[decoded.type_index + 1] = decoded
     return result
 
 
@@ -128,10 +156,11 @@ def resolve_clip(
 ) -> tuple[ClipFrame, ...]:
     """Resolve ``record_name.clip_tag`` to one :class:`ClipFrame` per keyframe.
 
-    The keyframe's sprite byte selects the ``ANIM`` chunk and ``step - 1`` (the
-    second byte, clamped into the chunk's frame range) selects that chunk's own
-    frame.  A keyframe whose sprite byte is outside the world's ``ANIM`` bank is
-    returned with ``resolved=False`` and ``pixels=None``.
+    The keyframe's first byte selects the ``ANIM`` chunk through
+    :func:`sprite_map` (sprite byte = ``type_index + 1``), and ``step - 1``
+    (the second byte, clamped into the chunk's frame range) selects that chunk's
+    own frame.  A keyframe whose sprite byte is outside the world's ``ANIM`` bank
+    is returned with ``resolved=False`` and ``pixels=None``.
     """
     anim = find_animation(world, record_name=record_name, clip_tag=clip_tag)
     if anim is None:
@@ -172,9 +201,10 @@ def _content_bbox(pixels: AnimPixels) -> tuple[int, int, int, int] | None:
 def _content_area(pixels: AnimPixels) -> int:
     """The tight bounding-box area of a layer's non-transparent pixels.
 
-    This is the "size" used to pick a pose's **base** sprite: the largest layer
-    is the base (the whole character), and any smaller layer is an overlay
-    (e.g. the head) painted on top at its own offset.
+    This is the "size" used to order a pose's layers: the largest layer is
+    painted first and smaller layers on top.  For the core clips this makes the
+    full-body sprite the base and the small accessory the overlay (``WALK``:
+    sprite 33 → type_index 32 body under sprite 34 → type_index 33).
     """
     box = _content_bbox(pixels)
     if box is None:
@@ -192,10 +222,10 @@ def resolve_poses(
     pose and every keyframe in the group is one sprite layer drawn at its
     recorded signed offsets.  The game stores its vertical axis pointing **up**
     (the sprite decompressor at VA ``0x415E30`` negates the frame height before
-    storing it), so a layer's screen position is ``(dx, -dy)`` — which is what
-    makes the head sit *above* the body.  Layers are painted base-first: the
-    largest layer (by content area) is the whole character and any smaller
-    layer paints on top of it, so the smaller sprite's detail is never buried.
+    storing it), so a layer's screen position is ``(dx, -dy)``.  Layers are
+    painted largest-first: the full-body base is painted first and any smaller
+    overlay on top, so the overlay's detail is never buried (``WALK``: sprite 33
+    → type_index 32 body first, sprite 34 → type_index 33 overlay on top).
 
     Every pose is painted into the *same* canvas, sized to the clip's union
     content bounding box, so the whole clip can be blitted pose to pose with a
@@ -245,10 +275,9 @@ def resolve_poses(
         if step in dropped:
             continue
         canvas = [0] * (width * height)
-        # Base first, overlays last: the largest layer is the whole character
-        # (the base) and any smaller layer (the head) paints on top of it at
-        # its own offset, so the smaller sprite's detail is never buried under
-        # the base.
+        # Largest layer first: the full-body base is painted first and any
+        # smaller overlay on top, so the overlay's detail is never buried
+        # under the body (for RUN: sprite 24 body, sprite 23 overlay).
         layers = sorted(
             by_step[step], key=lambda layer: _content_area(layer[2]), reverse=True
         )

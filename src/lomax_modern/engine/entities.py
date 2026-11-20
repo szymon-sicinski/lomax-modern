@@ -74,7 +74,7 @@ class Player:
     height: int = 14
     #: Facing direction: +1 right, -1 left.  Drives the sprite's horizontal flip.
     facing: int = 1
-    #: Index of the current WALK keyframe (cycles over the resolved clip).
+    #: Index of the current movement (RUN) keyframe, cycles over the clip.
     anim_frame: int = 0
 
     @property

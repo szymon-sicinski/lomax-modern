@@ -19,6 +19,7 @@ from pathlib import Path
 from .. import art, wld
 from .. import anim_clip
 from ..anim_nmy import (
+    AnimDecode,
     AnimPixels,
     GnmyEntry,
     anim_tag_name,
@@ -45,23 +46,31 @@ PLAYER_NMY_NAME = "Hero"
 #: keyframe is the player's standing pose (``STA1`` = "stand").
 PLAYER_STAND_ANIM = "STA1"
 
-#: The animation tag whose keyframes drive the player's walk cycle.  Each of its
-#: keyframes references an ``ANIM`` chunk (the hero's leg sub-sprites) plus a
-#: signed draw offset and a flip flag; ``anim_clip.resolve_clip`` turns the clip
-#: into renderable frames.
-PLAYER_WALK_ANIM = "WALK"
+#: The animation tag whose keyframes drive the player's movement cycle.  The
+#: draw-path trace (``docs/file-formats.md`` §2.6.1) showed the keyframe sprite
+#: byte is the ``ANIM`` ``type_index`` **+ 1** (the ``ANIM`` reader stores each
+#: chunk at slot ``type_index + 1``), so ``RUN``'s base is sprite 23 → type_index
+#: 22 (60×34) and ``WALK``'s base is sprite 33 → type_index 32 (36×46) — both
+#: full-body.  ``RUN`` is used for movement because the ground-truth screenshot
+#: shows the hero mid-lunge; the game has both a walk and a run clip selected by
+#: ground speed, and the exact threshold is not yet traced.  Each keyframe
+#: references an ``ANIM`` chunk plus a signed draw offset and a flag word;
+#: ``anim_clip.resolve_poses`` turns the clip into renderable poses.
+PLAYER_RUN_ANIM = "RUN"
 
 
 def load_player_sprite(main_world_path: str | Path) -> AnimPixels | None:
-    """Decode the player's standing frame from ``MAIN.WLD``'s global bank.
+    """Decode the player's standing body from ``MAIN.WLD``'s global bank.
 
-    The player is the ``NMY`` record named :data:`PLAYER_NMY_NAME`; its
-    standing pose is the first keyframe of the :data:`PLAYER_STAND_ANIM`
-    animation.  Each keyframe's first byte is the referenced ``ANIM``
-    type_index (``anim_nmy.NmyAnim.frames``, measured ~99% on the retail
-    install), so the standing sprite is that chunk's first frame, decoded to
-    palette indices.  The indexed layer is returned — the caller applies its
-    own ``HEAD`` palette.
+    The player is the ``NMY`` record named :data:`PLAYER_NMY_NAME`; its standing
+    pose is :data:`PLAYER_STAND_ANIM`.  Each keyframe's first byte is the
+    referenced ``ANIM`` ``type_index`` **+ 1** (``docs/file-formats.md`` §2.6.1),
+    so a keyframe resolves to the chunk whose ``type_index`` is that byte minus
+    one.  ``STA1``'s first stride pose pairs a small head overlay (sprite 28 →
+    type_index 27, 14×23) with the full body (sprite 27 → type_index 26, 44×49,
+    flags ``0x80`` = the pose-run terminator); the standing sprite is the
+    **body** — the largest sprite in the clip — decoded to palette indices.  The
+    indexed layer is returned — the caller applies its own ``HEAD`` palette.
 
     Returns ``None`` when ``MAIN.WLD`` is absent or does not resolve; the
     renderer then falls back to the player marker, so a synthetic world
@@ -90,31 +99,48 @@ def load_player_sprite(main_world_path: str | Path) -> AnimPixels | None:
     )
     if stand is None or not stand.frames:
         return None
-    sprite_index = stand.frames[0][0]
-    anim = None
+    # Resolve every sprite the clip references (sprite byte = type_index + 1)
+    # and pick the *largest* frame as the body — STA1's head overlay is far
+    # smaller than its body, so this returns the standing body, not the overlay.
+    chunks: dict[int, AnimDecode] = {}
     for chunk in world.chunks:
         if chunk.tag != "ANIM":
             continue
         decoded = decode_anim(chunk.payload)
-        if decoded is not None and decoded.type_index == sprite_index:
-            anim = decoded
-            break
-    if anim is None:
-        return None
-    return decode_anim_pixels(anim, 0)
+        if decoded is not None:
+            chunks[decoded.type_index + 1] = decoded
+    best: AnimPixels | None = None
+    best_area = -1
+    for sprite, _step, _w2, _w3, _w4 in stand.frames:
+        decoded = chunks.get(sprite)
+        if decoded is None:
+            continue
+        pixels = decode_anim_pixels(decoded, 0)
+        if pixels is None:
+            continue
+        area = pixels.width * pixels.height
+        if area > best_area:
+            best_area = area
+            best = pixels
+    return best
 
 
-def load_walk_clip(main_world_path: str | Path) -> tuple[anim_clip.PoseFrame, ...]:
-    """Resolve the player's ``WALK`` clip to one composited pose per stride.
+def load_run_clip(main_world_path: str | Path) -> tuple[anim_clip.PoseFrame, ...]:
+    """Resolve the player's ``RUN`` clip to one composited pose per stride.
 
     Returns one :class:`lomax_modern.anim_clip.PoseFrame` per resolvable stride
-    ``step`` (10 for ``Hero.WALK``), each the composite of that step's two
-    sprite layers — legs (sprite 34) and body (sprite 33) — painted at their
+    ``step`` (12 for ``Hero.RUN``), each the composite of that step's two
+    sprite layers — the full body (sprite 23 → type_index 22, 48–62×34–43) and
+    the overlay (sprite 24 → type_index 23, 24–34×13–17) — painted at their
     recorded ``(dx, -dy)`` screen offsets into one shared canvas (see
     :func:`lomax_modern.anim_clip.resolve_poses`).  The contact pose (step 0,
     sprite byte 169) is not in any ``.WLD`` bank and is dropped.  ``()`` when
     ``MAIN.WLD`` is absent or does not resolve; the renderer then falls back to
     the standing sprite.
+
+    ``RUN`` is the movement clip the ground-truth screenshot confirms (the hero
+    mid-lunge); ``WALK`` is a full-body clip too once the sprite byte is read as
+    ``type_index + 1``.
     """
     source = Path(main_world_path)
     if not source.is_file():
@@ -124,7 +150,7 @@ def load_walk_clip(main_world_path: str | Path) -> tuple[anim_clip.PoseFrame, ..
     except (OSError, wld.WLDError):
         return ()
     return anim_clip.resolve_poses(
-        world, record_name=PLAYER_NMY_NAME, clip_tag=PLAYER_WALK_ANIM
+        world, record_name=PLAYER_NMY_NAME, clip_tag=PLAYER_RUN_ANIM
     )
 
 
@@ -191,12 +217,12 @@ class Level:
     #: when the bank is absent (synthetic worlds); the renderer then falls back
     #: to the player marker.
     player_sprite: AnimPixels | None = None
-    #: The player's resolved ``WALK`` clip (see :func:`load_walk_clip`), one
-    #: :class:`lomax_modern.anim_clip.PoseFrame` per stride step (10 for
-    #: ``Hero.WALK``), each the composite of that step's two sprite layers on
+    #: The player's resolved ``RUN`` clip (see :func:`load_run_clip`), one
+    #: :class:`lomax_modern.anim_clip.PoseFrame` per stride step (12 for
+    #: ``Hero.RUN``), each the composite of that step's two sprite layers on
     #: one shared canvas.  Empty when ``MAIN.WLD`` is absent; the renderer
     #: falls back to the standing sprite while moving.
-    walk_frames: tuple[anim_clip.PoseFrame, ...] = ()
+    run_frames: tuple[anim_clip.PoseFrame, ...] = ()
 
     @property
     def plane(self) -> art.MapPlane:
@@ -346,5 +372,5 @@ def load_level(
         collision=collision or CollisionModel(),
         gnmy=gnmy,
         player_sprite=load_player_sprite(source.parent / "MAIN.WLD"),
-        walk_frames=load_walk_clip(source.parent / "MAIN.WLD"),
+        run_frames=load_run_clip(source.parent / "MAIN.WLD"),
     )

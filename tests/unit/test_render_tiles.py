@@ -289,7 +289,7 @@ def _main_world_with_hero(sprite_type_index: int, pixels: bytes) -> bytes:
     nmy += struct.pack("<I", 20 + 8 * 1)  # size field == 20 + 8*frames
     nmy += struct.pack("<H", 1)  # count2 = one frame
     nmy += b"\0" * 18  # 9 x u16 fields
-    nmy += struct.pack("<BBHHH", sprite_type_index, 0, 0, 0, 0)  # one keyframe
+    nmy += struct.pack("<BBHHH", sprite_type_index + 1, 0, 0, 0, 0)  # sprite byte = type_index + 1
     nmy += b"\0" * 2  # u16 terminator
     nmy += b"\0" * 2  # pad
     anim = anim_payload(

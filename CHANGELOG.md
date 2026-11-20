@@ -8,24 +8,27 @@ Versioning: [Semantic Versioning](https://semver.org/).
 
 ### Added
 
-- **`Hero.WALK` animated end to end (animation spike).** A new `anim-clip`
+- **`Hero` animation wired end to end (animation spike).** A new `anim-clip`
   command renders any `NMY` clip to per-pose PNGs plus a preview strip and a
-  GIF: `lomax-modern anim-clip <install> --world MAIN --name WALK --out DIR`.
-  The engine now draws the player as the `WALK` cycle while moving — one
-  composited stride pose per 60 Hz tick of movement, flipped to the facing
-  direction — instead of the static standing sprite. The keyframe record is
+  GIF: `lomax-modern anim-clip <install> --world MAIN --name RUN --out DIR`.
+  The engine now draws the player as a full-body movement cycle — the `RUN`
+  clip (sprite 24, 54×57), confirmed against a retail screenshot — while
+  moving, one composited stride pose per 60 Hz tick flipped to the facing
+  direction, instead of the static standing sprite. The keyframe record is
   resolved (`docs/file-formats.md` §2.6.1): byte 0 is the `ANIM` `type_index`
-  **[V]**, then a stride **pose index** (`step`), two signed draw offsets and a
-  flag word whose bit `0x80` is still **[H]** (9/10 steps, contradicted by
-  step 6). `Hero.WALK` is **10 poses × 2 layers** — a *base* sprite (33, the
-  whole character) plus a smaller *head overlay* (34) — each composited at its
-  recorded `(dx, -dy)` screen offset into one shared canvas, base first and
-  overlay on top. Sprites now resolve through their own palette slot
-  (`SPRITE_PALETTE_SLOT = 0`, the true Lomax colours) while tiles stay on
-  slot 1; this is `[H]` "user-confirmed against retail" pending a VA trace. The
-  two contact frames reference the shared pose `169`, which is not in any
-  `.WLD` bank and stays an explicit gap (Q34); the exact anchor the offsets are
-  relative to and the per-frame hold remain hypotheses.
+  **[V]** (ground-truth-proven — `STA1`'s first keyframe byte 28 → the 54×41
+  chunk that matches the screenshot), then a stride pose index (`step`), two
+  signed draw offsets, and a flag word whose bit `0x80` is the
+  **last-keyframe-of-a-pose-run terminator [V]** (the bbox pass at VA
+  `0x416480` stops on `flags & 0x80`). Every core clip pairs a full-body base
+  with a small overlay (`RUN` 24+23, `STA1` 28+27, `SPIN` 26+25, `TUMB`
+  44+43); `Hero.WALK` is the anomaly — its two sprites (33 → 18×23, 34 →
+  16×17) are both small fragments, so its role stays open (Q36) and the moving
+  player renders `RUN`. Sprites resolve through their own palette slot
+  (`SPRITE_PALETTE_SLOT = 0`, the true Lomax colours) while tiles stay on slot
+  1. The contact-pose byte `169` is not in any `.WLD` bank and stays an
+  explicit gap (Q34); the exact anchor the offsets are relative to and the
+  per-frame hold remain hypotheses.
 
 - **C-playable milestone closed (S1).** The one-playable-level plan
   (`docs/roadmap/45-playable-level-plan.md` §8) landed end to end: all seven

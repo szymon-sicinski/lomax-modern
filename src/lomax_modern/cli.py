@@ -1064,8 +1064,8 @@ def _cmd_anim_clip(args: argparse.Namespace) -> int:
         f"world: {world_path.name}",
         f"clip: {args.record}.{args.name} ({len(keyframes)} keyframes -> "
         f"{len(poses)} composited poses)",
-        f"poses: {len(poses)} frames, each a base sprite (the whole character) "
-        f"with its smaller overlay painted on top at (dx, -dy)",
+        f"poses: {len(poses)} frames, each a composite of its sprite layers "
+        f"(largest first) painted at (dx, -dy)",
     ]
     if unresolved:
         lines.append(
