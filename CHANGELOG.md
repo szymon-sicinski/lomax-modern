@@ -8,6 +8,18 @@ Versioning: [Semantic Versioning](https://semver.org/).
 
 ### Added
 
+- **C-playable milestone closed (S1).** The one-playable-level plan
+  (`docs/roadmap/45-playable-level-plan.md` §8) landed end to end: all seven
+  implementation cards (P1–P7) are merged and verified by execution on `main` —
+  567 unit tests pass; `lomax-modern play --world ED --seconds 10` runs headless
+  at 60 fps with the HUD reading `collect 0/2` and the player spawned at
+  `Start (159, 528)`; `slice --world ED` renders the player as its decoded
+  `ANIM` standing sprite (54×41, not the marker); `slice --world VILLAGE` reads
+  `collect 0/0` and does not divide by zero. The honest boundary is in §8.3:
+  the spawn/collect/exit *mechanics* are proven, but on ED the two `Moneybag`s
+  sit 186–244 px and the `Exit` 76 px above the walkway, so a scripted
+  right-walk passes underneath them and never completes — reaching them needs a
+  climbing route, which is the next milestone.
 - The `window` HUD line now ends with `collect N/M` — `Moneybag`s picked up
   over those on the playfield (P7 of
   `docs/roadmap/45-playable-level-plan.md` §1.1), so progress is visible while
