@@ -86,7 +86,7 @@ def test_walk_clip_poses_are_renderable() -> None:
     from lomax_modern import art
 
     head = next(c for c in world.chunks if c.tag == "HEAD")
-    palette = art.head_palette(head, art.DEFAULT_PALETTE_SLOT)
+    palette = art.head_palette(head, art.SPRITE_PALETTE_SLOT)
     width, height, buffers = anim_clip.pose_rgba_frames(poses, palette)
     strip = anim_clip.pose_strip(poses, palette)
     assert len(buffers) == 10

@@ -14,7 +14,7 @@ from . import __version__
 from . import anim_clip
 from . import gif, png
 from .art import (
-    DEFAULT_PALETTE_SLOT,
+    SPRITE_PALETTE_SLOT,
     ArtError,
     check_output_dir,
     export_world,
@@ -1038,7 +1038,7 @@ def _cmd_anim_clip(args: argparse.Namespace) -> int:
     if head is None:
         print(f"error: {world_path.name} has no HEAD chunk (no palette)", file=sys.stderr)
         return 1
-    palette = head_palette(head, DEFAULT_PALETTE_SLOT)
+    palette = head_palette(head, SPRITE_PALETTE_SLOT)
     try:
         width, height, rgba_frames = anim_clip.pose_rgba_frames(poses, palette)
         strip = anim_clip.pose_strip(poses, palette)
@@ -1064,8 +1064,8 @@ def _cmd_anim_clip(args: argparse.Namespace) -> int:
         f"world: {world_path.name}",
         f"clip: {args.record}.{args.name} ({len(keyframes)} keyframes -> "
         f"{len(poses)} composited poses)",
-        f"poses: {len(poses)} frames, each a stride pose of its sprite layers "
-        f"painted at (dx, -dy)",
+        f"poses: {len(poses)} frames, each a base sprite (the whole character) "
+        f"with its smaller overlay painted on top at (dx, -dy)",
     ]
     if unresolved:
         lines.append(

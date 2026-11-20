@@ -184,14 +184,14 @@ def test_four_bit_fixture_decodes_deterministically_through_the_clip() -> None:
 
 
 def test_resolve_poses_composites_layers_at_dx_neg_dy() -> None:
-    """Two layers sharing a step composite at (dx, -dy), body over legs."""
-    # Sprite 0 (legs, flags 0x01) at dx=0, dy=-1; sprite 1 (body, flags 0x80)
-    # at dx=-4, dy=0.  Under (dx, -dy) the legs sit at y=+1 (below) and the
-    # body at y=0 (above); the body paints over the legs in keyframe order.
+    """Two layers sharing a step composite at (dx, -dy), base then overlay."""
+    # Sprite 0 (overlay) at dx=0, dy=-1; sprite 1 (base) at dx=-4, dy=0.
+    # Under (dx, -dy) the overlay sits at y=+1 (below) and the base at y=0
+    # (above); they do not overlap, so paint order does not change the result.
     world = _world_with_clip(
         (
-            (0, 1, 0, -1, 0x01),  # legs layer
-            (1, 1, -4, 0, 0x80),  # body layer, same step
+            (0, 1, 0, -1, 0x01),  # overlay layer
+            (1, 1, -4, 0, 0x80),  # base layer, same step
         ),
         sprites={
             0: anim_payload(
@@ -208,12 +208,44 @@ def test_resolve_poses_composites_layers_at_dx_neg_dy() -> None:
     assert len(poses) == 1
     pose = poses[0]
     assert pose.pose == 1
-    # Union content bbox: body pixel at screen (-4, 0), legs pixel at (0, 1).
+    # Union content bbox: base pixel at screen (-4, 0), overlay pixel at (0, 1).
     assert (pose.pixels.width, pose.pixels.height) == (5, 2)
-    # Body pixel (index 7) at screen (-4, 0) -> canvas (0, 0).
+    # Base pixel (index 7) at screen (-4, 0) -> canvas (0, 0).
     assert pose.pixels.at(0, 0) == 7
-    # Legs pixel (index 5) at screen (0, 1) -> canvas (4, 1).
+    # Overlay pixel (index 5) at screen (0, 1) -> canvas (4, 1).
     assert pose.pixels.at(4, 1) == 5
+
+
+def test_resolve_poses_paints_base_first_then_overlay() -> None:
+    """A smaller overlay paints on top of a larger base at their offsets."""
+    # Base = sprite 1 (a 2-pixel row, content area 2); overlay = sprite 0 (one
+    # pixel, content area 1).  Both land at the same screen position, so the
+    # overlay (painted last) must win where they overlap.
+    world = _world_with_clip(
+        (
+            (0, 1, 0, 0, 0x01),  # overlay (smaller)
+            (1, 1, 0, 0, 0x80),  # base (larger), same step
+        ),
+        sprites={
+            0: anim_payload(
+                frame_count=1, packed=False, width=1, height=1,
+                type_index=0, pixels=b"\x05" + b"\x00" * 3,
+            ),
+            1: anim_payload(
+                frame_count=1, packed=False, width=2, height=1,
+                type_index=1, pixels=b"\x07\x07" + b"\x00" * 2,
+            ),
+        },
+    )
+    poses = anim_clip.resolve_poses(world, record_name="Hero", clip_tag="WALK")
+    assert len(poses) == 1
+    pose = poses[0]
+    # Shared canvas covers the 2-wide base (the larger layer's extent).
+    assert (pose.pixels.width, pose.pixels.height) == (2, 1)
+    # The overlay's single pixel (index 5) overrides the base's index 7 at (0,0).
+    assert pose.pixels.at(0, 0) == 5
+    # The base's other pixel remains.
+    assert pose.pixels.at(1, 0) == 7
 
 
 def test_resolve_poses_drops_a_step_with_an_unresolved_layer() -> None:

@@ -386,7 +386,7 @@ u8 sprite   # ANIM type_index (0..147 in MAIN.WLD)        [V]
 u8 step     # stride pose index; step-1 selects the chunk's own frame  [V, see below]
 i16 dx      # signed horizontal draw offset               [V structure]
 i16 dy      # signed vertical draw offset, y-up           [V]
-u16 flags   # per-frame flag word; bit 0x80 marks the second layer   [V]
+u16 flags   # per-frame flag word; bit 0x80's role is unresolved     [H]
 ```
 
 **Chunk ↔ clip mapping `[V]`.** A keyframe's first byte is a direct index into
@@ -402,15 +402,20 @@ kept as explicit gaps. `169` is the hero's shared contact pose (used by
 (they are likely embedded in `LOMAX.EXE`), so `WALK`'s two contact keyframes
 stay unresolved (Q34).
 
-**Pose structure `[V]`.** `Hero.WALK` is **10 stride poses × 2 sprite layers**,
-not 22 independent frames. Grouping the 22 keyframes by their second byte
-(`step`) gives exactly two keyframes per `step` 1..10 — a *legs* layer (sprite
-34, `flags 0x0001`) and a *body* layer (sprite 33, `flags 0x0080`) — plus two
-`step 0` contact keyframes (sprite 169). Sprite 33 has exactly 10 frames and
+**Pose structure `[V]` (step grouping and paint order); the `0x80` bit's
+meaning `[H]`.** `Hero.WALK` is **10 stride poses × 2 sprite layers**, not 22
+independent frames. Grouping the 22 keyframes by their second byte (`step`)
+gives exactly two keyframes per `step` 1..10 — a **base** layer (sprite 33, the
+whole character) and a smaller **overlay** layer (sprite 34, the head) — plus
+two `step 0` contact keyframes (sprite 169). Sprite 33 has exactly 10 frames and
 sprite 34's first 10 frames are used, so `step - 1` selects the matching frame
 of each layer: the two keyframes sharing a `step` are one composite pose, not
-two separate frames. `flags 0x80` is the **second-layer marker** (drawn on top
-of the `0x01` layer), *not* a "second stride pose" or a flip flag.
+two separate frames. The compositor paints the **base first, then the overlay**
+on top, so the head's detail is never buried. `flags 0x80` appears on the
+smaller overlay in 9/10 steps (step 6's body keyframe 12 is `0x00`), so the
+bit's exact role — a second-layer marker, a flip flag, or a priority hint — is
+still **[H]**, not settled; the paint order is derived from layer *size*, not
+from the flag.
 
 **Timing `[H]`.** No keyframe field and none of the animation's 9 `u16` params
 carry a per-frame hold: `dx`/`dy` are small signed offsets, `flags` is a flag
@@ -421,18 +426,38 @@ no sliding); this is a **chosen constant**, not a measured rate.
 **Alignment `[V]` structure, `[H]` anchor.** `dx`/`dy` are signed offsets with
 the game's **y-up** axis — the sprite decompressor at VA `0x415E30` negates the
 frame height before storing it (`neg ecx` at `0x415FF9`), so a layer is drawn at
-screen position `(dx, -dy)`, which is what puts the legs *below* the body. Each
-pose composites its two layers at those offsets into one canvas (the clip's
-union content bounding box, so every pose shares a canvas and there is no
-per-pose jitter); `anim_clip.resolve_poses` does this and the composite is
-verified to form a **single connected figure** (one 4-connected component per
-pose on the retail install). The exact anchor — which point on the collision box
-the offsets are relative to — is still not confirmed, so
+screen position `(dx, -dy)`, which is what puts the head *above* the body. Each
+pose composites its layers at those offsets into one canvas (the clip's union
+content bounding box, so every pose shares a canvas and there is no per-pose
+jitter); `anim_clip.resolve_poses` does this, painting the base first and the
+overlay on top. On the retail install the composite forms a **single connected
+figure in 8/10 poses** — poses 6 and 10 each carry one detached single pixel
+beside the connected figure, so the honest claim is "8/10 strictly
+single-component", not "one component per pose". The exact anchor — which point
+on the collision box the offsets are relative to — is still not confirmed, so
 `engine.render_tiles` anchors the composite like the standing sprite: bottom at
 the collision-box bottom, horizontally centred, mirrored by the player's facing
 direction. Anchor and facing convention are graded `[H]`. The `ANIM` frame's
 `d`/`e` words (carried verbatim as `field_d`/`field_e`) look like per-frame
 registration offsets but their sign and role are unresolved (Q35).
+
+**Sprite palette slot `[H]` (user-confirmed against retail).** Sprites resolve
+their indices through `HEAD` palette **slot 0**, not the tile slot (1): slot 0
+carries the hero's true colours (red plume 13-15, orange face 1-5, green tunic
+16-19, blue helmet/pants 20-23), where slot 1 maps indices 16-31 to an all-green
+ramp — the "green hero" defect the tile slot produced before the split. There is
+no palette field in the `ANIM` chunk header, so the selection is game state:
+`art.SPRITE_PALETTE_SLOT` hard-codes 0 for the sprite paths only
+(`engine.render_tiles`'s sprite blits, `anim_clip.pose_rgba_frames`, the
+`anim-clip` CLI), while tiles stay on `art.DEFAULT_PALETTE_SLOT` (1). The
+mechanism — a fixed `MAIN.WLD`-bank slot, a level-load global, or a swap through
+the `Cset` NMY record (`CSET`/`PINK`/`BLUE`/`GREE`/`RED`) — is not yet traced to
+a VA, so this is graded `[H]` "user-confirmed against retail" rather than `[V]`.
+Sampling the other `MAIN.WLD` sprite records (`Items` type 35, `Trapdoor` 40,
+`Explosions` 101, `Cset` 143) shows the same split — slot 0 yields red/orange/
+blue/white art where slot 1 yields the green/grey ramp — so the slot is a
+**global sprite setting**, not per-record; `Cset` is the candidate for the
+player's colour *swap* (pink/blue/green/red), not the default selection.
 
 `lomax-modern anim-clip <install> --world MAIN --name WALK --out DIR` renders
 the clip's **10 composited poses** as PNGs plus a strip and a GIF, each a whole

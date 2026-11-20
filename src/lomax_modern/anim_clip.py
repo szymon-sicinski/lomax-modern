@@ -11,11 +11,13 @@ same-world resolutions on the retail install), and the second byte is that
 chunk's own frame selector (``step - 1``, clamped into the chunk's frame range).
 The remaining three words are the signed draw offsets ``dx``/``dy`` and the
 per-frame flag word ``flags``.  A stride pose is the keyframes that share one
-``step`` value — for ``Hero.WALK`` a legs layer (flags ``0x01``) and a body
-layer (flags ``0x80``) — and :func:`resolve_poses` composites them at their
-recorded offsets.  The game's vertical axis points up (the sprite decompressor
-at VA ``0x415E30`` negates the frame height), so a layer draws at screen
-position ``(dx, -dy)``, which is what puts the legs below the body.
+``step`` value — for ``Hero.WALK`` a **base** layer (sprite 33, the whole
+character) and a smaller **overlay** layer (sprite 34, the head) — and
+:func:`resolve_poses` composites them at their recorded offsets, painting the
+base first and the overlay on top.  The game's vertical axis points up (the
+sprite decompressor at VA ``0x415E30`` negates the frame height), so a layer
+draws at screen position ``(dx, -dy)``, which is what puts the head above the
+body.
 
 Nothing here reads game bytes into the repository: every decode happens at run
 time against the caller's own ``.WLD``.
@@ -68,14 +70,15 @@ class PoseFrame:
     """One composited stride pose: every layer of one ``step`` at its offset.
 
     ``pose`` is the keyframe's second byte (``step``, 1..10 for ``WALK``).  A
-    stride pose is *two* keyframes that share a ``step`` value — a legs layer
-    (flags ``0x01``) and a body layer (flags ``0x80``) — and ``pixels`` is the
-    composite of those layers painted at their recorded signed draw offsets
-    into a canvas sized to the clip's union content bounding box.  Every pose
-    therefore shares one canvas, so the clip can be blitted pose to pose
-    without per-pose jitter.  Index 0 is transparent.  A ``step`` whose layers
-    do not all resolve (the contact pose, sprite byte 169) is dropped rather
-    than half-drawn.
+    stride pose is *two* keyframes that share a ``step`` value — a **base**
+    layer (sprite 33, the whole character) and a smaller **overlay** layer
+    (sprite 34, the head) — and ``pixels`` is the composite of those layers
+    painted at their recorded signed draw offsets into a canvas sized to the
+    clip's union content bounding box.  The base (the largest layer) is painted
+    first and any overlay on top.  Every pose therefore shares one canvas, so
+    the clip can be blitted pose to pose without per-pose jitter.  Index 0 is
+    transparent.  A ``step`` whose layers do not all resolve (the contact pose,
+    sprite byte 169) is dropped rather than half-drawn.
     """
 
     pose: int
@@ -166,6 +169,20 @@ def _content_bbox(pixels: AnimPixels) -> tuple[int, int, int, int] | None:
     return x0, y0, x1, y1
 
 
+def _content_area(pixels: AnimPixels) -> int:
+    """The tight bounding-box area of a layer's non-transparent pixels.
+
+    This is the "size" used to pick a pose's **base** sprite: the largest layer
+    is the base (the whole character), and any smaller layer is an overlay
+    (e.g. the head) painted on top at its own offset.
+    """
+    box = _content_bbox(pixels)
+    if box is None:
+        return 0
+    x0, y0, x1, y1 = box
+    return (x1 - x0 + 1) * (y1 - y0 + 1)
+
+
 def resolve_poses(
     world: wld.World, *, record_name: str, clip_tag: str
 ) -> tuple[PoseFrame, ...]:
@@ -176,9 +193,9 @@ def resolve_poses(
     recorded signed offsets.  The game stores its vertical axis pointing **up**
     (the sprite decompressor at VA ``0x415E30`` negates the frame height before
     storing it), so a layer's screen position is ``(dx, -dy)`` — which is what
-    makes the legs sit *below* the body.  Layers are painted in keyframe order,
-    so a later keyframe (flags ``0x80``, the body) paints over an earlier one
-    (flags ``0x01``, the legs) where they overlap.
+    makes the head sit *above* the body.  Layers are painted base-first: the
+    largest layer (by content area) is the whole character and any smaller
+    layer paints on top of it, so the smaller sprite's detail is never buried.
 
     Every pose is painted into the *same* canvas, sized to the clip's union
     content bounding box, so the whole clip can be blitted pose to pose with a
@@ -228,7 +245,14 @@ def resolve_poses(
         if step in dropped:
             continue
         canvas = [0] * (width * height)
-        for dx, dy, pixels in by_step[step]:
+        # Base first, overlays last: the largest layer is the whole character
+        # (the base) and any smaller layer (the head) paints on top of it at
+        # its own offset, so the smaller sprite's detail is never buried under
+        # the base.
+        layers = sorted(
+            by_step[step], key=lambda layer: _content_area(layer[2]), reverse=True
+        )
+        for dx, dy, pixels in layers:
             for y in range(pixels.height):
                 for x in range(pixels.width):
                     index = pixels.at(x, y)

@@ -16,13 +16,16 @@ Versioning: [Semantic Versioning](https://semver.org/).
   direction — instead of the static standing sprite. The keyframe record is
   resolved (`docs/file-formats.md` §2.6.1): byte 0 is the `ANIM` `type_index`
   **[V]**, then a stride **pose index** (`step`), two signed draw offsets and a
-  flag word whose bit `0x80` marks the **second sprite layer** **[V]**.
-  `Hero.WALK` is **10 poses × 2 layers** (legs sprite 34 + body sprite 33), each
-  composited at its recorded `(dx, -dy)` screen offset into one shared canvas —
-  a single connected walking character, not a fragment. The two contact frames
-  reference the shared pose `169`, which is not in any `.WLD` bank and stays an
-  explicit gap (Q34); the exact anchor the offsets are relative to and the
-  per-frame hold remain hypotheses.
+  flag word whose bit `0x80` is still **[H]** (9/10 steps, contradicted by
+  step 6). `Hero.WALK` is **10 poses × 2 layers** — a *base* sprite (33, the
+  whole character) plus a smaller *head overlay* (34) — each composited at its
+  recorded `(dx, -dy)` screen offset into one shared canvas, base first and
+  overlay on top. Sprites now resolve through their own palette slot
+  (`SPRITE_PALETTE_SLOT = 0`, the true Lomax colours) while tiles stay on
+  slot 1; this is `[H]` "user-confirmed against retail" pending a VA trace. The
+  two contact frames reference the shared pose `169`, which is not in any
+  `.WLD` bank and stays an explicit gap (Q34); the exact anchor the offsets are
+  relative to and the per-frame hold remain hypotheses.
 
 - **C-playable milestone closed (S1).** The one-playable-level plan
   (`docs/roadmap/45-playable-level-plan.md` §8) landed end to end: all seven
