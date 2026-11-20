@@ -72,6 +72,13 @@ class Player:
     on_ground: bool = False
     width: int = 12
     height: int = 14
+    #: Facing direction: +1 right, -1 left.  Drives the sprite's horizontal flip.
+    facing: int = 1
+    #: Index of the current moving-clip pose (cycles over ``Level.move_poses``).
+    anim_frame: int = 0
+    #: Ticks the current pose has been held; advances ``anim_frame`` every
+    #: ``state.MOVE_ANIM_TICKS_PER_POSE`` ticks.
+    anim_ticks: int = 0
 
     @property
     def centre_x(self) -> float:

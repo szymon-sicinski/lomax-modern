@@ -11,8 +11,16 @@ from pathlib import Path
 from typing import Callable
 
 from . import __version__
+from . import anim_clip
 from . import gif, png
-from .art import ArtError, check_output_dir, export_world, refuse_into_game_folder
+from .art import (
+    SPRITE_PALETTE_SLOT,
+    ArtError,
+    check_output_dir,
+    export_world,
+    head_palette,
+    refuse_into_game_folder,
+)
 from .config import (
     UNSET,
     ConfigError,
@@ -965,6 +973,120 @@ def _cmd_gnmy(args: argparse.Namespace) -> int:
     return 0
 
 
+def _cmd_anim_clip(args: argparse.Namespace) -> int:
+    """Render one ``NMY`` animation clip to PNGs, a strip and a GIF.
+
+    Read-only on the install: the only writes are the frame PNGs, the preview
+    strip and the GIF, all into ``--out``, refused when it would land inside the
+    game folder (:func:`lomax_modern.art.refuse_into_game_folder`).
+
+    Each output frame is a *composited stride pose* — every sprite layer of one
+    ``step`` painted at its recorded ``(dx, -dy)`` offset — not a single
+    keyframe layer, so the strip/GIF show a whole character walking.
+    """
+    game_dir = args.game_dir or os.environ.get("LOMAX_GAME_DIR")
+    if not game_dir:
+        print(
+            "error: pass a game dir, or set LOMAX_GAME_DIR",
+            file=sys.stderr,
+        )
+        return 2
+    world_path: Path | None = None
+    for candidate in find_world_files(game_dir):
+        if candidate.stem.casefold() == args.world.casefold():
+            world_path = candidate
+            break
+    if world_path is None:
+        print(
+            f"error: no {args.world}.WLD under {game_dir}",
+            file=sys.stderr,
+        )
+        return 2
+    out_dir = Path(args.out).expanduser()
+    try:
+        refuse_into_game_folder(out_dir)
+    except ArtError as exc:
+        print(f"error: {exc}", file=sys.stderr)
+        return 2
+    try:
+        world = parse_file(world_path)
+    except WLDError as exc:
+        print(f"error: cannot read {world_path.name}: {exc}", file=sys.stderr)
+        return 1
+    anim = anim_clip.find_animation(
+        world, record_name=args.record, clip_tag=args.name
+    )
+    if anim is None:
+        print(
+            f"error: no animation {args.record}.{args.name} in {world_path.name}",
+            file=sys.stderr,
+        )
+        return 1
+    keyframes = anim_clip.resolve_clip(
+        world, record_name=args.record, clip_tag=args.name
+    )
+    poses = anim_clip.resolve_poses(
+        world, record_name=args.record, clip_tag=args.name
+    )
+    if not poses:
+        print(
+            f"error: {args.record}.{args.name} has no compositable poses",
+            file=sys.stderr,
+        )
+        return 1
+    head = next((c for c in world.chunks if c.tag == "HEAD"), None)
+    if head is None:
+        print(f"error: {world_path.name} has no HEAD chunk (no palette)", file=sys.stderr)
+        return 1
+    palette = head_palette(head, SPRITE_PALETTE_SLOT)
+    try:
+        width, height, rgba_frames = anim_clip.pose_rgba_frames(poses, palette)
+        strip = anim_clip.pose_strip(poses, palette)
+    except ArtError as exc:
+        print(f"error: {exc}", file=sys.stderr)
+        return 1
+
+    out_dir.mkdir(parents=True, exist_ok=True)
+    stem = f"{args.record}_{args.name}".lower()
+    for n, rgba in enumerate(rgba_frames):
+        png.write(out_dir / f"frame_{n:04d}.png", width, height, rgba)
+    strip.write(out_dir / f"{stem}_strip.png")
+    try:
+        gif.write(
+            out_dir / f"{stem}.gif", width, height, rgba_frames, fps=args.fps
+        )
+    except (gif.GIFError, OSError) as exc:
+        print(f"error: cannot write GIF: {exc}", file=sys.stderr)
+        return 1
+
+    unresolved = sorted({f.sprite_index for f in keyframes if not f.resolved})
+    lines = [
+        f"world: {world_path.name}",
+        f"clip: {args.record}.{args.name} ({len(keyframes)} keyframes -> "
+        f"{len(poses)} composited poses)",
+        f"poses: {len(poses)} frames, each a base sprite (the whole character) "
+        f"with its smaller overlay painted on top at (dx, -dy)",
+    ]
+    if unresolved:
+        lines.append(
+            f"unresolved sprites (not in this world's ANIM bank): {unresolved} "
+            f"-- the contact pose; those keyframes are dropped, not half-drawn"
+        )
+    lines.append(
+        f"frames: {len(rgba_frames)} PNGs in {out_dir} (frame_0000.png .. "
+        f"frame_{len(rgba_frames) - 1:04d}.png, {width}x{height})"
+    )
+    lines.append(f"strip: {stem}_strip.png")
+    lines.append(f"gif: {stem}.gif ({args.fps} fps)")
+    lines.append(
+        "alignment: dx/dy are signed draw offsets with the game's y-up axis; "
+        "each pose composites its layers at (dx, -dy) -- docs/file-formats.md "
+        "2.6.1 (anchor [H])"
+    )
+    print("\n".join(lines))
+    return 0
+
+
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
         prog="lomax-modern",
@@ -1369,6 +1491,49 @@ def build_parser() -> argparse.ArgumentParser:
         help="folder containing WORLDS/*.WLD (default: $LOMAX_GAME_DIR)",
     )
     p_gnmy.set_defaults(func=_cmd_gnmy)
+
+    p_clip = sub.add_parser(
+        "anim-clip",
+        help="render one NMY animation clip (e.g. Hero.WALK) to PNGs + strip + GIF",
+    )
+    p_clip.add_argument(
+        "game_dir",
+        nargs="?",
+        default=None,
+        help="folder containing WORLDS/*.WLD (default: $LOMAX_GAME_DIR)",
+    )
+    p_clip.add_argument(
+        "--world",
+        default="MAIN",
+        metavar="NAME",
+        help="world file stem that holds the animation (default: MAIN)",
+    )
+    p_clip.add_argument(
+        "--record",
+        default="Hero",
+        metavar="NAME",
+        help="NMY record name (default: Hero, the player)",
+    )
+    p_clip.add_argument(
+        "--name",
+        default="WALK",
+        metavar="TAG",
+        help="animation tag, forward ASCII (default: WALK)",
+    )
+    p_clip.add_argument(
+        "--out",
+        required=True,
+        metavar="DIR",
+        help="directory for the frames, strip and GIF (outside the game folder)",
+    )
+    p_clip.add_argument(
+        "--fps",
+        type=_positive_int,
+        default=gif.DEFAULT_FPS,
+        metavar="N",
+        help="GIF playback rate in frames per second (default: %(default)s)",
+    )
+    p_clip.set_defaults(func=_cmd_anim_clip)
 
     return parser
 

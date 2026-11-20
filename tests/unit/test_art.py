@@ -109,6 +109,18 @@ def test_head_palette_reads_the_requested_slot_only() -> None:
     assert art.head_palette(head_chunk).slot == art.DEFAULT_PALETTE_SLOT
 
 
+def test_sprite_and_tile_palette_slots_are_distinct() -> None:
+    """Sprites resolve through slot 0 and tiles through slot 1 — pinned.
+
+    The split is the regression guard for the "green hero" defect: slot 1 maps
+    the hero's body indices to an all-green ramp, so the sprite path must never
+    fall back to the tile slot.
+    """
+    assert art.SPRITE_PALETTE_SLOT == 0
+    assert art.DEFAULT_PALETTE_SLOT == 1
+    assert art.SPRITE_PALETTE_SLOT != art.DEFAULT_PALETTE_SLOT
+
+
 def test_head_palette_rejects_bad_slot_tag_and_short_payload() -> None:
     good = head({1: [0x7FFF] * 256})
     with pytest.raises(ArtError, match="palette slot"):

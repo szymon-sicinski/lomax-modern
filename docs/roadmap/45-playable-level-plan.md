@@ -246,7 +246,7 @@ is **C-playable** as §1 defines it, with the honest boundary recorded in §8.3.
 | Card | PR | Notes |
 |---|---|---|
 | P1 NMY name + role classifier | #52 (`e99370e`) | acceptance already satisfied by the Q32 follow-up before the gate; the P1 worker's PR #53 was closed unmerged as redundant |
-| P2 wire GNMY semantics | #57 | **reworked** — rebased onto `main` after P3/P6 landed, then re-reviewed |
+| P2 wire GNMY semantics | #57 | **reworked** — merged `main` into the branch (merge commit, no rebase) after P3/P6 landed, then re-reviewed |
 | P3 keyboard → `Input` | #55 | clean |
 | P4 interactive `play` | #59 | **reworked** — first review returned changes; merged `main` + re-wired, then re-reviewed |
 | P5 player sprite | #60 | merged by S1 under the gate |
@@ -293,12 +293,33 @@ milestone crosses.
 
 ### 8.4 Spend vs forecast
 
-Forecast 15 cards (7 impl + 7 review + 1 synthesis) ≈ $2.48 off-peak, high
-≈$3.50 for a second cycle on the three unfamiliar cards. The delivery graph
-took 21 cards: the 15, plus two re-review cycles (P2, P4), one rebase (P2), and
-the synthesis/merge work tracked as three explicit merge cards (#55/#59/#60)
-plus S1 rather than the plan's single card. At the board's $0.165/card average
-that is ≈$3.47 — at the top of, not past, the high band. The rework itself
-(2 cycles + 1 rebase = 3 cards) is *inside* the band; the distance to the top
-came from P2's unpredicted rebase cycle and from merge work being tracked at
-finer granularity than the plan assumed.
+Forecast **15 cards ≈ $2.48** off-peak (high ≈$3.30–3.50 for a second cycle on
+the three unfamiliar cards).
+
+Three counts are defensible depending on what is included, and they should not
+be quoted interchangeably:
+
+| basis | cards | at $0.165/card |
+|---|---:|---:|
+| the plan's graph (P1–P7 + R1–R7 + S1) | 15 | ≈$2.48 |
+| graph + rework cycles + explicit merge cards | 21 | ≈$3.47 |
+| **every card dispatched since the plan card** | **35** | **≈$5.78** |
+
+The third row is the honest one for a budget question: it counts what was
+actually spent, including the review cards the poller opened for a PR whose head
+moved (PR #51 ×3, PR #57 ×2, PR #59 ×2), the duplicated Q32 review cards, and
+the per-PR merge cards that the plan assumed would be one synthesis card.
+
+So the milestone came in at roughly **2.3× the forecast**, past the high band.
+The implementation itself was the predicted 7 cards; the overrun is
+coordination overhead — re-reviews after heads moved, merge cards the plan did
+not model, and duplicate review cards (several created by the coordinator, not
+by the poller).
+
+Caveats on the unit rate: $0.165 is a board-wide average, and
+`scripts/token_cost_report.py` reports **73 of 186** measured cards with no
+matching log line, so every figure here is a **lower bound**.
+
+The rework *itself* (2 cycles + 1 merge of `main`) stayed small. What the plan
+under-modelled is the cost of a head moving after review: each move buys a new
+verdict, and three of those happened here.
