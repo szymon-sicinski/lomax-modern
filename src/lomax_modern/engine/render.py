@@ -295,13 +295,16 @@ def render_tiles(
 
     sprite = level.player_sprite
     moving = state.player.vx != 0.0
-    if moving and level.walk_frames:
-        # Walk cycle: one composited stride pose per movement tick, flipped to
-        # the facing direction.  Each pose is the base+overlay composite on one
-        # shared canvas (see anim_clip.resolve_poses); the canvas is anchored
-        # with its bottom at the collision-box bottom and centred, the same
-        # convention the standing sprite uses (docs/file-formats.md 2.6.1 [H]).
-        pose = level.walk_frames[state.player.anim_frame % len(level.walk_frames)]
+    if moving and level.move_poses:
+        # Moving: one whole-body sprite per pose (anim_clip.resolve_body_poses —
+        # RUN's sprite 24, a complete character), advanced every
+        # ``state.MOVE_ANIM_TICKS_PER_POSE`` ticks by the step function and
+        # mirrored for the facing direction: the clip stores a single facing, so
+        # left is a horizontal flip of the right-facing art [H].  Anchored with
+        # its bottom at the collision-box bottom and horizontally centred, the
+        # same convention the standing sprite uses (docs/file-formats.md 2.6.1
+        # anchor [H]).
+        pose = level.move_poses[state.player.anim_frame % len(level.move_poses)]
         pixels = pose.pixels
         if state.player.facing < 0:
             pixels = anim_clip.mirrored(pixels)

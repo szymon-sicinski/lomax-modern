@@ -6,7 +6,12 @@ import struct
 
 from lomax_modern import anim_clip, art, wld
 from lomax_modern.anim_nmy import decode_anim_pixels
-from tests.fixtures.synth import anim_payload, build_container, head_payload
+from tests.fixtures.synth import (
+    anim_frames_payload,
+    anim_payload,
+    build_container,
+    head_payload,
+)
 
 
 def _nmy_clip_payload(
@@ -44,17 +49,31 @@ def _nmy_clip_payload(
     return bytes(out)
 
 
+def _anim_with_frames(
+    type_index: int,
+    frames: tuple[bytes, ...],
+    *,
+    width: int = 4,
+    height: int = 4,
+) -> bytes:
+    """An ``ANIM`` payload whose frames carry *different* pixels, in order."""
+    return anim_frames_payload(type_index, frames, width=width, height=height)
+
+
 def _world_with_clip(
     keyframes: tuple[tuple[int, int, int, int, int], ...],
     *,
     sprites: dict[int, bytes] | None = None,
     head: bytes | None = None,
+    clip_tag: str = "WALK",
 ) -> wld.World:
-    """A synthetic world holding ``Hero.WALK`` plus one ANIM chunk per sprite.
+    """A synthetic world holding one ``Hero`` clip plus one ANIM chunk per sprite.
 
     ``sprites`` maps an ANIM ``type_index`` to a ready-made ``anim_payload``.
     By default sprite 0 is one raw 8x8 frame and sprite 1 is a packed 4x4 frame.
-    ``head`` overrides the ``HEAD`` payload (e.g. to supply a palette).
+    ``head`` overrides the ``HEAD`` payload (e.g. to supply a palette) and
+    ``clip_tag`` the animation's 4-byte tag (``WALK`` unless a test needs
+    another one).
     """
     if sprites is None:
         sprites = {
@@ -65,7 +84,7 @@ def _world_with_clip(
         }
     chunks: list[tuple[str, bytes]] = [
         ("WRLD", b"PS-X" + b"\x00" * 4),
-        ("NMY", _nmy_clip_payload("Hero", "WALK", keyframes)),
+        ("NMY", _nmy_clip_payload("Hero", clip_tag, keyframes)),
         ("HEAD", head if head is not None else head_payload(16, 16, endian=">")),
     ]
     for type_index, payload in sprites.items():
@@ -312,3 +331,114 @@ def test_pose_strip_has_one_cell_per_pose() -> None:
     strip = anim_clip.pose_strip(poses, palette)
     assert strip.width == (poses[0].pixels.width + 1) * 1
     assert strip.height == poses[0].pixels.height
+
+
+# ---------------------------------------------------------------------------
+# The moving player's clip: one whole-body sprite per step
+# ---------------------------------------------------------------------------
+
+
+def test_frame_for_step_is_one_based_and_wraps() -> None:
+    """``step`` indexes the chunk 1-based and wraps when steps exceed frames.
+
+    Measured on the retail install (``docs/file-formats.md`` §2.6.1): ``RUN``
+    declares 12 steps over sprite 24's 8 frames, so the last four steps must not
+    freeze on the final frame.
+    """
+    assert anim_clip.frame_for_step(1, 10) == 0  # first step -> first frame
+    assert anim_clip.frame_for_step(10, 10) == 9  # last step -> last frame
+    assert anim_clip.frame_for_step(8, 8) == 7
+    assert anim_clip.frame_for_step(9, 8) == 0  # wraps instead of clamping
+    assert anim_clip.frame_for_step(12, 8) == 3
+    assert anim_clip.frame_for_step(5, 0) == 0  # a frame-less chunk cannot index
+
+
+def test_resolve_clip_wraps_a_step_past_the_last_frame() -> None:
+    """A keyframe whose step exceeds the chunk's frames wraps, never clamps."""
+    world = _world_with_clip(
+        (
+            (0, 1, 0, 0, 0x01),
+            (0, 9, 0, 0, 0x01),
+        ),
+        sprites={0: _anim_with_frames(0, (b"\x01" * 16, b"\x02" * 16), width=4, height=4)},
+    )
+    frames = anim_clip.resolve_clip(world, record_name="Hero", clip_tag="WALK")
+    assert [f.sub_frame for f in frames] == [0, 0]  # step 9 -> (9-1) % 2 == 0
+    assert frames[0].pixels is not None
+    assert frames[0].pixels.indices == (1,) * 16
+    assert frames[1].pixels is not None
+    assert frames[1].pixels.indices == (1,) * 16  # wrapped to frame 0, not frame 1
+
+
+def test_resolve_body_poses_keeps_the_whole_body_layer_only() -> None:
+    """Per step, the pose is the layer with the larger content box — not a composite.
+
+    ``Hero.RUN``'s steps carry a whole-body sprite (54x57) plus a 26x13
+    companion; the companion is measured clear of the figure at its recorded
+    offset, so the player must be drawn from the body layer alone (Q37).
+    """
+    world = _world_with_clip(
+        (
+            (0, 1, 0, 0, 0x80),  # small companion, 1x1
+            (1, 1, -2, 0, 0x01),  # whole body, 4x4
+        ),
+        sprites={
+            0: anim_payload(
+                frame_count=1, packed=False, width=1, height=1,
+                type_index=0, pixels=b"\x05" + b"\x00" * 3,
+            ),
+            1: anim_payload(
+                frame_count=1, packed=False, width=4, height=4,
+                type_index=1, pixels=b"\x07" * 16,
+            ),
+        },
+    )
+    poses = anim_clip.resolve_body_poses(world, record_name="Hero", clip_tag="WALK")
+    assert len(poses) == 1
+    pose = poses[0]
+    assert pose.step == 1
+    assert pose.sprite_index == 1  # the whole-body layer, by content area
+    assert (pose.pixels.width, pose.pixels.height) == (4, 4)
+    assert pose.dx == -2 and pose.dy == 0  # the layer's own recorded offsets
+    assert pose.pixels.indices == (7,) * 16
+
+
+def test_resolve_body_poses_is_one_pose_per_step_in_step_order() -> None:
+    world = _world_with_clip(
+        (
+            (0, 2, 0, 0, 0x01),
+            (0, 1, 0, 0, 0x01),
+        ),
+        sprites={0: _anim_with_frames(0, (b"\x01" * 16, b"\x02" * 16), width=4, height=4)},
+    )
+    poses = anim_clip.resolve_body_poses(world, record_name="Hero", clip_tag="WALK")
+    assert [p.step for p in poses] == [1, 2]
+    assert [p.sub_frame for p in poses] == [0, 1]
+
+
+def test_resolve_body_poses_drops_a_step_with_an_unresolved_sprite() -> None:
+    """The shared contact pose (sprite 169 on retail) is dropped, not drawn."""
+    world = _world_with_clip(
+        (
+            (99, 0, 0, 0, 0x02),  # contact pose: sprite outside the bank
+            (0, 1, 0, 0, 0x01),
+        ),
+        sprites={
+            0: anim_payload(
+                frame_count=1, packed=False, width=4, height=4,
+                type_index=0, pixels=b"\x05" * 16,
+            ),
+        },
+    )
+    poses = anim_clip.resolve_body_poses(world, record_name="Hero", clip_tag="WALK")
+    assert [p.step for p in poses] == [1]
+
+
+def test_resolve_body_poses_is_empty_when_the_clip_is_absent() -> None:
+    world = _world_with_clip(((0, 1, 0, 0, 0x01),))
+    assert anim_clip.resolve_body_poses(
+        world, record_name="Hero", clip_tag="RUN"
+    ) == ()
+    assert anim_clip.resolve_body_poses(
+        world, record_name="Nobody", clip_tag="WALK"
+    ) == ()

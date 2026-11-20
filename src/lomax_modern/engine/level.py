@@ -45,11 +45,14 @@ PLAYER_NMY_NAME = "Hero"
 #: keyframe is the player's standing pose (``STA1`` = "stand").
 PLAYER_STAND_ANIM = "STA1"
 
-#: The animation tag whose keyframes drive the player's walk cycle.  Each of its
-#: keyframes references an ``ANIM`` chunk (the hero's leg sub-sprites) plus a
-#: signed draw offset and a flip flag; ``anim_clip.resolve_clip`` turns the clip
-#: into renderable frames.
-PLAYER_WALK_ANIM = "WALK"
+#: The animation tag whose steps drive the player's **moving** animation.  It is
+#: the clip with a whole-body sprite per step (``RUN``: sprite 24, 54x57 — a
+#: complete character).  ``WALK`` is *not* used: its layers are leg-sized
+#: (18x23 / 16x17) and what the original uses that clip for is under research —
+#: see ``docs/research/05-open-questions.md`` and ``docs/file-formats.md``
+#: §2.6.1.  ``anim_clip.resolve_body_poses`` turns the clip into renderable
+#: whole-body frames.
+PLAYER_MOVE_ANIM = "RUN"
 
 
 def load_player_sprite(main_world_path: str | Path) -> AnimPixels | None:
@@ -104,17 +107,16 @@ def load_player_sprite(main_world_path: str | Path) -> AnimPixels | None:
     return decode_anim_pixels(anim, 0)
 
 
-def load_walk_clip(main_world_path: str | Path) -> tuple[anim_clip.PoseFrame, ...]:
-    """Resolve the player's ``WALK`` clip to one composited pose per stride.
+def load_move_poses(main_world_path: str | Path) -> tuple[anim_clip.BodyPose, ...]:
+    """Resolve the player's moving clip (``RUN``) to one whole-body pose per step.
 
-    Returns one :class:`lomax_modern.anim_clip.PoseFrame` per resolvable stride
-    ``step`` (10 for ``Hero.WALK``), each the composite of that step's two
-    sprite layers — legs (sprite 34) and body (sprite 33) — painted at their
-    recorded ``(dx, -dy)`` screen offsets into one shared canvas (see
-    :func:`lomax_modern.anim_clip.resolve_poses`).  The contact pose (step 0,
-    sprite byte 169) is not in any ``.WLD`` bank and is dropped.  ``()`` when
+    Returns one :class:`lomax_modern.anim_clip.BodyPose` per resolvable step (12
+    for ``Hero.RUN``), each the step's **whole-body** sprite decoded to palette
+    indices — a complete character per frame, not a stack of body parts (see
+    :func:`lomax_modern.anim_clip.resolve_body_poses`).  The contact pose (step
+    0, sprite byte 169) is not in any ``.WLD`` bank and is dropped.  ``()`` when
     ``MAIN.WLD`` is absent or does not resolve; the renderer then falls back to
-    the standing sprite.
+    the standing sprite, so a synthetic world still renders.
     """
     source = Path(main_world_path)
     if not source.is_file():
@@ -123,8 +125,8 @@ def load_walk_clip(main_world_path: str | Path) -> tuple[anim_clip.PoseFrame, ..
         world = wld.parse_file(source)
     except (OSError, wld.WLDError):
         return ()
-    return anim_clip.resolve_poses(
-        world, record_name=PLAYER_NMY_NAME, clip_tag=PLAYER_WALK_ANIM
+    return anim_clip.resolve_body_poses(
+        world, record_name=PLAYER_NMY_NAME, clip_tag=PLAYER_MOVE_ANIM
     )
 
 
@@ -191,12 +193,12 @@ class Level:
     #: when the bank is absent (synthetic worlds); the renderer then falls back
     #: to the player marker.
     player_sprite: AnimPixels | None = None
-    #: The player's resolved ``WALK`` clip (see :func:`load_walk_clip`), one
-    #: :class:`lomax_modern.anim_clip.PoseFrame` per stride step (10 for
-    #: ``Hero.WALK``), each the composite of that step's two sprite layers on
-    #: one shared canvas.  Empty when ``MAIN.WLD`` is absent; the renderer
-    #: falls back to the standing sprite while moving.
-    walk_frames: tuple[anim_clip.PoseFrame, ...] = ()
+    #: The player's resolved moving clip (see :func:`load_move_poses`), one
+    #: :class:`lomax_modern.anim_clip.BodyPose` per stride step (12 for
+    #: ``Hero.RUN``), each a whole-body sprite.  Empty when ``MAIN.WLD`` is
+    #: absent or the clip does not resolve; the renderer then falls back to the
+    #: standing sprite while moving.
+    move_poses: tuple[anim_clip.BodyPose, ...] = ()
 
     @property
     def plane(self) -> art.MapPlane:
@@ -346,5 +348,5 @@ def load_level(
         collision=collision or CollisionModel(),
         gnmy=gnmy,
         player_sprite=load_player_sprite(source.parent / "MAIN.WLD"),
-        walk_frames=load_walk_clip(source.parent / "MAIN.WLD"),
+        move_poses=load_move_poses(source.parent / "MAIN.WLD"),
     )

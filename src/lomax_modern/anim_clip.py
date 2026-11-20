@@ -8,7 +8,8 @@ caller can render a whole walking character without re-deriving the mapping.
 The mapping is the one ``docs/file-formats.md`` §2.5/§2.6 already grade: the
 keyframe's first byte is the referenced ``ANIM`` ``type_index`` **[V]** (3,124/3,156
 same-world resolutions on the retail install), and the second byte is that
-chunk's own frame selector (``step - 1``, clamped into the chunk's frame range).
+chunk's own frame selector (``step - 1``, wrapped into the chunk's frame range —
+see :func:`frame_for_step`).
 The remaining three words are the signed draw offsets ``dx``/``dy`` and the
 per-frame flag word ``flags``.  A stride pose is the keyframes that share one
 ``step`` value — for ``Hero.WALK`` a **base** layer (sprite 33, the whole
@@ -85,6 +86,24 @@ class PoseFrame:
     pixels: AnimPixels
 
 
+@dataclass(frozen=True)
+class BodyPose:
+    """One step of a clip drawn from its **whole-body layer** alone.
+
+    ``sprite_index``/``sub_frame`` name the layer this pose came from, so a
+    caller can report which sprite a supplied frame is (and a test can pin it).
+    Unlike :class:`PoseFrame` the canvas is the layer's own frame, not a union
+    composite: the protagonist is one sprite in RUN, not a stack of body parts.
+    """
+
+    step: int
+    sprite_index: int
+    sub_frame: int
+    dx: int
+    dy: int
+    pixels: AnimPixels
+
+
 def sprite_map(world: wld.World) -> dict[int, AnimDecode]:
     """Map each ``ANIM`` chunk's ``type_index`` to its decoded chunk."""
     result: dict[int, AnimDecode] = {}
@@ -123,15 +142,33 @@ def find_animation(
     )
 
 
+def frame_for_step(step: int, frame_count: int) -> int:
+    """The ``ANIM`` sub-frame a keyframe's ``step`` selects, wrapping.
+
+    ``step`` is 1-based (``step - 1`` indexes the chunk on the retail data:
+    ``Hero.WALK``'s 10 steps over sprite 33's 10 frames).  A clip may declare
+    *more* steps than the referenced chunk has frames — ``Hero.RUN`` has 12
+    steps over sprite 24's **8** frames — so the index wraps modulo the frame
+    count.  Measured on the retail install: clamping instead (the previous
+    rule) repeats the last frame for 5 of RUN's 12 steps, which freezes the
+    animation for those steps; wrapping gives all 12 steps a distinct frame.
+    Which rule the original uses is unresolved (Q36), so this is a chosen
+    convention, not a recovered one **[H]**.
+    """
+    if frame_count <= 0:
+        return 0
+    return (step - 1) % frame_count
+
+
 def resolve_clip(
     world: wld.World, *, record_name: str, clip_tag: str
 ) -> tuple[ClipFrame, ...]:
     """Resolve ``record_name.clip_tag`` to one :class:`ClipFrame` per keyframe.
 
     The keyframe's sprite byte selects the ``ANIM`` chunk and ``step - 1`` (the
-    second byte, clamped into the chunk's frame range) selects that chunk's own
-    frame.  A keyframe whose sprite byte is outside the world's ``ANIM`` bank is
-    returned with ``resolved=False`` and ``pixels=None``.
+    second byte, wrapped into the chunk's frame range by :func:`frame_for_step`)
+    selects that chunk's own frame.  A keyframe whose sprite byte is outside the
+    world's ``ANIM`` bank is returned with ``resolved=False`` and ``pixels=None``.
     """
     anim = find_animation(world, record_name=record_name, clip_tag=clip_tag)
     if anim is None:
@@ -144,10 +181,7 @@ def resolve_clip(
         if chunk is None:
             frames.append(ClipFrame(index, sprite, step, dx, dy, w4, False))
             continue
-        if chunk.frame_count <= 0:
-            sub = 0
-        else:
-            sub = max(0, min(step - 1, chunk.frame_count - 1))
+        sub = frame_for_step(step, chunk.frame_count)
         pixels = decode_anim_pixels(chunk, sub)
         frames.append(ClipFrame(index, sprite, sub, dx, dy, w4, True, pixels))
     return tuple(frames)
@@ -214,7 +248,7 @@ def resolve_poses(
         if chunk is None:
             dropped.add(step)  # contact pose (sprite 169): the step is incomplete
             continue
-        sub = 0 if chunk.frame_count <= 0 else max(0, min(step - 1, chunk.frame_count - 1))
+        sub = frame_for_step(step, chunk.frame_count)
         pixels = decode_anim_pixels(chunk, sub)
         if pixels is None:
             dropped.add(step)
@@ -262,6 +296,61 @@ def resolve_poses(
                     cy = -dy - uy0 + y
                     canvas[cy * width + cx] = index
         poses.append(PoseFrame(step, AnimPixels(width, height, tuple(canvas))))
+    return tuple(poses)
+
+
+def resolve_body_poses(
+    world: wld.World, *, record_name: str, clip_tag: str
+) -> tuple[BodyPose, ...]:
+    """Resolve a clip to one **whole-body sprite** per stride ``step``.
+
+    This is the "one character, one sprite" reading that ``engine.render_tiles``
+    draws the moving player from.  ``Hero.RUN`` has 26 keyframes over 12 steps:
+    per step a **whole-body** layer (sprite **24**, 54x57 — head, torso, arms
+    and legs in one image) plus a much smaller companion (sprite **23**, 26x13).
+    The body layer is the one with the larger content bounding box, so the
+    selection is a measurement (:func:`_content_area`), not a hard-coded id.
+
+    The companion layer is **not** painted.  Measured over RUN's 12 steps, its
+    non-transparent pixels land on the body layer's pixels 0–8 % of the time at
+    the recorded ``(dx, -dy)`` under the top-left anchor **and** under a
+    bottom-left anchor, and its offset puts it 25 px to the figure's left and
+    level with its head — so compositing it floats a detached fragment beside
+    the character rather than completing a body.  What it *is* (a second
+    facing, an effect, a limb drawn by a different path) is open (Q37); the
+    player is drawn from the whole-body layer until that is settled.
+
+    Steps whose layers do not all resolve (the shared contact pose, sprite
+    byte 169) are dropped, exactly as in :func:`resolve_poses`, so every pose
+    returned is a complete frame.
+    """
+    anim = find_animation(world, record_name=record_name, clip_tag=clip_tag)
+    if anim is None:
+        return ()
+    sprites = sprite_map(world)
+    layers: dict[int, list[tuple[int, int, int, int, AnimPixels]]] = {}
+    dropped: set[int] = set()
+    for sprite, step, w2, w3, _w4 in anim.frames:
+        dx, dy = _signed(w2), _signed(w3)
+        chunk = sprites.get(sprite)
+        if chunk is None:
+            dropped.add(step)
+            continue
+        sub = frame_for_step(step, chunk.frame_count)
+        pixels = decode_anim_pixels(chunk, sub)
+        if pixels is None:
+            dropped.add(step)
+            continue
+        layers.setdefault(step, []).append((sprite, sub, dx, dy, pixels))
+
+    poses: list[BodyPose] = []
+    for step in sorted(layers):
+        if step in dropped:
+            continue
+        sprite, sub, dx, dy, pixels = max(
+            layers[step], key=lambda layer: _content_area(layer[4])
+        )
+        poses.append(BodyPose(step, sprite, sub, dx, dy, pixels))
     return tuple(poses)
 
 

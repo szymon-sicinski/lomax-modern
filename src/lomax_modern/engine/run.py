@@ -14,10 +14,11 @@ from pathlib import Path
 from typing import Callable
 
 from ..anim_nmy import placement_role
+from ..art import DEFAULT_PALETTE_SLOT, SPRITE_PALETTE_SLOT
 from .entities import Input
-from .level import Level, load_level
+from .level import PLAYER_MOVE_ANIM, PLAYER_STAND_ANIM, Level, load_level
 from .render import Frame, render_tiles
-from .state import GameState, new_game_state
+from .state import MOVE_ANIM_TICKS_PER_POSE, GameState, new_game_state
 
 #: A script turns the current tick and state into one tick of input.
 InputScript = Callable[[int, GameState], Input]
@@ -68,6 +69,10 @@ class SliceReport:
     gnmy_roles: dict[str, int]
     #: Pixel ``(x, y)`` of every ``Exit`` placement, in file order.
     exits: tuple[tuple[int, int], ...]
+    #: One line stating how the player is drawn: the standing clip when idle,
+    #: the moving clip's pose count and hold when moving, and the sprite palette
+    #: slot.  Empty when the caller did not describe it (old constructions).
+    player_anim: str = ""
     next_level: str | None = None
 
     def format(self) -> str:
@@ -118,6 +123,8 @@ class SliceReport:
             f"other {self.gnmy_roles.get('other', 0)} "
             "(Start/Exit/Moneybag [V]; the other names' handlers are unmapped)",
         ]
+        if self.player_anim:
+            lines.append(self.player_anim)
         return "\n".join(lines)
 
 
@@ -177,6 +184,23 @@ def run_slice(
     final_frame = captured if captured is not None else render_tiles(level, state)
     next_level = worlds[1] if state.complete and len(worlds) > 1 else None
     gnmy_roles = collections.Counter(placement_role(e.name) for e in level.gnmy)
+    if level.move_poses:
+        player_anim = (
+            f"player: idle = {PLAYER_STAND_ANIM} standing sprite; moving = "
+            f"{PLAYER_MOVE_ANIM} {len(level.move_poses)} whole-body poses, one pose "
+            f"per {MOVE_ANIM_TICKS_PER_POSE} tick(s) ("
+            f"{60 / MOVE_ANIM_TICKS_PER_POSE:.0f} poses/s at 60 Hz, one cycle per "
+            f"{len(level.move_poses) * MOVE_ANIM_TICKS_PER_POSE} ticks "
+            f"= {len(level.move_poses) * MOVE_ANIM_TICKS_PER_POSE / 60:.2f} s), "
+            f"hold chosen by eye [H]; facing = single sprite mirrored; ANIM "
+            f"sprites through HEAD palette slot {SPRITE_PALETTE_SLOT}, tiles "
+            f"through slot {DEFAULT_PALETTE_SLOT}"
+        )
+    else:
+        player_anim = (
+            f"player: no {PLAYER_MOVE_ANIM} clip resolved (no sibling MAIN.WLD) "
+            "-- the standing sprite is reused while moving"
+        )
     report = SliceReport(
         world=world_name,
         planes=len(level.sections),
@@ -196,6 +220,7 @@ def run_slice(
         gnmy_entries=len(level.gnmy),
         gnmy_roles=dict(gnmy_roles),
         exits=level.exits,
+        player_anim=player_anim,
         next_level=next_level,
     )
     return report, final_frame

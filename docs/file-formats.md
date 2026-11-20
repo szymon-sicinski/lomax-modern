@@ -419,9 +419,35 @@ from the flag.
 
 **Timing `[H]`.** No keyframe field and none of the animation's 9 `u16` params
 carry a per-frame hold: `dx`/`dy` are small signed offsets, `flags` is a flag
-word and `step` a monotonic stride counter. The engine therefore advances one
-pose per 60 Hz tick of horizontal movement (feet stay locked to the ground —
-no sliding); this is a **chosen constant**, not a measured rate.
+word and `step` a monotonic stride counter. The engine advances one pose every
+**three** 60 Hz ticks (`engine.state.MOVE_ANIM_TICKS_PER_POSE = 3`, 20 poses/s),
+so a 12-pose `RUN` cycle takes 36 ticks = **0.6 s**. That rate is **chosen by
+eye**, not measured; the previous wiring advanced one pose per tick (12 fps of
+animation, ~5 cycles/s) and stuttered by construction. Q36.
+
+**The moving player draws `RUN`, one whole-body sprite per step `[V]` structure,
+`[H]` layer choice.** `Hero.RUN` is 26 keyframes over **12 steps**: per step a
+**whole-body** sprite (**24**, frames 50–56 × 56–57 — head, torso, arms and legs
+in one image) plus a much smaller companion (**23**, 26×13–26×17, which alone
+has the 12 frames the clip needs). Measured on the retail install: at the
+recorded `(dx, -dy)` the companion's opaque pixels land on the body layer's
+pixels **0–8 %** of the time, under the top-left anchor *and* under a
+bottom-left anchor, and its offset sits **25 px to the figure's left**, level
+with its head — so compositing the two floats a detached fragment beside the
+character rather than completing a body. `engine.render_tiles` therefore blits
+the whole-body layer only (`anim_clip.resolve_body_poses`, chosen by content
+bounding box, not by a hard-coded sprite id); what the companion is — a second
+facing, an effect, a limb drawn on another path — is open (**Q37**). `WALK` is
+**not** the moving clip: its layers are leg-sized (18×23 / 16×17).
+
+**Frame selector when a clip has more steps than its chunk has frames `[H]`.**
+`step` indexes the chunk 1-based (`step - 1`), which is exact for `WALK` (10
+steps over sprite 33's 10 frames) but overruns `RUN` (12 steps over sprite 24's
+**8** frames). The selector therefore wraps modulo the frame count
+(`anim_clip.frame_for_step`, Q36). Measured: clamping instead repeats the final
+frame for **5 of RUN's 12 steps**, which freezes the animation for those steps;
+wrapping gives all 12 steps a distinct frame. Which rule the original uses is
+not yet traced.
 
 **Alignment `[V]` structure, `[H]` anchor.** `dx`/`dy` are signed offsets with
 the game's **y-up** axis — the sprite decompressor at VA `0x415E30` negates the

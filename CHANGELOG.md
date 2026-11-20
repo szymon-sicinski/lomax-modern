@@ -8,12 +8,30 @@ Versioning: [Semantic Versioning](https://semver.org/).
 
 ### Added
 
+- **The moving player draws `RUN`, one whole-body sprite per step.** While the
+  player moves, `engine.render_tiles` blits a complete character — `Hero.RUN`'s
+  whole-body layer (sprite 24, 50–56 × 56–57), 12 poses — mirrored for the
+  facing direction. The standing path is unchanged (`STA1`'s sprite 28),
+  `ANIM` sprites still resolve through `HEAD` palette slot 0 while tiles keep
+  slot 1, and output is still refused inside the game folder
+  (`art.refuse_into_game_folder`). Two measured conventions replace guesses
+  (`docs/file-formats.md` §2.6.1, Q36/Q37): the frame selector **wraps** because
+  RUN's 12 steps overrun sprite 24's 8 frames (clamping froze 5 of the 12
+  steps), and the pose hold is **3 ticks at 60 Hz** (`state.
+  MOVE_ANIM_TICKS_PER_POSE`, 0.6 s per cycle), chosen by eye `[H]` rather than
+  the previous one-pose-per-tick strobe. RUN's small companion layer (sprite 23,
+  26×13) is measured clear of the figure at its recorded offset under both
+  candidate anchors (0–8 % pixel overlap), so it is not composited into the
+  character; its role is Q37. `WALK`'s loader is gone from the engine — that
+  clip's role is the research card's question.
+
 - **`Hero.WALK` animated end to end (animation spike).** A new `anim-clip`
   command renders any `NMY` clip to per-pose PNGs plus a preview strip and a
   GIF: `lomax-modern anim-clip <install> --world MAIN --name WALK --out DIR`.
-  The engine now draws the player as the `WALK` cycle while moving — one
-  composited stride pose per 60 Hz tick of movement, flipped to the facing
-  direction — instead of the static standing sprite. The keyframe record is
+  The `anim-clip` command and the WALK composite remain the research surface;
+  the engine's moving player is wired to `RUN` instead (entry above), because
+  WALK's layers are leg-sized and what the original uses that clip for is still
+  open. The keyframe record is
   resolved (`docs/file-formats.md` §2.6.1): byte 0 is the `ANIM` `type_index`
   **[V]**, then a stride **pose index** (`step`), two signed draw offsets and a
   flag word whose bit `0x80` is still **[H]** (9/10 steps, contradicted by
