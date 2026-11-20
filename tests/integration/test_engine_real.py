@@ -23,6 +23,7 @@ from lomax_modern.engine import (
     render_tiles,
     run_slice,
 )
+from lomax_modern.engine.render import COLOUR_PLAYER
 
 GAME_DIR = os.environ.get("LOMAX_GAME_DIR")
 
@@ -119,6 +120,30 @@ def _playfield_gnmy(world, playfield: int) -> list:
             if decoded is not None:
                 entries.extend(decoded[0])
     return entries
+
+
+def test_render_tiles_shows_the_player_sprite_not_the_marker() -> None:
+    """The player is its standing ANIM sprite from MAIN.WLD, not the marker."""
+    path = Path(GAME_DIR or "") / "WORLDS" / "VILLAGE.WLD"
+    if not path.is_file():
+        pytest.skip("VILLAGE.WLD not present in this install")
+
+    level = load_level(path)
+    sprite = level.player_sprite
+    assert sprite is not None, "VILLAGE should resolve the Hero's standing frame"
+    assert sprite.width > 0 and sprite.height > 0
+    # Not all-transparent: the standing Lomax sprite has real pixels.
+    assert any(v != 0 for v in sprite.indices)
+
+    state = new_game_state(level, spawn_x=99.0, spawn_y=189.0)
+    frame = render_tiles(level, state)
+
+    print(
+        f"player sprite: {sprite.width}x{sprite.height}, "
+        f"{sum(1 for v in sprite.indices if v)}/{len(sprite.indices)} opaque"
+    )
+    # The marker is gone: the sprite replaced the solid-colour rectangle.
+    assert COLOUR_PLAYER not in frame.pixels
 
 
 def test_render_tiles_overlays_gnmy_markers() -> None:

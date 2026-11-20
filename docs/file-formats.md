@@ -211,6 +211,18 @@ MEDIEVAL 68, TITLE 22, VILLAGE 49, WEST 53** — each equals that world's maximu
 `GNMY` type index **+ 1** (BONUS 29, WEST 52, HAUNTED 73) **[V]**, which is
 exactly the "records == max type index + 1" falsifier named for Q23.
 
+The 8-byte per-frame record (each `{u8, u8, u16, u16, u16}`) is an animation
+keyframe: its **first byte is the referenced `ANIM` type_index** **[V]** —
+across every `NMY` animation on the retail install, 3,124 of 3,156 keyframes
+whose first byte is ≤ 147 resolve to a same-world `ANIM` chunk (the remaining
+32 are global-bank/cross-world references, since `MAIN.WLD`'s bank carries the
+`0x100` flag). The other five bytes (a sub-frame/sequence index and three
+words — draw offset, flip/duration flags) are read by the animation scheduler
+and are not yet mapped (Q34). This is what lets
+`lomax_modern.engine.level.load_player_sprite` find the player's standing
+frame: `MAIN.WLD`'s `Hero` record, its `STA1` ("stand") animation, and the
+first keyframe's sprite index.
+
 **`GNMY`** entries reference those records directly, one per placed object
 (3,593 entries across 104 chunks). The loader walks them **structurally** — its
 read pointer is bumped by fixed `add $0x2` steps, and the leading `u16` is read
@@ -342,6 +354,23 @@ The packed flag halves the storage (two 4-bit pixels per byte) and is set on
 geometry: widths 2–220 px, heights 2–241 px, 1–46 frames per chunk, type indices
 0–147.
 
+**Pixel decode** (recovered from the sprite decompressor at VA `0x415E30`,
+the loop at `0x415F18` that expands a frame into an 8-bit index buffer):
+
+* **raw** (8-bit) — one palette index per byte, row-major (`mov al,[esi]` /
+  `mov [ebx],al` at `0x415F65`).
+* **packed** (4-bit) — two pixels per byte, **low nibble first** then high
+  nibble: `and al,0xf` stores pixel 0, `shr al,4` stores pixel 1
+  (`0x415F18`–`0x415F2C`), `width>>1` bytes per row. An odd `width` drops the
+  trailing pixel of each row (the reader halves `width` per row), so it is
+  transparent (index 0).
+
+Index 0 is the transparent key (the same rule the tile blit uses); the caller
+applies a `HEAD` palette slot to the indices. `lomax-modern` decodes this with
+`lomax_modern.anim_nmy.decode_anim_pixels`, and the player's standing frame is
+the first keyframe of `MAIN.WLD`'s `Hero` → `STA1` animation (a 54×41 raw
+sprite).
+
 The documented "`SpriteFrame` is 0x38 bytes" `[S2]` is **not the on-disk unit** —
 it is the in-memory stride the loader allocates per frame (`0x38` bytes in RAM);
 the on-disk framing is the one above, and no chunk is an array of `0x38`-byte
@@ -372,6 +401,7 @@ virtual address + file offset:
 | `MAP`/`TTAB` preprocessor (byte-swaps the big-endian words in place) | `0x415430` | `0x14430` |
 | tile-cache builder (consumes the `0x2000`/`0x4000` flips) | `0x4154B0` | `0x148B0` |
 | `NMY` reader | `0x415199` | `0x14599` |
+| sprite decompressor (unpacks a frame: 4-bit low nibble first / 8-bit) | `0x415E30` | `0x15230` |
 | `File_Read` (reads N bytes into a buffer) | `0x416A70` | `0x15E70` |
 | byte-swap (`bswap`, big-endian→little-endian) | `0x416620` | `0x15A20` |
 | spawn pass (placement → 0x120-byte entity; dispatches `record+0x16`) | `0x4126A0` | `0x11AA0` |

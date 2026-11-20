@@ -325,6 +325,33 @@ class Framebuffer:
                 transparent_index=transparent_index,
             )
 
+    def blit_sprite(
+        self,
+        indices: Sequence[int],
+        width: int,
+        height: int,
+        palette: Palette565,
+        x0: int,
+        y0: int,
+        *,
+        transparent_index: int = TRANSPARENT_INDEX,
+    ) -> None:
+        """Draw an indexed sprite (row-major palette indices) at ``(x0, y0)``.
+
+        This is the ANIM-sprite counterpart of :meth:`blit_cell`: each index is
+        looked up in ``palette`` and index ``transparent_index`` is skipped, so
+        the sprite's transparent border never paints.  ``set`` clips at the
+        buffer edge, so a sprite partly off-screen is clipped rather than
+        rejected.
+        """
+        for y in range(height):
+            base = y * width
+            for x in range(width):
+                index = indices[base + x]
+                if index == transparent_index:
+                    continue
+                self.set(x0 + x, y0 + y, palette.word(index))
+
     def blit_map_field(
         self,
         plane: MapPlane,

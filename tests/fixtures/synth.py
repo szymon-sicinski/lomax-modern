@@ -163,21 +163,29 @@ def anim_payload(
     height: int = 8,
     type_index: int = 0,
     flags: int = 0,
+    pixels: bytes | None = None,
 ) -> bytes:
     """An ``ANIM`` payload built to the recovered framing (docs §2.6).
 
     Header is 12 little-endian bytes (``a, b, n, flags, type_index, pad``);
     each frame is ``i16 width, i16 height, u16 d, u16 e`` followed by
     ``round4(w*h)`` (or ``round4((w*h)>>1)`` when ``packed``) pixel bytes.
+
+    ``pixels`` supplies the raw pixel bytes for every frame (padded to the
+    frame's byte count); when omitted the pixels are zero.  This lets a test
+    pin the 4-bit nibble order and the raw one-byte-per-pixel path.
     """
     flag_word = flags | (0x8000 if packed else 0)
     out = bytearray(struct.pack("<6H", 1, 2, frame_count, flag_word, type_index, 0))
     area = width * height
-    pixels = (area >> 1) if packed else area
-    pixel_bytes = (pixels + 3) & ~3
+    pixel_count = (area >> 1) if packed else area
+    pixel_bytes = (pixel_count + 3) & ~3
     for _ in range(frame_count):
         out += struct.pack("<hhHH", width, height, 0, 0)
-        out += b"\0" * pixel_bytes
+        if pixels is None:
+            out += b"\0" * pixel_bytes
+        else:
+            out += (pixels + b"\0" * pixel_bytes)[:pixel_bytes]
     return bytes(out)
 
 

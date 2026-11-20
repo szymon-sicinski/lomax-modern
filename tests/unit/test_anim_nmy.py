@@ -5,7 +5,9 @@ from __future__ import annotations
 import struct
 
 from lomax_modern.anim_nmy import (
+    anim_tag_name,
     decode_anim,
+    decode_anim_pixels,
     decode_gnmy,
     decode_nmy,
     placement_role,
@@ -65,6 +67,76 @@ def test_anim_frame_overrun_rejected() -> None:
 def test_anim_trailing_bytes_rejected() -> None:
     payload = anim_payload(frame_count=1, width=4, height=4)
     assert decode_anim(payload + b"\x00\x00\x00\x00") is None
+
+
+# ---------------------------------------------------------------------------
+# ANIM pixel decode
+# ---------------------------------------------------------------------------
+
+
+def test_anim_pixels_packed_low_nibble_first() -> None:
+    """A 4-bit packed frame decodes two pixels per byte, low nibble first.
+
+    Byte ``0x12`` -> pixel 0 = 0x2 (low), pixel 1 = 0x1 (high), matching the
+    sprite decompressor's ``and al,0xf`` then ``shr al,4`` (VA 0x415F18).
+    """
+    data = bytes([0x12, 0x34, 0x56, 0x78])
+    payload = anim_payload(frame_count=1, packed=True, width=4, height=2, pixels=data)
+    dec = decode_anim(payload)
+    assert dec is not None
+    px = decode_anim_pixels(dec, 0)
+    assert px is not None
+    assert (px.width, px.height) == (4, 2)
+    assert px.indices == (2, 1, 4, 3, 6, 5, 8, 7)
+
+
+def test_anim_pixels_raw_one_byte_per_pixel() -> None:
+    """A raw frame decodes one palette index per byte, row-major."""
+    data = bytes([0, 1, 2, 3, 4, 5, 6, 7, 8])
+    payload = anim_payload(frame_count=1, packed=False, width=3, height=3, pixels=data)
+    dec = decode_anim(payload)
+    assert dec is not None
+    px = decode_anim_pixels(dec, 0)
+    assert px is not None
+    assert px.indices == (0, 1, 2, 3, 4, 5, 6, 7, 8)
+
+
+def test_anim_pixels_packed_odd_width_drops_trailing_pixel() -> None:
+    """An odd packed width halves per row, so the trailing pixel is transparent."""
+    data = bytes([0x21, 0x00, 0x00, 0x00])
+    payload = anim_payload(frame_count=1, packed=True, width=3, height=1, pixels=data)
+    dec = decode_anim(payload)
+    assert dec is not None
+    px = decode_anim_pixels(dec, 0)
+    assert px is not None
+    assert px.indices == (1, 2, 0)  # low=1, high=2, then the dropped pixel
+
+
+def test_anim_pixels_out_of_range_frame_is_none() -> None:
+    payload = anim_payload(frame_count=1, packed=False, width=2, height=2)
+    dec = decode_anim(payload)
+    assert dec is not None
+    assert decode_anim_pixels(dec, 1) is None
+
+
+def test_anim_pixels_indices_match_geometry() -> None:
+    """The decoded index count equals width * height for every frame size."""
+    for w, h in ((8, 8), (4, 2), (3, 3), (1, 5), (7, 3)):
+        payload = anim_payload(frame_count=1, packed=True, width=w, height=h)
+        dec = decode_anim(payload)
+        assert dec is not None
+        px = decode_anim_pixels(dec, 0)
+        assert px is not None
+        assert len(px.indices) == w * h
+        assert px.at(0, 0) == px.indices[0]
+
+
+def test_anim_tag_name_recovers_forward_ascii() -> None:
+    """The byte-swapped NMY animation tag reads back as its forward ASCII name."""
+    stay = struct.unpack("<I", b"YATS")[0]
+    assert anim_tag_name(stay) == "STAY"
+    # "STA1" forward ASCII is stored as its byte-swapped form "1ATS" on disk.
+    assert anim_tag_name(struct.unpack("<I", b"1ATS")[0]) == "STA1"
 
 
 # ---------------------------------------------------------------------------

@@ -20,9 +20,13 @@ The recovery and evidence are recorded in ``docs/file-formats.md`` §2.5/§2.6 a
 Payload fields are **little-endian** (the readers use plain ``mov`` on the words;
 only the chunk header's size — and the ``HEAD``/``WRLD`` fields — are byte-swapped
 big-endian).  This module reports structure plus each ``NMY`` record's **name**
-(the game's object vocabulary, matched on its first four bytes — Q32); it never
-returns animation tag strings, pixel data or any other game content, so it is
-safe to keep in the repository.
+(the game's object vocabulary, matched on its first four bytes — Q32).
+
+Pixel data is decoded only on request, at run time, from the caller's own files:
+:func:`decode_anim` carries each ``ANIM`` frame's raw pixel bytes, and
+:func:`decode_anim_pixels` expands them into palette indices (4-bit packed or
+raw 8-bit) — see the docstring there for the recovered nibble order.  The
+repository commits only this decoding code, never game content.
 """
 
 from __future__ import annotations
@@ -44,13 +48,14 @@ def _round4(x: int) -> int:
 
 @dataclass(frozen=True)
 class AnimFrame:
-    """One frame of an ``ANIM`` chunk (structural fields only, no pixels)."""
+    """One frame of an ``ANIM`` chunk (structure plus the raw pixel bytes)."""
 
     width: int
     height: int
     field_d: int
     field_e: int
     pixel_bytes: int
+    pixels: bytes = b""  # the frame's raw pixel data, still packed if 4-bit
 
 
 @dataclass(frozen=True)
@@ -108,11 +113,82 @@ def decode_anim(payload: bytes) -> AnimDecode | None:
         pixel_bytes = _round4(pixels)
         if pixel_bytes < 0 or pos + pixel_bytes > len(payload):
             return None
-        frames.append(AnimFrame(width, height, field_d, field_e, pixel_bytes))
+        frame_pixels = payload[pos : pos + pixel_bytes]
+        frames.append(AnimFrame(width, height, field_d, field_e, pixel_bytes, frame_pixels))
         pos += pixel_bytes
     if pos != len(payload):
         return None
     return AnimDecode(a, b, n, flags, packed, type_index, pad, tuple(frames))
+
+
+@dataclass(frozen=True)
+class AnimPixels:
+    """One decoded ``ANIM`` frame as row-major palette indices.
+
+    ``indices`` holds exactly ``width * height`` palette indices; index 0 is
+    the transparent key (the same rule the tile blit uses).  This is the
+    indexed layer only — the caller applies its own ``HEAD`` palette.
+    """
+
+    width: int
+    height: int
+    indices: tuple[int, ...]
+
+    def __post_init__(self) -> None:
+        if len(self.indices) != self.width * self.height:
+            raise ValueError(
+                f"frame has {len(self.indices)} indices for "
+                f"{self.width}x{self.height} ({self.width * self.height})"
+            )
+
+    def at(self, x: int, y: int) -> int:
+        """Palette index at ``(x, y)`` — row-major."""
+        if not (0 <= x < self.width and 0 <= y < self.height):
+            raise IndexError(f"pixel ({x}, {y}) outside {self.width}x{self.height}")
+        return self.indices[y * self.width + x]
+
+
+def decode_anim_pixels(anim: AnimDecode, frame_index: int) -> AnimPixels | None:
+    """Decode one ``ANIM`` frame's pixel data into palette indices.
+
+    Two storage paths, both recovered from the sprite decompressor at
+    ``VA 0x415E30`` (the loop that unpacks a frame into an 8-bit index buffer):
+
+    * **raw** (``packed`` False) — one palette index per byte, row-major
+      (``mov al,[esi]`` / ``mov [ebx],al``, ``VA 0x415F65``).
+    * **packed** (``packed`` True) — two 4-bit pixels per byte, **low nibble
+      first** then high nibble: ``and al,0xf`` stores pixel 0, ``shr al,4``
+      stores pixel 1 (``VA 0x415F18..0x415F2C``), ``width>>1`` bytes per row.
+      An odd ``width`` drops the trailing pixel of each row (the reader halved
+      ``width`` per row), so it is emitted as transparent index 0.
+
+    ``frame_index`` is zero-based.  Returns ``None`` when the index is out of
+    range or the frame is degenerate (a non-positive dimension).
+    """
+    if not 0 <= frame_index < len(anim.frames):
+        return None
+    frame = anim.frames[frame_index]
+    width, height = frame.width, frame.height
+    if width <= 0 or height <= 0:
+        return None
+    data = frame.pixels
+    if not anim.packed:
+        indices = tuple(data[: width * height])
+    else:
+        row_bytes = width >> 1
+        out: list[int] = []
+        for y in range(height):
+            base = y * row_bytes
+            for i in range(row_bytes):
+                byte = data[base + i]
+                out.append(byte & 0x0F)  # low nibble first
+                out.append(byte >> 4)  # then high nibble
+            if width & 1:
+                out.append(0)  # odd width: the reader drops the trailing pixel
+        indices = tuple(out)
+    if len(indices) != width * height:
+        return None
+    return AnimPixels(width, height, indices)
 
 
 # ---------------------------------------------------------------------------
@@ -122,11 +198,37 @@ def decode_anim(payload: bytes) -> AnimDecode | None:
 
 @dataclass(frozen=True)
 class NmyAnim:
-    """One animation of an ``NMY`` type record (structural only)."""
+    """One animation of an ``NMY`` type record (structure plus keyframes).
 
-    tag: int  # 4-byte identifier (reported as an integer, never decoded)
+    ``frames`` is one entry per 8-byte per-frame record.  Each is the raw
+    ``(sprite, b1, w2, w3, w4)`` tuple decoded ``u8, u8, u16, u16, u16``.  Only
+    the first byte is mapped: ``sprite`` is the referenced ``ANIM`` type_index
+    (measured on the retail install — 99%+ of the sub-256 values resolve to a
+    same-world ``ANIM`` chunk, the rest being global-bank/cross-world
+    references).  ``b1``/``w2``/``w3``/``w4`` are carried verbatim; their
+    meaning (sub-frame index, draw offset, flip/duration flags) is read by the
+    animation scheduler, not this module, and is left unresolved here.
+    """
+
+    tag: int  # 4-byte identifier (byte-swapped ASCII on disk)
     size_field: int  # the u32 after the tag; measured to equal 20 + 8*frames
     frame_count: int
+    frames: tuple[tuple[int, int, int, int, int], ...] = ()
+
+
+def anim_tag_name(tag: int) -> str:
+    """The forward-ASCII name of an ``NMY`` animation tag.
+
+    The tag is stored byte-swapped on disk: ``0x53544159`` ("STAY" as a
+    big-endian dword) appears as the little-endian bytes ``YATS``.  Reading the
+    dword big-endian recovers the name the game compares against its animation
+    vocabulary (``STAY``, ``JUMP``, ``STA1``, ...).  Non-ASCII bytes are
+    preserved as ``\\xNN`` escapes so an unexpected tag is visible, not mangled.
+    """
+    raw = struct.pack("<I", tag)[::-1]
+    return "".join(
+        chr(b) if 0x20 <= b < 0x7F else f"\\x{b:02x}" for b in raw
+    )
 
 
 @dataclass(frozen=True)
@@ -203,8 +305,12 @@ def decode_nmy(payload: bytes) -> tuple[list[NmyRecord], int] | None:
             pos += 18  # 9 x u16 fields
             if pos + 8 * count2 > len(payload):
                 return None
+            frames = tuple(
+                struct.unpack_from("<BBHHH", payload, pos + 8 * i)
+                for i in range(count2)
+            )
             pos += 8 * count2
-            anims.append(NmyAnim(tag, size_field, count2))
+            anims.append(NmyAnim(tag, size_field, count2, frames))
         records.append(NmyRecord(name, w_a, w_b, tuple(anims)))
         if pos + 2 > len(payload):
             return None

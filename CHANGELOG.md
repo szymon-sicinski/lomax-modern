@@ -26,6 +26,17 @@ Versioning: [Semantic Versioning](https://semver.org/).
   keysym constants it binds. It imports no SDL and reads no events, so it is
   unit-tested with no display and no pad attached; the `play` loop that
   consumes it lands in P4.
+- The player is now its **standing ANIM sprite** instead of a marker. `decode_anim`
+  carries each frame's raw pixel bytes and the new `decode_anim_pixels` expands
+  them to palette indices — the recovered nibble order is **low nibble first**
+  for 4-bit packed frames and one byte per pixel for raw frames (sprite
+  decompressor at VA `0x415E30`, `file-formats.md` §2.6). Each `NMY` keyframe's
+  first byte is the referenced `ANIM` type_index, so `load_player_sprite`
+  resolves the standing frame as `MAIN.WLD`'s `Hero` → `STA1` animation, first
+  keyframe (a 54×41 raw sprite); `load_level` attaches it to `Level.player_sprite`
+  and `render_tiles` blits it (feet at the collision box's bottom, through the
+  `HEAD` palette with index-0 transparency), falling back to the marker when
+  `MAIN.WLD` is absent. The keyframe's remaining five bytes stay unmapped (Q34).
 - GNMY markers now consume the `NMY` name Q32 resolved. `decode_nmy` returns
   each record's `name` and `load_level` attaches it to every placement
   (`GnmyEntry.name`); `engine.overlay_gnmy` styles `Start` (white 7×7),
