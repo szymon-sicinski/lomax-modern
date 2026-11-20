@@ -17,6 +17,7 @@ from dataclasses import dataclass, replace
 from pathlib import Path
 
 from .. import art, wld
+from .. import anim_clip
 from ..anim_nmy import (
     AnimPixels,
     GnmyEntry,
@@ -43,6 +44,12 @@ PLAYER_NMY_NAME = "Hero"
 #: The animation tag (forward ASCII, see ``anim_nmy.anim_tag_name``) whose first
 #: keyframe is the player's standing pose (``STA1`` = "stand").
 PLAYER_STAND_ANIM = "STA1"
+
+#: The animation tag whose keyframes drive the player's walk cycle.  Each of its
+#: keyframes references an ``ANIM`` chunk (the hero's leg sub-sprites) plus a
+#: signed draw offset and a flip flag; ``anim_clip.resolve_clip`` turns the clip
+#: into renderable frames.
+PLAYER_WALK_ANIM = "WALK"
 
 
 def load_player_sprite(main_world_path: str | Path) -> AnimPixels | None:
@@ -95,6 +102,30 @@ def load_player_sprite(main_world_path: str | Path) -> AnimPixels | None:
     if anim is None:
         return None
     return decode_anim_pixels(anim, 0)
+
+
+def load_walk_clip(main_world_path: str | Path) -> tuple[anim_clip.PoseFrame, ...]:
+    """Resolve the player's ``WALK`` clip to one composited pose per stride.
+
+    Returns one :class:`lomax_modern.anim_clip.PoseFrame` per resolvable stride
+    ``step`` (10 for ``Hero.WALK``), each the composite of that step's two
+    sprite layers — legs (sprite 34) and body (sprite 33) — painted at their
+    recorded ``(dx, -dy)`` screen offsets into one shared canvas (see
+    :func:`lomax_modern.anim_clip.resolve_poses`).  The contact pose (step 0,
+    sprite byte 169) is not in any ``.WLD`` bank and is dropped.  ``()`` when
+    ``MAIN.WLD`` is absent or does not resolve; the renderer then falls back to
+    the standing sprite.
+    """
+    source = Path(main_world_path)
+    if not source.is_file():
+        return ()
+    try:
+        world = wld.parse_file(source)
+    except (OSError, wld.WLDError):
+        return ()
+    return anim_clip.resolve_poses(
+        world, record_name=PLAYER_NMY_NAME, clip_tag=PLAYER_WALK_ANIM
+    )
 
 
 @dataclass(frozen=True)
@@ -160,6 +191,12 @@ class Level:
     #: when the bank is absent (synthetic worlds); the renderer then falls back
     #: to the player marker.
     player_sprite: AnimPixels | None = None
+    #: The player's resolved ``WALK`` clip (see :func:`load_walk_clip`), one
+    #: :class:`lomax_modern.anim_clip.PoseFrame` per stride step (10 for
+    #: ``Hero.WALK``), each the composite of that step's two sprite layers on
+    #: one shared canvas.  Empty when ``MAIN.WLD`` is absent; the renderer
+    #: falls back to the standing sprite while moving.
+    walk_frames: tuple[anim_clip.PoseFrame, ...] = ()
 
     @property
     def plane(self) -> art.MapPlane:
@@ -309,4 +346,5 @@ def load_level(
         collision=collision or CollisionModel(),
         gnmy=gnmy,
         player_sprite=load_player_sprite(source.parent / "MAIN.WLD"),
+        walk_frames=load_walk_clip(source.parent / "MAIN.WLD"),
     )

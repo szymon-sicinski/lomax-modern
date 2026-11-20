@@ -44,6 +44,7 @@ from tests.fixtures.synth import (
 #: 15-bit HEAD palette words and their ``B5G6R5`` forms after widening.
 RED15, RED565 = 0x7C00, 0xF800
 BLUE15, BLUE565 = 0x001F, 0x001F
+GREEN15, GREEN565 = 0x03E0, 0x07E0
 MAGENTA15, MAGENTA565 = 0x7C1F, 0xF81F
 
 
@@ -64,6 +65,7 @@ def _world(
     map_overrides: dict[tuple[int, int], tuple[int, int]] | None = None,
     map_default: int = 0,
     palette_slot1: dict[int, int] | None = None,
+    palette_slot0: dict[int, int] | None = None,
 ) -> bytes:
     """One plane whose MAP cell (x, y) -> (tile_word, collision), row-major."""
     width_units = width_cells * 2
@@ -75,8 +77,11 @@ def _world(
         for x in range(width_cells)
     ]
     palettes = None
-    if palette_slot1 is not None:
-        palettes = [[0] * 256, _palette(palette_slot1)]
+    if palette_slot1 is not None or palette_slot0 is not None:
+        palettes = [
+            _palette(palette_slot0) if palette_slot0 else [0] * 256,
+            _palette(palette_slot1) if palette_slot1 else [0] * 256,
+        ]
     chunks = [
         ("WRLD", b"PS-X" + b"\0" * 4),
         ("NMY", b"\0" * 16),
@@ -328,7 +333,8 @@ def test_render_tiles_blits_the_player_sprite_not_the_marker(tmp_path: Path) -> 
         cells=[RED_CELL],
         records=[RED_TILE],
         map_default=0,
-        palette_slot1={1: RED15, 2: BLUE15},
+        palette_slot1={1: RED15},
+        palette_slot0={2: BLUE15},
     )
     (tmp_path / "VILLAGE.WLD").write_bytes(world)
     (tmp_path / "MAIN.WLD").write_bytes(_main_world_with_hero(5, bytes([2] * 16)))
@@ -339,9 +345,49 @@ def test_render_tiles_blits_the_player_sprite_not_the_marker(tmp_path: Path) -> 
     state = new_game_state(level, spawn_x=0.0, spawn_y=0.0)
     frame = render_tiles(level, state)
 
-    # The marker is gone: the sprite (palette index 2 -> blue) is drawn instead.
+    # The marker is gone: the sprite (palette index 2 -> blue, via the sprite
+    # slot 0) is drawn instead.
     assert COLOUR_PLAYER not in frame.pixels
     # Player box at (0,0) is 12x14; a 4x4 sprite is centred (x=4) with feet at
     # the box bottom (y=10), so its top-left is (4, 10) in the frame.
     assert frame.pixel(4, 10) == BLUE565
     assert frame.pixel(7, 13) == BLUE565  # the sprite's bottom-right corner
+
+
+def test_render_tiles_sprite_slot0_tile_slot1(tmp_path: Path) -> None:
+    """Sprites resolve through slot 0 and tiles through slot 1 — no cross-talk.
+
+    The same palette index N is painted a *different* colour by the two paths:
+    index 1 is green in the sprite slot (0) and red in the tile slot (1).  The
+    tile and the sprite must each pick their own slot's colour.
+    """
+    world = _world(
+        4,
+        4,
+        cells=[RED_CELL],
+        records=[RED_TILE],
+        map_default=0,
+        palette_slot1={1: RED15},   # tile path: index 1 -> red
+        palette_slot0={1: GREEN15},  # sprite path: index 1 -> green
+    )
+    (tmp_path / "VILLAGE.WLD").write_bytes(world)
+    # The standing sprite is index 1 (green under slot 0, red under slot 1).
+    (tmp_path / "MAIN.WLD").write_bytes(_main_world_with_hero(5, bytes([1] * 16)))
+
+    level = load_level(tmp_path / "VILLAGE.WLD")
+    state = new_game_state(level, spawn_x=48.0, spawn_y=48.0)
+    frame = render_tiles(level, state)
+
+    # Tile art (index 1 through slot 1) is red at the playfield centre.
+    assert frame.pixel(24, 24) == RED565
+    # The standing sprite (index 1 through slot 0) is green at its top-left —
+    # it must NOT reuse the tile slot's red.  Camera is clamped to (0,0) here
+    # (the 64x64 playfield is smaller than the 320x240 viewport).
+    sprite = level.player_sprite
+    assert sprite is not None
+    cam_x, cam_y = camera(level, state.player, 320, 240)
+    assert (cam_x, cam_y) == (0, 0)
+    sx = int(state.player.centre_x - sprite.width / 2) - cam_x
+    sy = int(state.player.y + state.player.height - sprite.height) - cam_y
+    assert frame.pixel(sx, sy) == GREEN565
+    assert frame.pixel(sx, sy) != RED565
