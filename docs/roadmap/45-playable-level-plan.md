@@ -235,3 +235,70 @@ grep -rniE '[0-9a-f]{64}' src tests docs && echo "FAIL: hash in tree" || true
 python3 -m pip install --user pytest && python3 -m pip install --user -e .
 python3 -m pytest tests -m "not realgame" -q
 ```
+
+## 8. Outcome — milestone closed (S1)
+
+All seven implementation cards landed and their PRs are merged; the milestone
+is **C-playable** as §1 defines it, with the honest boundary recorded in §8.3.
+
+### 8.1 Cards landed
+
+| Card | PR | Notes |
+|---|---|---|
+| P1 NMY name + role classifier | #52 (`e99370e`) | acceptance already satisfied by the Q32 follow-up before the gate; the P1 worker's PR #53 was closed unmerged as redundant |
+| P2 wire GNMY semantics | #57 | **reworked** — rebased onto `main` after P3/P6 landed, then re-reviewed |
+| P3 keyboard → `Input` | #55 | clean |
+| P4 interactive `play` | #59 | **reworked** — first review returned changes; merged `main` + re-wired, then re-reviewed |
+| P5 player sprite | #60 | merged by S1 under the gate |
+| P6 physics to original rates | #56 | clean |
+| P7 HUD collectable counter | #58 | clean |
+| S1 synthesis + verification | — | this card |
+
+### 8.2 Re-work, recorded
+
+Two cards cycled a second pass; one of them was unpredicted:
+
+- **P4 (predicted).** §5 named P4 as a rework risk. Its first review returned
+  changes: the branch was cut before P2 merged, so `play` drove the placeholder
+  engine (`spawn (0,0)`, `collect 0/0` on ED despite two resolved Moneybags).
+  P4 merged `main` and re-wired the loop; that merge surfaced a real bug
+  (`_cmd_play` still called P7's `_hud_line` with 5 args after it grew to 7,
+  a `TypeError` under live input), fixed in the same pass.
+- **P2 (unpredicted).** Not in §5's risk table. PR #57 opened against an older
+  `main`; once P3 (#55) and P6 (#56) merged, it needed a rebase onto `main`, and
+  the rebased head was re-reviewed.
+
+The two predicted unfamiliar cards that *did not* cycle were **P5** (sprite
+pixel format — one review, clean) and **P6** (physics RE — one review, clean).
+
+### 8.3 The ED-vs-VILLAGE collectable finding
+
+The mechanics are proven; *reaching* the collectables is not yet reachable by a
+scripted right-walk:
+
+- **ED** carries 2 `Moneybag`s and one `Exit`. Measured on the retail install:
+  the two bags sit 186–244 px above the walkway and the `Exit` 76 px above it,
+  so a scripted right-walk passes underneath all three — after 600 ticks the
+  player is at `(1118, 706)` with `collect 0/2` and `did not reach exit`.
+  Standing on the exit cell sets `complete=True` and standing on a bag collects
+  it (both asserted in tests), so the spawn/collect/exit *mechanics* are proven;
+  the gap is a **climbing route** (jump/ledge traversal), which is the next
+  milestone.
+- **VILLAGE** has 0 `Moneybag`s (`collect 0/0`) and does not divide by zero.
+
+"Playable" here means *a human can play it* — move, jump, see the real sprite,
+watch the counter, collect a bag, stand on the exit — not that a scripted
+right-walk proves level completion. That honest boundary is what the next
+milestone crosses.
+
+### 8.4 Spend vs forecast
+
+Forecast 15 cards (7 impl + 7 review + 1 synthesis) ≈ $2.48 off-peak, high
+≈$3.50 for a second cycle on the three unfamiliar cards. The delivery graph
+took 21 cards: the 15, plus two re-review cycles (P2, P4), one rebase (P2), and
+the synthesis/merge work tracked as three explicit merge cards (#55/#59/#60)
+plus S1 rather than the plan's single card. At the board's $0.165/card average
+that is ≈$3.47 — at the top of, not past, the high band. The rework itself
+(2 cycles + 1 rebase = 3 cards) is *inside* the band; the distance to the top
+came from P2's unpredicted rebase cycle and from merge work being tracked at
+finer granularity than the plan assumed.

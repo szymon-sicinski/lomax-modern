@@ -144,7 +144,9 @@ used. Three rules keep it honest:
   engine's *tile-art* frame — each visible `MAP` cell resolves through `TTAB`
   to its `CELL` blocks and blits with the `HEAD` palette and index-0
   transparency, now that the `MAP` cell -> `TTAB` record link is measured
-  (Q20). The geometric collision grid remains as a debug path.
+  (Q20). That frame also carries the player as its decoded `ANIM` standing
+  sprite and the `GNMY` placements as name-styled markers (§4). The geometric
+  collision grid remains as a debug path.
 
 The P5 gate is deliberately split into required and expected entries:
 `LOMAX.EXE` plus `WORLDS/` with at least one `*.WLD` is "the game"; missing
