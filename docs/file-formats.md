@@ -478,10 +478,14 @@ screen position `(dx, -dy)`, which is what puts the head *above* the body. Each
 pose composites its layers at those offsets into one canvas (the clip's union
 content bounding box, so every pose shares a canvas and there is no per-pose
 jitter); `anim_clip.resolve_poses` does this, painting the base first and the
-overlay on top. On the retail install the composite forms a **single connected
-figure in 8/10 poses** — poses 6 and 10 each carry one detached single pixel
-beside the connected figure, so the honest claim is "8/10 strictly
-single-component", not "one component per pose". The exact anchor — which point
+overlay on top. Measured at this head on the retail install with
+`anim_clip.resolve_poses(world, record_name="Hero", clip_tag="WALK")` over
+`MAIN.WLD` (10 poses on one 40×51 canvas): at **4-connectivity only 2/10 poses
+are strictly one component** (steps 6 and 7); the other eight each carry exactly
+one isolated 1-px pixel (step 9 carries two). At **8-connectivity 10/10 poses are
+one component**. The honest claim is "one figure per pose at 8-connectivity, with
+a stray 1-px pixel in eight poses at 4-connectivity" — not "8/10 poses", which
+also named the wrong steps. The exact anchor — which point
 on the collision box the offsets are relative to — is still not confirmed, so
 `engine.render_tiles` anchors the composite like the standing sprite: bottom at
 the collision-box bottom, horizontally centred, mirrored by the player's facing
