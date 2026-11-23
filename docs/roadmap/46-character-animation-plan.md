@@ -213,7 +213,10 @@ disassembly). It is cheap for AN1 to settle and it decides whether `WALK` or
 fields the other way — layer **top = `+dy`** — makes the body layer's bottom edge
 `dy + h` is **constant to the pixel** in **24 of the 47 clips** (19 of them over
 more than one body keyframe; 5 have a single keyframe, so are trivially
-constant). The constant is **+1** in 16 of the 24 — `WALK`, `STA1`, `STA2`,
+constant — "keyframe" here counts only the records whose sprite byte resolves
+to the body layer, per clip; this count is not an Appendix A column (its
+*keyframes* column counts all layers) and was recomputed independently by the
+reviewer of PR #65). The constant is **+1** in 16 of the 24 — `WALK`, `STA1`, `STA2`,
 `DUCK`, `BRAK`, `EDGE`, `DIG1`, `DIZZ`, `IN`, `OUT`, … — and 6–7 in `FLO1`/`FLO2`,
 `CLI2`–`CLI4` and `THR3` (`HEL4` −1, `PLO2` 11). It is **not**
 constant where the body moves: `RUN` takes the values {−6, −1, 0, 1}, `JMP1`
