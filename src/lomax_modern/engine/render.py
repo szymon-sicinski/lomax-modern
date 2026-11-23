@@ -30,7 +30,8 @@ import struct
 from dataclasses import dataclass
 
 from ..anim_nmy import placement_role
-from ..art import DEFAULT_PALETTE_SLOT
+from .. import anim_clip
+from ..art import DEFAULT_PALETTE_SLOT, SPRITE_PALETTE_SLOT
 from ..renderer import Framebuffer, head_palette565
 from .entities import Player
 from .level import CELL_PX, Level
@@ -266,7 +267,11 @@ def render_tiles(
     plane = section.plane
     tiles = section.tiles
     cells = level.cells
-    palette = head_palette565(section.head, DEFAULT_PALETTE_SLOT)
+    # Tiles and sprites resolve their palette indices through *different* slots:
+    # tiles through the tile slot (1), ANIM sprites through the sprite slot (0).
+    # See ``art.SPRITE_PALETTE_SLOT`` — the hero's true colours live in slot 0.
+    tile_palette = head_palette565(section.head, DEFAULT_PALETTE_SLOT)
+    sprite_palette = head_palette565(section.head, SPRITE_PALETTE_SLOT)
 
     fb = Framebuffer(vw, vh, fill=COLOUR_SKY)
     cx0 = max(0, cam_x // CELL_PX)
@@ -280,7 +285,7 @@ def render_tiles(
                 fb.blit_tile(
                     tiles[tile_word],
                     cells,
-                    palette,
+                    tile_palette,
                     cell_x * CELL_PX - cam_x,
                     cell_y * CELL_PX - cam_y,
                     layout="2x2",
@@ -289,17 +294,38 @@ def render_tiles(
     overlay_gnmy(fb, level.gnmy, cam_x, cam_y)
 
     sprite = level.player_sprite
-    if sprite is None:
+    moving = state.player.vx != 0.0
+    if moving and level.move_poses:
+        # Moving: one whole-body sprite per pose (anim_clip.resolve_body_poses —
+        # RUN's whole-body layer, sprite byte 23 -> type_index 22, 48-62 x 34-43), and
+        # advanced every
+        # ``state.MOVE_ANIM_TICKS_PER_POSE`` ticks by the step function and
+        # mirrored for the facing direction: the clip stores a single facing, so
+        # left is a horizontal flip of the right-facing art [H].  Anchored with
+        # its bottom at the collision-box bottom and horizontally centred, the
+        # same convention the standing sprite uses (docs/file-formats.md 2.6.1
+        # anchor [H]).
+        pose = level.move_poses[state.player.anim_frame % len(level.move_poses)]
+        pixels = pose.pixels
+        if state.player.facing < 0:
+            pixels = anim_clip.mirrored(pixels)
+        sx = int(state.player.centre_x - pixels.width / 2) - cam_x
+        sy = int(state.player.y + state.player.height - pixels.height) - cam_y
+        fb.blit_sprite(pixels.indices, pixels.width, pixels.height, sprite_palette, sx, sy)
+    elif sprite is None:
         # No global bank (synthetic world): fall back to the player marker so
         # camera-follow stays visible without a sprite.
         sx = int(state.player.x) - cam_x
         sy = int(state.player.y) - cam_y
         fb.fill_rect(sx, sy, state.player.width, state.player.height, COLOUR_PLAYER)
     else:
-        # Centre the sprite on the player's collision box; feet at its bottom.
+        # Standing pose: centre the sprite on the player's collision box; feet
+        # at its bottom.  Flipped to the facing direction.
+        if state.player.facing < 0:
+            sprite = anim_clip.mirrored(sprite)
         sx = int(state.player.centre_x - sprite.width / 2) - cam_x
         sy = int(state.player.y + state.player.height - sprite.height) - cam_y
-        fb.blit_sprite(sprite.indices, sprite.width, sprite.height, palette, sx, sy)
+        fb.blit_sprite(sprite.indices, sprite.width, sprite.height, sprite_palette, sx, sy)
 
     frame = Frame(vw, vh)
     frame.pixels = fb.pixels

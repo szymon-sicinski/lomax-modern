@@ -96,6 +96,19 @@ PALETTE_BLOCK_SIZE = PALETTE_SLOT_COUNT * PALETTE_ENTRY_COUNT * 2
 #: Default slot: see the module docstring -- an observation, not a proof.
 DEFAULT_PALETTE_SLOT = 1
 
+#: Palette slot for ``ANIM`` *sprites*, distinct from the tile slot above.
+#: The tile path resolves ``MAP``/``TTAB``/``CELL`` indices through slot 1; the
+#: sprite path (``load_player_sprite``, ``anim_clip``, the engine's
+#: ``blit_sprite``) resolves ``ANIM`` indices through slot 0.  Slot 0 carries
+#: the hero's true colours — red plume (13-15), orange face (1-5), green tunic
+#: (16-19), blue helmet/pants (20-23) — where slot 1 maps indices 16-31 to an
+#: all-green ramp, which is the "green hero" defect the slot split fixes.  The
+#: source of this is the operator's comparison against the retail render
+#: (user-confirmed); the mechanism (a fixed MAIN-bank slot vs a level-load
+#: global vs the ``Cset`` NMY record) is not yet traced to a VA, so it is
+#: graded ``[H]`` "user-confirmed against retail" rather than ``[V]``.
+SPRITE_PALETTE_SLOT = 0
+
 RGB = tuple[int, int, int]
 RGBA = tuple[int, int, int, int]
 
