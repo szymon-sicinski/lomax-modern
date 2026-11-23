@@ -21,7 +21,7 @@ from .entities import (
     Input,
     Player,
 )
-from .level import CELL_PX, Level
+from .level import CELL_PX, PLAYER_MOVE_ANIM, PLAYER_STAND_ANIM, Level
 
 #: Ticks one whole-body moving pose is held for before the next pose.
 #:
@@ -34,6 +34,44 @@ from .level import CELL_PX, Level
 #: strobe.  The previous wiring used 1 pose per tick (12 fps of animation,
 #: ≈5 cycles/s) and stuttered by construction.
 MOVE_ANIM_TICKS_PER_POSE = 3
+
+#: Which clip tag the player draws in each of today's motion states.
+#:
+#: ``False`` = standing (``vx == 0``), ``True`` = moving (``vx != 0``).  This is
+#: the *whole* stand/run rule, in one table: the moving entry is ``RUN`` because
+#: PR #64 chose the full-body clip; Q38 asks whether the original's ordinary
+#: 2.0 px/tick walk draws ``WALK`` instead, and answering it is a one-line change
+#: here — no render-path edit.  The tags must be keys of the level's clip table
+#: (``Level.clips``), which is what makes clip choice data.
+MOTION_CLIP_TAGS: dict[bool, str] = {
+    False: PLAYER_STAND_ANIM,
+    True: PLAYER_MOVE_ANIM,
+}
+
+
+def select_clip(player: Player) -> tuple[str, int]:
+    """The clip the player draws now: ``(clip tag, pose index)``.
+
+    **Pure**: a function of the player's own state — no I/O, no module-level
+    mutable state, no level.  The pair is the key into the level's clip table
+    (``Level.clip_pose``), so the render path names no sprite id and needs no
+    branch per clip; a later slice changes *this* function (air states in AN4,
+    duck in AN5, idle in AN6) instead of the renderer.
+
+    Today's rules, unchanged from the shipped render path:
+
+    * ``vx != 0`` (moving) → :data:`PLAYER_MOVE_ANIM` (``RUN``), pose index =
+      :attr:`Player.anim_frame`, the stride counter the tick advances;
+    * otherwise (standing) → :data:`PLAYER_STAND_ANIM` (``STA1``), pose index 0,
+      the clip's first pose — the clip's first keyframe names its standing frame.
+
+    Airborne players are **not** special-cased yet: they resolve through the same
+    two tags (``vx != 0`` still draws ``RUN``), exactly as before this refactor.
+    The jump/fall/land clips arrive with AN4.
+    """
+    if player.vx != 0.0:
+        return MOTION_CLIP_TAGS[True], player.anim_frame
+    return MOTION_CLIP_TAGS[False], 0
 
 
 def _overlaps_cell(player: Player, cell_x: int, cell_y: int) -> bool:

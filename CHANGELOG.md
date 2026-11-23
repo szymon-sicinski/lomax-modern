@@ -305,6 +305,21 @@ Versioning: [Semantic Versioning](https://semver.org/).
 
 ### Changed
 
+- **The player's clip choice is data: a tag-keyed clip table plus a pure
+  `select_clip(player)`.** `engine.level.load_move_poses` (one hard-coded clip)
+  becomes `load_clip_table`, which resolves **any** clip tag to its whole-body
+  poses (`Hero`'s `STA1` and `RUN` today, a later tag without touching the
+  loader), and `engine.state.select_clip(player)` returns the `(clip tag, pose
+  index)` pair as a pure function of the player. The whole stand/run rule is one
+  table — `MOTION_CLIP_TAGS`: `vx != 0` → `RUN`, else `STA1` (PR #64's choice,
+  unchanged) — so Q38's `WALK` question is a one-line change and AN4/AN5/AN6
+  change the selector, not the render path. `render_tiles` resolves the pair
+  through `Level.clip_pose`, so no sprite id or per-clip branch is left in it.
+  Behaviour-neutral: all **120/120** rendered frames of
+  `slice --world VILLAGE --frames 120` are byte-identical before and after, and
+  the only report change is a new line naming what was drawn and for how many
+  ticks — `clips: STA1 61, RUN 59` on that run (the 62 airborne ticks resolve as
+  before: 50 `RUN`, 12 `STA1`, since the air clips arrive with AN4).
 - Player physics tuned to the rates measured from `LOMAX.EXE` (P6):
   `WALK_SPEED` 2.0, `GRAVITY` 0.35 → **0.375**, `JUMP_SPEED` −5.5 → **−4.0**,
   `MAX_FALL` 8.0 → **6.0** px/tick, each with its virtual-address citation in

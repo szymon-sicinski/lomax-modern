@@ -18,7 +18,7 @@ from ..art import DEFAULT_PALETTE_SLOT, SPRITE_PALETTE_SLOT
 from .entities import Input
 from .level import PLAYER_MOVE_ANIM, PLAYER_STAND_ANIM, Level, load_level
 from .render import Frame, render_tiles
-from .state import MOVE_ANIM_TICKS_PER_POSE, GameState, new_game_state
+from .state import MOVE_ANIM_TICKS_PER_POSE, GameState, new_game_state, select_clip
 
 #: A script turns the current tick and state into one tick of input.
 InputScript = Callable[[int, GameState], Input]
@@ -73,6 +73,12 @@ class SliceReport:
     #: the moving clip's pose count and hold when moving, and the sprite palette
     #: slot.  Empty when the caller did not describe it (old constructions).
     player_anim: str = ""
+    #: Ticks drawn per clip tag, in the level's clip-table order: each engine tick
+    #: is booked to the clip :func:`lomax_modern.engine.state.select_clip` chose
+    #: and the table could resolve, so ``sum`` is the number of ticks drawn as a
+    #: clip.  Empty when there is no clip table (a world without ``MAIN.WLD`` draws
+    #: the marker, and nothing is named).
+    clip_ticks: tuple[tuple[str, int], ...] = ()
     next_level: str | None = None
 
     def format(self) -> str:
@@ -125,6 +131,11 @@ class SliceReport:
         ]
         if self.player_anim:
             lines.append(self.player_anim)
+        if self.clip_ticks:
+            lines.append(
+                "clips: "
+                + ", ".join(f"{tag} {count}" for tag, count in self.clip_ticks)
+            )
         return "\n".join(lines)
 
 
@@ -172,9 +183,15 @@ def run_slice(
 
     ticks = 0
     captured: Frame | None = None
+    # One counter per clip in the table, in table order, so the ``clips:`` line is
+    # stable across runs and diffs read as data ("which clip, how many ticks").
+    clip_ticks = {tag: 0 for tag in level.clips}
     for tick in range(max_ticks):
         state.tick(script(tick, state))
         ticks += 1
+        tag, _pose_index = select_clip(state.player)
+        if tag in clip_ticks:
+            clip_ticks[tag] += 1
         if on_frame is not None:
             captured = render_tiles(level, state)
             on_frame(ticks - 1, captured)
@@ -184,14 +201,15 @@ def run_slice(
     final_frame = captured if captured is not None else render_tiles(level, state)
     next_level = worlds[1] if state.complete and len(worlds) > 1 else None
     gnmy_roles = collections.Counter(placement_role(e.name) for e in level.gnmy)
-    if level.move_poses:
+    move_poses = level.clips.get(PLAYER_MOVE_ANIM, ())
+    if move_poses:
         player_anim = (
             f"player: idle = {PLAYER_STAND_ANIM} standing sprite; moving = "
-            f"{PLAYER_MOVE_ANIM} {len(level.move_poses)} whole-body poses, one pose "
+            f"{PLAYER_MOVE_ANIM} {len(move_poses)} whole-body poses, one pose "
             f"per {MOVE_ANIM_TICKS_PER_POSE} tick(s) ("
             f"{60 / MOVE_ANIM_TICKS_PER_POSE:.0f} poses/s at 60 Hz, one cycle per "
-            f"{len(level.move_poses) * MOVE_ANIM_TICKS_PER_POSE} ticks "
-            f"= {len(level.move_poses) * MOVE_ANIM_TICKS_PER_POSE / 60:.2f} s), "
+            f"{len(move_poses) * MOVE_ANIM_TICKS_PER_POSE} ticks "
+            f"= {len(move_poses) * MOVE_ANIM_TICKS_PER_POSE / 60:.2f} s), "
             f"hold chosen by eye [H]; facing = single sprite mirrored; ANIM "
             f"sprites through HEAD palette slot {SPRITE_PALETTE_SLOT}, tiles "
             f"through slot {DEFAULT_PALETTE_SLOT}"
@@ -221,6 +239,7 @@ def run_slice(
         gnmy_roles=dict(gnmy_roles),
         exits=level.exits,
         player_anim=player_anim,
+        clip_ticks=tuple(clip_ticks.items()),
         next_level=next_level,
     )
     return report, final_frame

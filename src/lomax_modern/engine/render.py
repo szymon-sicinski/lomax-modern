@@ -6,9 +6,10 @@ record's four ``CELL`` blocks (flips applied) with the ``HEAD`` palette and
 index-0 transparency into the 320x240 viewport, overlays the playfield's
 ``GNMY`` placements as markers styled by the placement's ``NMY`` name
 (``Start``/``Exit``/``Moneybag`` distinct, every other name one grey "other
-type" bucket — Q32 **[V]**), and finally the player — its standing ``ANIM``
-sprite from the global ``MAIN.WLD`` bank, falling back to a marker when that
-bank is absent — so the camera-follow and scrolling are visible.
+type" bucket — Q32 **[V]**), and finally the player — a pose from the level's
+clip table, chosen by the pure selector (``STA1`` standing, ``RUN`` moving
+today), falling back to the marker when the ``MAIN.WLD`` bank is absent — so the
+camera-follow and scrolling are visible.
 :func:`render` remains the
 *geometric* debug path: every non-zero collision cell is drawn in one colour
 and the player/entities as markers, with the unresolved bits (Q31) flagged in
@@ -35,7 +36,7 @@ from ..art import DEFAULT_PALETTE_SLOT, SPRITE_PALETTE_SLOT
 from ..renderer import Framebuffer, head_palette565
 from .entities import Player
 from .level import CELL_PX, Level
-from .state import GameState
+from .state import GameState, select_clip
 
 #: The original internal resolution (``docs/roadmap/15-strategy-report.md`` §3).
 VIEWPORT_WIDTH = 320
@@ -256,10 +257,13 @@ def render_tiles(
     (collectable) distinct, every other name one grey "other type" bucket
     (Q32 **[V]**; the remaining handlers are unmapped, so nothing is invented)
     — then the player is overlaid last so camera-follow and scrolling stay
-    visible.  The player is its standing ANIM sprite (decoded from the global
-    ``MAIN.WLD`` bank, see :func:`lomax_modern.engine.level.load_player_sprite`),
-    blitted through the ``HEAD`` palette with index-0 transparency; when that
-    bank is absent (a synthetic world) the player falls back to the marker.
+    visible.  The player is drawn from the level's **clip table**
+    (:meth:`lomax_modern.engine.level.Level.clip_pose`): the pure
+    :func:`lomax_modern.engine.state.select_clip` names a ``(tag, pose index)``
+    pair and the table resolves it to a whole-body pose (``STA1``'s standing frame
+    while still, ``RUN``'s stride while ``vx != 0`` today), blitted through the
+    ``HEAD`` palette with index-0 transparency.  A world without the global bank
+    (a synthetic world) falls back to the marker.
     """
     vw, vh = viewport
     cam_x, cam_y = camera(level, state.player, vw, vh)
@@ -293,39 +297,40 @@ def render_tiles(
 
     overlay_gnmy(fb, level.gnmy, cam_x, cam_y)
 
-    sprite = level.player_sprite
-    moving = state.player.vx != 0.0
-    if moving and level.move_poses:
-        # Moving: one whole-body sprite per pose (anim_clip.resolve_body_poses —
-        # RUN's whole-body layer, sprite byte 23 -> type_index 22, 48-62 x 34-43), and
-        # advanced every
-        # ``state.MOVE_ANIM_TICKS_PER_POSE`` ticks by the step function and
-        # mirrored for the facing direction: the clip stores a single facing, so
-        # left is a horizontal flip of the right-facing art [H].  Anchored with
-        # its bottom at the collision-box bottom and horizontally centred, the
-        # same convention the standing sprite uses (docs/file-formats.md 2.6.1
-        # anchor [H]).
-        pose = level.move_poses[state.player.anim_frame % len(level.move_poses)]
+    # Clip choice is data: the pure selector names a (tag, pose index) pair, the
+    # level's clip table resolves it to a whole-body pose.  No branch per clip
+    # lives here, so AN4's air states / AN5's duck / AN6's idle change the
+    # selector, not this function.
+    tag, pose_index = select_clip(state.player)
+    pose = level.clip_pose(tag, pose_index)
+    if pose is not None:
+        # One whole-body sprite per pose (anim_clip.resolve_body_poses), mirrored
+        # for the facing direction: the clip stores a single facing, so left is a
+        # horizontal flip of the right-facing art [H].  Anchored with its bottom
+        # at the collision-box bottom and horizontally centred (the same
+        # convention for every clip; docs/file-formats.md §2.6.1 anchor [H]).
         pixels = pose.pixels
         if state.player.facing < 0:
             pixels = anim_clip.mirrored(pixels)
         sx = int(state.player.centre_x - pixels.width / 2) - cam_x
         sy = int(state.player.y + state.player.height - pixels.height) - cam_y
         fb.blit_sprite(pixels.indices, pixels.width, pixels.height, sprite_palette, sx, sy)
-    elif sprite is None:
-        # No global bank (synthetic world): fall back to the player marker so
-        # camera-follow stays visible without a sprite.
-        sx = int(state.player.x) - cam_x
-        sy = int(state.player.y) - cam_y
-        fb.fill_rect(sx, sy, state.player.width, state.player.height, COLOUR_PLAYER)
-    else:
-        # Standing pose: centre the sprite on the player's collision box; feet
-        # at its bottom.  Flipped to the facing direction.
+    elif (sprite := level.player_sprite) is not None:
+        # The clip table has no pose for the chosen tag (a world whose MAIN.WLD
+        # lacks the clip): reuse the standing sprite rather than inventing art.
+        # Standing pose: centre the sprite on the player's collision box; feet at
+        # its bottom.  Flipped to the facing direction.
         if state.player.facing < 0:
             sprite = anim_clip.mirrored(sprite)
         sx = int(state.player.centre_x - sprite.width / 2) - cam_x
         sy = int(state.player.y + state.player.height - sprite.height) - cam_y
         fb.blit_sprite(sprite.indices, sprite.width, sprite.height, sprite_palette, sx, sy)
+    else:
+        # No global bank (synthetic world): fall back to the player marker so
+        # camera-follow stays visible without a sprite.
+        sx = int(state.player.x) - cam_x
+        sy = int(state.player.y) - cam_y
+        fb.fill_rect(sx, sy, state.player.width, state.player.height, COLOUR_PLAYER)
 
     frame = Frame(vw, vh)
     frame.pixels = fb.pixels
