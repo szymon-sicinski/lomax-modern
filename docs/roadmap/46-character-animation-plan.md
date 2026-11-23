@@ -43,7 +43,7 @@ deferred (§2, §6), with reasons.
 | The `NMY` sprite byte is **1-based** (`anim_clip.chunk_index_for_sprite`); byte 0 and step 0 draw nothing | [V] `file-formats.md` §2.6.1 |
 | `render_tiles` discards each pose's `dx`/`dy`; the bottom-pinned `RUN` head bobs by **9 px** across the cycle | [M] §8 column "top spread" (RUN = 9); cited Q36 |
 | `WALK` composites one figure in 10/10 poses at 8-connectivity, 2/10 at 4-connectivity | cited Q34/Q35 (not re-run here) |
-| The 3-tick hold, mirroring-as-facing and the choice of `RUN` for "moving" are `[H]`; `WALK` is the slow-walk clip, gate `\|vx\| ≤ 2.0` at VA `0x411F79` | cited `file-formats.md` §2.6.1 |
+| The engine's 3-tick hold and its choice of `RUN` for every `vx ≠ 0` are its own choices, **not the original's**: the original draws **`WALK` for `0 < \|vx\| ≤ 2.0` and `RUN` only above 2.0** (`cmp \|vx\|, 0x20000` / `jg` at VA `0x411F79`), so at the engine's only ground speed, 2.0, the original draws `WALK`; each clip's hold is its own rate (`WALK` 3.5 ticks/pose at 2.0); the art faces +x and is mirrored for −x. *(Updated by §2.6.2 a/c/d; the earlier "`WALK` is the slow-walk clip" row is superseded.)* | [V] `file-formats.md` §2.6.2 a, c, d |
 | The engine's inputs are `left` / `right` / `jump` only; it knows `on_ground`, `vx`, `vy`, `facing` | `engine/entities.py`, `engine/state.py` |
 
 ### 1.2 Reachability — what the real data allows
@@ -78,7 +78,9 @@ but I did not trace those 49 ticks one by one `[H]`), which today draws the
 standing sprite; and a
 `JMP1`/`JMP2` clip is 7 steps, so at the engine's 3 ticks per pose it plays for
 **21 ticks — exactly the measured flat-ground airtime** `[H]` (a coincidence of
-two chosen/derived numbers, worth testing, not evidence).
+two chosen/derived numbers, worth testing, not evidence). *(Superseded by
+§2.6.2 d: the original does not play a jump clip on a timer; after the jump
+lockout the pose is taken from `vy`, so the coincidence is irrelevant.)*
 
 ### 1.3 Acceptance criteria
 
@@ -89,15 +91,15 @@ criterion pass.
 
 | # | What the maintainer sees | Command that shows it | Reachable because | Slice |
 |---|---|---|---|---|
-| **AC1** | While the player is in the air it draws a jump clip, never the standing or running sprite. The report names what was drawn and for how many ticks. | `python3 -m lomax_modern slice "<install>" --world VILLAGE --frames 120 --out /tmp/f` → a `clips:` line such as `clips: STA1 n, RUN n, JMP1 n …` whose air-clip tick total **equals the 62 airborne ticks** and which shows **no** `STA1`/`RUN` tick inside an air span | the first airborne tick is tick 0 (spawn fall), the first jump is tick 20 (0.33 s) | AN2 adds the line, AN4 makes the air clips appear |
-| **AC2** | Touching down plays the landing pose once, then returns to stand/run. | same command: `clips:` shows `LND1` ≥ 1 tick after each air span | landings at ticks 18, 40, 79 inside the 120 | AN4 |
-| **AC3** | The character no longer jitters its head up and down as the run cycles; feet and head sit where the clip's offsets put them. | `python3 -m lomax_modern anim-clip "<install>" --name RUN --out /tmp/c` prints an `anchor:` line giving the **bottom-pinned** top spread (**9 px**, today's value) and the **offset-placed** one; the second is the value AN1 freezes in `file-formats.md` §2.6.2 | pure data; no play time | AN3 |
-| **AC4** | In the live window the same behaviour, played by hand: stand, run right, jump over the wall at x = 180, land. | `python3 -m lomax_modern play "<install>" --world VILLAGE --seconds 20`; headless smoke `SDL_VIDEODRIVER=dummy … --seconds 5` exits 0 | the wall is 0.7 s from the spawn; 20 s ≪ the 31.8 s limit | AN4 (visible), AN2 (no regression) |
+| **AC1** | While the player is in the air it draws a jump clip, never the standing or ground-moving sprite; on the ground at the engine's 2.0 px/tick it draws `WALK`, as the original does (§2.6.2 a). The report names what was drawn and for how many ticks. | `python3 -m lomax_modern slice "<install>" --world VILLAGE --frames 120 --out /tmp/f` → a `clips:` line such as `clips: STA1 n, WALK n, JMP2 n, FLO2 n …` whose air-clip (`JMP*`/`FLO*`) tick total **equals the 62 airborne ticks**, which shows **no** `STA1`/`STA2`/`WALK`/`RUN` tick inside an air span, and in which (after AN3b) the **9 grounded-moving ticks are all `WALK`** and **`RUN` is 0**: the engine's `vx` is only ever ±2.0 or 0 (`state.step_player`), never above the 2.0 gate. The three scripted jumps (ticks 20, 65, 110) launch with right held, so `vx` = 2.0 at launch and each is a **moving jump → `JMP2`, `FLO2` once `vy` ≥ 2.5** [derived: `default_script` + `step_player` + §2.6.2 b]; the spawn fall (ticks 0–17) draws the last jump kind, whose value at level start is not traced, so `JMP1`/`FLO1` or `JMP2`/`FLO2` there | the first airborne tick is tick 0 (spawn fall), the first jump is tick 20 (0.33 s); 9 grounded-moving ticks inside the 120 [M] `reach` | AN2 adds the line, AN3b makes the ground clip `WALK`, AN4 makes the air clips appear |
+| **AC2** | A **straight** jump (no left/right held at launch) lands on `LND1` for **10 ticks**, then stands; a **moving** jump lands straight into stand/walk with no `LND1`; a left/right input during those 10 ticks cuts `LND1` short (§2.6.2 b, [V] `0x410E96`–`0x410EBF`, `0x411D3E`). | unit test on the selector (synthetic fixtures: straight jump → 10 `LND1` ticks; moving jump → 0; a left/right input during the 10 ticks → fewer than 10); by hand: `play … --seconds 20`, jump on the spot. **`slice --frames 120` shows `LND1` 0** — every scripted jump there is a moving jump and right is held throughout | a flat-ground straight jump lands after 21 airborne ticks [M] `reach` | AN4 |
+| **AC3** | Feet and head sit where the clip's offsets put them (top-left = origin + (`dx`, `dy`), y down, §2.6.2 c) instead of bottom-pinned; the run cycle bobs as the original's does (8 px), not by today's 9 px. | `python3 -m lomax_modern anim-clip "<install>" --name RUN --out /tmp/c` prints an `anchor:` line giving the **bottom-pinned** top spread (**9 px**, today's value) and the **offset-placed** one (**8 px**, body top −42 … −34); `--name WALK` — the clip the 2.0-speed walk draws once AN3b lands — prints **4 px** for both, because `WALK`'s body bottom row is 0 in every pose (body top −47 … −43) | pure data; no play time; numbers [M] `research/08` `anchor`, re-run 2026-11-23 | AN3 |
+| **AC4** | In the live window the same behaviour, played by hand: stand, walk right (`WALK`), jump over the wall at x = 180, land. | `python3 -m lomax_modern play "<install>" --world VILLAGE --seconds 20`; headless smoke `SDL_VIDEODRIVER=dummy … --seconds 5` exits 0 | the wall is 0.7 s from the spawn; 20 s ≪ the 31.8 s limit | AN4 (visible), AN3b (`WALK`), AN2 (no regression) |
 | **AC5** | Clip choice is **data**, not hard-coded sprite ids: a clip tag → poses table. A moving, standing and airborne player each resolve through it. | `python3 -m pytest tests -m "not realgame" -q` (synthetic fixtures); each slice adds its own tests | none needed | AN2 |
 | **AC6** | `file-formats.md` §2.6.2 lists **every clip the engine draws** with its selector graded [V]/[H] and the VA where known; Q38 and Q39 are each answered or restated as open with the narrowing. | `grep -n "2.6.2" docs/file-formats.md`; `grep -n "Q38" docs/research/05-open-questions.md`; `grep -n "Q39" docs/research/05-open-questions.md` | docs | AN1 |
 | **AC7** | The repository stays clean-room: no game bytes, no new binary files, no hashes. | the §7.1 guard block (below) prints nothing | — | every slice |
 | **AC8** *(stretch)* | Holding **Down** on the ground crouches (`DUCK`); releasing stands. | `play … --seconds 20`, hold ↓; unit test on `Keymap` + the selector | instant | AN5 |
-| **AC9** *(stretch)* | Standing still long enough plays the idle fidget (`STA2`) instead of freezing on `STA1`. | `play … --seconds 20`, touch nothing for the chosen idle delay (**[H]**, set ≤ 10 s); unit test on the selector | idle delay ≤ 10 s | AN6 |
+| **AC9** *(stretch)* | Standing still plays the original's idle cycle instead of freezing on `STA1`: `STA1` held on pose 0, then `STA1` or `STA2` played once (50/50), then held again (§2.6.2 a rows 30–31 and d "Idle", [V]). No idle delay is invented. | `play … --seconds 20`, touch nothing for ≈ 2 s; unit test on the selector with a seeded random source: held until the idle counter reaches the level-start threshold of 100, then one played clip, then held for a new threshold of 30–93 ticks | the first played idle clip comes no earlier than 100 ticks = 1.7 s after level start [derived from the threshold 100 set at `0x40F986`] | AN6 |
 
 **The witness the maintainer can watch.** The closing card renders
 `slice --frames 120` and `gif` into a GIF **attached to the card, never
@@ -150,6 +152,10 @@ are barely above it, so the executable probably selects those by another route
 
 ### 2.2 What is known about *when* each clip plays
 
+*(Superseded by `file-formats.md` §2.6.2 a: AN1 located the selector for
+every one of the 47 `Hero` clips. This subsection records what was known when
+the plan was written.)*
+
 Almost nothing is located in the disassembly. The complete [V] list:
 
 * **`WALK`** — selected at VA `0x411F79` under a speed gate written `|vx| ≤ 2.0`
@@ -164,13 +170,15 @@ Almost nothing is located in the disassembly. The complete [V] list:
   one draws.
 * **Terrain-dependent walk speed** 1.5 / 2.0 / 2.5 (`0x426DEC`–`0x426E26`).
 
-Everything else below is a **name-based guess [H]**.
+Everything else below was a **name-based guess [H]** when written; the rows
+of §2.3 that the slices use are now updated to §2.6.2.
 
 ### 2.3 The candidate table
 
 > **AN1 outcome (2026-11-23), read this first.** The disassembly pass
 > ([`../file-formats.md`](../file-formats.md) §2.6.2) overturns four `[H]`
-> entries below. Where this table or §2.4/§3 disagree, §2.6.2 wins.
+> entries below; the rows, §2.4 and the slices in §3 are updated in place, and
+> wherever anything in this plan still disagrees, §2.6.2 wins.
 > (1) **`JMP1` is the straight-up jump and `JMP2` the moving jump** — the
 > reverse of the fallback order in §3. (2) **`FLO1`/`FLO2` are the
 > fast-fall clips** (`vy` ≥ 2.5), not a slow float, so the engine can already
@@ -184,16 +192,16 @@ Everything else below is a **name-based guess [H]**.
 "stretch" = needs one new input or one resolved question; "deferred" = needs a
 mechanic the engine does not have. Sizes are `[M]` from Appendix A.
 
-| clip | steps | what the name suggests `[H]` | trigger | engine can produce the trigger today? | verdict |
+| clip | steps | meaning (from the name, `[H]`, unless the trigger is `[V]`) | trigger | engine can produce the trigger today? | verdict |
 |---|---:|---|---|---|---|
-| `STA1` | 7 | stand | `[H]` (vx == 0) — shipped | yes | **in scope** (already drawn; re-anchored by AN3) |
-| `RUN` | 12 | moving | `[H]` — and see §2.4 finding 1 | yes (`vx ≠ 0`) | **in scope** (re-anchored; the WALK/RUN split is AN1's first question) |
-| `WALK` | 10 | slow walk | **[V]** gate `\|vx\| ≤ 2.0` at `0x411F79`; strictness unsettled | the engine's only ground speed is 2.0, exactly on the gate (§2.4, finding 1); it has no terrain speeds and no acceleration ramp | **in scope for AN1** (decide the gate); drawn only if AN1 shows the player reaches it |
-| `JMP1`, `JMP2` | 7, 7 | moving jump / straight jump | the *split* is **[V]** (§2.9: lockout 5 vs 10); which clip is which is `[H]` | yes (`jump`, `vx ≠ 0` or `== 0`) | **in scope** (AN4) |
-| `LND1` | 1 | landing | `[H]` (first grounded tick after air) | yes | **in scope** (AN4); one step, held 3 ticks `[H]` |
-| `FLO1`, `FLO2` | 5, 5 | float / slow fall | mechanism **[V]** (0.125 fall, `0x410B9A`); clip mapping `[H]` | **no** — the engine has no reduced-gravity fall (§2.9 notes the adoption as follow-up) | **deferred** |
-| `DUCK` | 6 | crouch | `[H]`; the down input exists in the original **[V]** (`0x410B9A`) | needs `Input.down` + a key | **stretch** (AN5) |
-| `STA2` | 10 | idle fidget after waiting | `[H]` | needs an idle timer; and Q36: its steps overrun a layer's frames (10 steps over `type_index` 27's 7) | **stretch** (AN6, only if AN1 settles Q36) |
+| `STA1` | 7 | stand | **[V]** ground, `\|vx\|` = 0: held on pose 0 (rate 0), played once in the idle cycle (§2.6.2 a rows 30–31) — shipped as a still | yes | **in scope** (already drawn; re-anchored by AN3; idle cycle AN6) |
+| `RUN` | 12 | run | **[V]** ground, `\|vx\|` **> 2.0** (`jg` at `0x411F79`, §2.6.2 a row 35) | **no** — the engine's only ground speed is 2.0; it has no terrain speeds | **in scope** for re-anchoring (AN3) and for the `\|vx\|` switch (AN3b), but **not drawn** by today's engine once AN3b lands |
+| `WALK` | 10 | walk — the everyday ground clip | **[V]** ground, **`0 < \|vx\| ≤ 2.0`**: `cmp \|vx\|, 0x20000` / `jg` at `0x411F79`, Q38 answered (§2.6.2 a row 34); rate `\|vx\|/0x700`, 3.5 ticks/pose at 2.0 | **yes** — every grounded-moving tick is at exactly 2.0 | **in scope** (AN3b: drawn for every moving grounded tick) |
+| `JMP1`, `JMP2` | 7, 7 | **`JMP1` straight-up jump / `JMP2` moving jump** | **[V]** state bit `0x2`, set by a launch at `vx` = 0 (lockout 10) and cleared by a launch at `vx` ≠ 0 (lockout 5); time-driven during the lockout, pose from `vy` after it (§2.6.2 b, d) | yes (`jump` with `vx == 0` or `≠ 0`) | **in scope** (AN4) |
+| `LND1` | 1 | landing | **[V]** 10 ticks after a **straight** jump only, cut short by left/right (§2.6.2 b) | yes | **in scope** (AN4) |
+| `FLO1`, `FLO2` | 5, 5 | **fast fall** (not a slow float) | **[V]** airborne `vy` ≥ 2.5 px/tick, same `JMP1`/`JMP2` split (§2.6.2 b, rows 18/21) | **yes** — a flat-ground jump reaches `vy` ≥ 2.5 on its last 3 airborne ticks [derived: −4.0 + 0.375·k ≥ 2.5 for k = 18 … 20 of 21] | **in scope** (AN4) |
+| `DUCK` | 6 | crouch | **[V]** ground, state `0x4`, one-shot holding its last pose (§2.6.2 a row 23); the down input exists in the original **[V]** (`0x410B9A`) | needs `Input.down` + a key | **stretch** (AN5) |
+| `STA2` | 10 | idle fidget | **[V]** part of the data-driven idle cycle: after `STA1` is held for a random 30–93 ticks (100 at level start), `STA2` or `STA1` plays once, 50/50 (§2.6.2 a row 31, d "Idle"). Q36 is answered: steps index each keyframe's own sprite and never overrun (0 of 4,788), so the old "10 steps over 7 frames" objection is retracted | needs an idle counter only — no invented delay | **stretch** (AN6) |
 | `BRAK` | 7 | brake / turn | `[H]` | **no** — `vx` flips instantly, there is no momentum to brake | deferred |
 | `EDGE` | 10 | teeter on a ledge | `[H]` | partly (ledge probe) but ledge semantics rest on Q31 | deferred |
 | `RU45` | 8 | run up a slope | `[H]` | **no** — no slope semantics (Q31) | deferred |
@@ -202,7 +210,10 @@ mechanic the engine does not have. Sizes are `[M]` from Appendix A.
 | `OUCH`, `OHNO`, `TUMB`, `DIZZ`, `PLOP`, `PLO2`, `DROW`, `BOOM` | 3, 3, 9, 8, 5, 1, 14, 3 | hurt / death / stun / splash | `[H]` | **no** — no hazard semantics (Q31), fail state deferred in `45` §1 | deferred |
 | `CLIM`, `CLI2`–`CLI4`, `JPAD`, `HELI`, `HEL0`–`HEL8`, `BUI1`, `BUI2`, `DIG1`, `WAHL`, `IN`, `OUT` | 3–21 | climb / jetpad / helicopter / build / dig / doors | `[H]` | **no** — each needs a world object the engine lacks | deferred |
 
-**Used in the original vs guessed.** Of 47 clips, the repo has located the
+*(Superseded by §2.6.2 a: the selector of all 47 clips is now located, and the
+deferred rows above keep their `[H]` trigger only because no slice uses them;
+§2.6.2 a gives each one's test and VA. The paragraph below is the state before
+AN1.)* **Used in the original vs guessed.** Of 47 clips, the repo had located the
 selector for **one** (`WALK`) **[V]**, the *existence* of two jump kinds and a
 slow-fall state **[V]**, and nothing else. That is the honest count; the rest
 of the table is naming. This is why AN1 (§3) is first: the slices that follow
@@ -210,18 +221,21 @@ are cheap only if their selection rules are not guessed.
 
 ### 2.4 Two findings that change the plan
 
-**Finding 1 — "moving = `RUN`" may be wrong at the default speed (Q38).**
-`file-formats.md` §2.6.1 says `WALK` is chosen at `|vx| ≤ 2.0`, the engine's
-`level.py` comment says "below 2.0", and §2.9 gives the terrain-0 maximum
-horizontal speed as **exactly 2.0** (`WALK_SPEED`). If the gate is `≤` the
-original draws `WALK` for the ordinary walk and `RUN` only on terrain whose
-speed is 2.5; PR #64's choice of `RUN` for every `vx ≠ 0` would then be the
-**exception, not the rule**. Neither reading is re-verified here (I read no
-disassembly). It is cheap for AN1 to settle and it decides whether `WALK` or
-`RUN` is the everyday clip.
+**Finding 1 — "moving = `RUN`" is wrong at the default speed (Q38, settled
+[V] by §2.6.2 a).** The gate at `0x411F79` is `cmp esi, 0x20000` / **`jg`** with
+`esi` = `|vx|`, so the original draws **`WALK` for `0 < |vx| ≤ 2.0`** and
+**`RUN` only above 2.0**. §2.9 gives the terrain-0 maximum horizontal speed as
+**exactly 2.0** (`WALK_SPEED`), so the ordinary walk draws `WALK`, and PR #64's
+choice of `RUN` for every `vx ≠ 0` — like the `level.py` comment "below 2.0" —
+is the **exception, not the rule**. **AN3b** (§3) owns the switch. *(When this
+plan was written the strictness was unread; that version of the finding is
+superseded.)*
 
-**Finding 2 — the `dx`/`dy` convention is not settled by the repo's own claim
-(Q39).** §2.6.1 records "a layer draws at `(dx, −dy)`" **[V]**. Reading the
+**Finding 2 — the `dx`/`dy` convention (Q39).** *Settled [V] by §2.6.2 c: the
+layer's top-left is at origin + (`dx`, `dy`) with y down (top = `+dy`), the
+`(dx, −dy)` reading is retracted, and the body's bottom row is exactly the
+origin row in every pose of 16 clips — the "+1" below is the same fact counted
+from 1. The rest of this finding is the pre-AN1 reasoning.* §2.6.1 records "a layer draws at `(dx, −dy)`" **[V]**. Reading the
 fields the other way — layer **top = `+dy`** — makes the body layer's bottom edge
 `dy + h` is **constant to the pixel** in **24 of the 47 clips** (19 of them over
 more than one body keyframe; 5 have a single keyframe, so are trivially
@@ -249,13 +263,18 @@ measured flat-ground apex of **19.4 px** (§1.2). If the clip's offsets already
 encode the jump's rise, then applying `dy` on top of the engine moving the
 player up by the same arc would draw the sprite about twice as high `[H]`. This
 is a reason AN1 reads the blit *before* AN3 writes anything, and the AN3
-acceptance includes an air-pose check (§6).
+acceptance includes an air-pose check (§6). *Settled [V] by §2.6.2 c: the
+original's blit adds `dy` to the physics position with no compensation, so it
+draws a `JMP1` pose up to 18 px above the actor origin while the actor is
+itself displaced by the jump — a faithful port applies `dy` as-is; only the
+mapping of the engine's player position onto the original's actor origin stays
+open (Q39).*
 
 ---
 
 ## 3. Slices
 
-Six PRs: four in the milestone, two stretch. Each is independently
+Seven PRs: five in the milestone (AN1, AN2, AN3, AN3b, AN4), two stretch. Each is independently
 reviewable, branches from the then-current `main`, and carries the standard
 card contract (Context / Goal / Acceptance / Verify / Constraints) and the
 routing note: code and the reviewer's verdict come from
@@ -266,13 +285,17 @@ board state, and **exit `75` means park the card — do not reassign it**.
 |---|---|---|---:|---|---|
 | **AN1** | *Disassembly pass — the player's clip selector and the `dx`/`dy` blit.* Answer, with VAs: (a) the function around `0x411F79`: which tag is chosen under which state, `<` vs `≤`, what is compared (Q38); (b) which clip the two jump kinds, the landing and the airborne fall draw; (c) the sign/origin of `dx`/`dy` (Q39); (d) whether the original holds a pose for a fixed tick count and how steps map across layers with different frame counts (Q36). Output: `file-formats.md` §2.6.2 (clip → selector → VA, graded), Q38/Q39 closed or narrowed, and the **leftover (a) link fix** as its own commit (below). **Docs only; no code.** | **specialist** | 1 + 1 | — | `docs/file-formats.md`, `docs/research/05-open-questions.md` |
 | **AN2** | *Behaviour-neutral refactor.* Replace the single-purpose `load_move_poses` with a tag-keyed loader and a pure `select_clip(player) → (tag, pose)`; today's stand/run rules move into it unchanged; `slice` prints the `clips:` line. | **builder** | 1 + 1 | — (parallel with AN1) | `engine/level.py`, `engine/state.py`, `engine/render.py`, `cli.py` |
-| **AN3** | *Anchoring fix.* `render_tiles` places each pose at its `dx`/`dy` under AN1's convention; `anim-clip` prints the `anchor:` line. The prerequisite for every air clip (jump bodies are 38–53 px tall: bottom-pinned they bob 13–15 px). | **builder** (specialist only if AN1 cannot settle Q39 — see fallback) | 1 + 1 | AN1, AN2 | `engine/render.py`, `anim_clip.py`, `cli.py` |
-| **AN4** | *Air states.* Rising/falling → `JMP1`/`JMP2` (moving vs straight), landing → `LND1`; `FLO*` **not** used. | **builder** | 1 + 1 | AN2, AN3 (and AN1's mapping) | `engine/state.py`, `engine/entities.py`, `engine/render.py` |
-| **AN5** *(stretch)* | *Duck.* `Input.down`, a Down key in `Keymap`, `DUCK` while grounded and held; collision box unchanged `[H]`. | **builder** | 1 + 1 | AN4 | `input.py`, `engine/entities.py`, `engine/state.py` |
-| **AN6** *(stretch)* | *Idle fidget.* `STA2` after an idle delay `[H]`; **dropped, not guessed**, if AN1 does not settle Q36. | **builder** | 1 + 1 | AN4, AN1 (Q36) | `engine/state.py`, `engine/level.py` |
+| **AN3** | *Anchoring fix.* `render_tiles` places each pose's drawn layer with its top-left at origin + (`dx`, `dy`), y down, mirrored about the origin column (`dx' = 1 − w − dx`) for −x facing — §2.6.2 c [V]; `anim-clip` prints the `anchor:` line (AC3). The prerequisite for every air clip (jump bodies are 38–53 px tall: bottom-pinned they bob 13–15 px). **AN3 also clears the stale docstrings and messages** — `engine/level.py:49`–`50` ("slow-walk", "below 2.0"), `anim_clip.py:26`, `:273`, `:366` and `cli.py:984`, `:1068`, `:1082`–`1083` (`(dx, -dy)`, "y-up") — and moves `anim_clip`'s compositing off the retracted `-dy` (`anim_clip.py:318`–`345`). | **builder** | 1 + 1 | AN1, AN2 | `engine/render.py`, `anim_clip.py`, `cli.py`, `engine/level.py` (docstring only) |
+| **AN3b** | *Ground clip by speed — the original's `WALK`/`RUN` selection.* Replace PR #64's "moving = `RUN`" with §2.6.2 a rows 34–35 [V]: grounded and **`0 < \|vx\| ≤ 2.0` → `WALK`** at rate `\|vx\| / 0x700` (`\|vx\|` in 16.16 fixed point: `0x20000 / 0x700` = 73, i.e. 73/256 poses per tick = 3.5 ticks/pose at 2.0), **`\|vx\| > 2.0` → `RUN`** at rate `\|vx\| >> 11`; a strict `>` test, so 2.0 itself is `WALK`. The engine's only ground speed is 2.0, so every grounded-moving tick becomes `WALK`; `RUN` stays loaded for a future speed above 2.0. One row of AN2's clip table plus a rate field replacing the fixed `MOVE_ANIM_TICKS_PER_POSE = 3` for these two clips. **Acceptance:** unit tests on `select_clip` (synthetic fixtures: `vx` = ±2.0 → `WALK`, ±2.5 → `RUN`, 0 → the standing clip; `WALK` rate 73 at 2.0); `python3 -m lomax_modern slice "<install>" --world VILLAGE --frames 120 --out /tmp/f` → `clips:` shows `WALK` on the 9 grounded-moving ticks and `RUN` 0 (AC1); `python3 -m pytest tests -m "not realgame" -q` green. | **builder** | 1 + 1 | AN2 **merged** (it needs `select_clip` and the clip table); runs after AN3 in the serial chain because both touch `engine/level.py` (AN3 its docstring at `:49`–`50`, AN3b the moving-clip constant under it) | `engine/state.py`, `engine/level.py`, `tests/` |
+| **AN4** | *Air states, per §2.6.2 b and d [V].* Jump kind from `vx` **at launch**: `vx` = 0 → **`JMP1`** (straight-up), `vx` ≠ 0 → **`JMP2`** (moving); a fall without a jump keeps the last kind. During the jump lockout (10 ticks straight, 5 moving) the clip runs at rate 64 from pose 0; after it the pose is taken **from `vy`** (> 1.0 → 6; > −0.5 → 5; > −2.0 → 4; otherwise 3; pose 2 when `vy` ≤ −3.5 for `JMP1` / ≤ −3.875 for `JMP2`). **`FLO1`/`FLO2` are used**: airborne with `vy` ≥ 2.5 after the lockout, same `JMP1`/`JMP2` split. Landing: **`LND1` for 10 ticks after a straight jump only**, cut short by a left/right input; none after a moving jump. | **builder** | 1 + 1 | AN2, AN3, AN3b | `engine/state.py`, `engine/entities.py`, `engine/render.py` |
+| **AN5** *(stretch)* | *Duck.* `Input.down`, a Down key in `Keymap`, `DUCK` while grounded and held (one-shot, holds its last pose, §2.6.2 a row 23); collision box unchanged `[H]`. | **builder** | 1 + 1 | AN4 | `input.py`, `engine/entities.py`, `engine/state.py` |
+| **AN6** *(stretch)* | *Idle cycle, data-driven (§2.6.2 a rows 30–31, d "Idle" [V]; Q36 answered).* Grounded with `vx` = 0: hold `STA1` pose 0 (rate 0) while an idle counter is below a threshold (100 at level start); when it reaches it, play `STA2` or `STA1` once at the clip's own rate, chosen 50/50 by bit 0 of a random source (that `0x43AAD0` is a random-number routine is [H]; tests seed it), then hold `STA1` again for a new random 30–93 ticks (`30 + (rand & 63)`). The exact counter/threshold bookkeeping comes from rows 30–31, not from this summary. No invented delay. | **builder** | 1 + 1 | AN4 | `engine/state.py`, `engine/level.py` |
 | **close** | *Synthesis.* Re-derive the merge gate live, run AC1–AC7 on merged `main`, attach the GIF, report spend against §4. | **lead** | 1 | all milestone PRs | — |
 
-Order: `AN1 ∥ AN2` → `AN3` → `AN4` → *(stretch)* `AN5` → `AN6` → close.
+Order: `AN1 ∥ AN2` → `AN3` → `AN3b` → `AN4` → *(stretch)* `AN5` → `AN6` → close.
+*(AN3b was added after AN1 found that the original draws `WALK` at the
+engine's 2.0 ground speed — §2.4 finding 1 — and no other slice owned that
+change.)*
 `AN1` is docs and `AN2` is code in disjoint files, so they are the only pair
 that may run in parallel.
 
@@ -284,7 +307,10 @@ the builder has not been tried on any of it yet, so no card goes to the
 specialist "to be safe". If the builder returns a card with `kind=needs_input`
 and a stated reason, it moves to the specialist once, not twice.
 
-**Fallback if AN1 does not answer.** The slices must not stall on a research
+*(Moot: AN1 answered Q36 and Q38 and settled the sign and origin of
+`dx`/`dy` in Q39 — §2.6.2 — so this fallback is not used. Its "moving-vs-straight ⇒ `JMP1`/`JMP2` in that order" was the reverse of
+the verified mapping, `JMP1` straight and `JMP2` moving; kept only as the
+record of the plan.)* **Fallback if AN1 does not answer.** The slices must not stall on a research
 card. If AN1 closes inconclusive after one rework, AN3/AN4 proceed with their
 conventions **labelled `[H]`** — the `top = +dy` anchor (§2.4 finding 2, backed
 by 19 non-trivial clips with a 0-px bottom spread), `vy < 0` ⇒ rising,
@@ -292,7 +318,8 @@ moving-vs-straight ⇒ `JMP1`/`JMP2` in that order — and Q38/Q39 stay open in
 `05-open-questions.md` with that narrowing. AN6 is dropped.
 
 **Hotspots.** `engine/render.py` and `engine/state.py` are touched by AN2, AN3,
-AN4, AN5 and AN6. That is why the chain is serial: five PRs on two files cannot
+AN4, AN5 and AN6, and `engine/state.py`/`engine/level.py` by AN3b as well. That
+is why the chain is serial: six PRs on three files cannot
 run in parallel without a head-moves-after-review cycle each. Each slice
 branches from the main that contains its predecessor.
 
@@ -404,20 +431,22 @@ implemented.
 
 | Risk | What it could do | Cheapest retirement |
 |---|---|---|
-| **AN1 cannot find the selector** (stripped, computed state, inlined) | Selection stays `[H]`; Q38/Q39 stay open | The fallback in §3 — slices ship with `[H]` labels; AN6 is dropped. Cost of the failure: ~1 card |
-| **Q38 flips the everyday clip** (`WALK`, not `RUN`) | PR #64's visible choice changes; AN2's "unchanged behaviour" baseline moves | AN1 answers it before AN3/AN4; AN2 is written to keep the rule in **one table**, so flipping it is a one-line change |
-| **`dx`/`dy` convention wrong** (§2.4 finding 2) | Every pose placed a few pixels off — looks "almost right" | AN1's blit read; AN3 acceptance pins a number (AC3), and the check is a synthetic fixture with a known offset |
-| **Jump arc counted twice** (§2.4 hazard) | An air pose drawn ~2× too high | AN1 states whether `dy` already carries the rise; AN3's acceptance compares the drawn air-pose bottom edge with the engine's `y` over one flat-ground jump (apex 19.4 px, 21 ticks) before AN4 starts |
-| **`STA2`'s overrunning steps** (Q36) | Idle fidget loops wrongly | AN6 is conditional on AN1 |
-| **Serial chain on two hot files** | Longer elapsed time | Accepted: it is the price of not re-reviewing |
+| **AN1 cannot find the selector** (stripped, computed state, inlined) | Selection stays `[H]`; Q38/Q39 stay open | *Retired: AN1 found it (§2.6.2 a).* The fallback in §3 — slices ship with `[H]` labels; AN6 is dropped. Cost of the failure: ~1 card |
+| **Q38 flips the everyday clip** (`WALK`, not `RUN`) | PR #64's visible choice changes; AN2's "unchanged behaviour" baseline moves | *Happened (§2.6.2 a, [V]).* AN2 stays behaviour-neutral and keeps the rule in **one table**; **AN3b** makes the flip as its own small PR |
+| **`dx`/`dy` convention wrong** (§2.4 finding 2) | Every pose placed a few pixels off — looks "almost right" | *Settled by AN1's blit read (§2.6.2 c).* AN3 acceptance pins the numbers (AC3), and the check is a synthetic fixture with a known offset |
+| **Jump arc counted twice** (§2.4 hazard) | An air pose drawn ~2× too high | *Settled (§2.6.2 c): the original applies `dy` with no compensation, so the port does the same.* AN3's acceptance still compares the drawn air-pose bottom edge with the engine's `y` over one flat-ground jump (apex 19.4 px, 21 ticks) before AN4 starts |
+| **`STA2`'s overrunning steps** (Q36) | Idle fidget loops wrongly | *Retired: steps never overrun (0 of 4,788, §2.6.2 d), and the idle cycle is data-driven*; AN6 goes ahead |
+| **Serial chain on three hot files** | Longer elapsed time | Accepted: it is the price of not re-reviewing |
 | **Plan-limit stop** | A card parks mid-slice | Exit `75` parks it; resume when the window reopens; no reassignment, no fallback model |
 | **Overrun** (last time 2.3×) | Spend passes the expected band | The 30-card stop rule |
 
 **Non-goals.** Attack/throw/spin (`THR*`, `SPIN`), hurt/death (`OUCH`, `OHNO`,
 …), climbing, helicopter/jet-pad, build/dig, swimming, doors, slope running,
-braking/turning (no momentum), edge-teeter, the slow-fall `FLO*` (needs the
-held-jump gravity mechanics of §2.9), changing the collision box, the
-unresolved `169` contact sprite, the `Cset` colour swap, enemy animation, audio.
+braking/turning (no momentum), edge-teeter, the held-down 0.125 slow fall of
+§2.9 (a mechanic, not a clip — `FLO*` are the fast-fall clips and are in AN4,
+§2.6.2 b), changing the collision box, the callbacks behind the step-0
+attachment points such as `169` (not sprites, §2.6.2 d), the `Cset` colour
+swap, enemy animation, audio.
 Gamepad and rebinding stay deferred as in `45`.
 
 **Hard rules, restated for every card** (`AGENTS.md`):
@@ -632,7 +661,9 @@ if __name__ == "__main__":
 ## 8. Appendix A — every `Hero` clip in `MAIN.WLD`
 
 Produced by `anim_audit.py appendix`. *Layers* is `resolved / unresolved` sprite
-bytes (unresolved = not in any `.WLD` bank; `169` is the shared contact pose).
+bytes (unresolved = not in any `.WLD` bank; `169` and the other unresolved
+bytes sit only on step-0 keyframes, which are attachment points for a callback,
+not sprites — §2.6.2 d).
 *Body layer* is the largest-area layer (the one the engine draws). *Top spread*
 is the pixel spread of the body layer's height across the clip — the head bob
 under today's bottom-pinned blit. *`dy+h` spread* is the spread of `dy + h`

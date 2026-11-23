@@ -28,6 +28,13 @@ Versioning: [Semantic Versioning](https://semver.org/).
   commands are in the new `research/08-player-animation-selector.md`.
 - **Fixed the `07-wp1-patching-surface.md` link in `file-formats.md` §2.9**
   (`../research/…` → `research/…`).
+- **`46-character-animation-plan.md` reconciled with §2.6.2.** The facts
+  table, candidate table, §2.4 findings, slices, acceptance criteria and risks
+  now state the AN1 results in place (superseded text is tagged). New slice
+  **AN3b** owns the switch from "moving = `RUN`" to the original's `WALK`/`RUN`
+  choice by `|vx|`; AN4 now uses `JMP1` straight / `JMP2` moving, `FLO*` for
+  the fast fall and `LND1` only after a straight jump; AN6 is the data-driven
+  idle cycle; AC1/AC2/AC3/AC9 expect `WALK` at 2.0 and the verified landing.
 
 - **`46-character-animation-plan.md` — plan + budget for more player-character
   animations (docs only, no code).** Scopes the next milestone to stand / move /

@@ -79,7 +79,7 @@ Output on the author's install (`main` = `0523602`, 2026-11-23):
 
 Run OUTSIDE the repository, read-only:
     PYTHONPATH=src python3 an1_audit.py <subcommand> "$LOMAX_GAME_DIR"
-Subcommands: hero | anchor | overrun | step0
+Subcommands: hero | anchor | overrun | step0 | overlap
 Prints counts, sizes, offsets and clip parameters only -- never pixels or file bytes.
 """
 import struct
