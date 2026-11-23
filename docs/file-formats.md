@@ -456,7 +456,9 @@ hard-coded sprite id) because that renders a complete figure on its own; what
 the overlay depicts is open (**Q37**). The `anim-clip` strips composite both
 layers (`anim_clip.resolve_poses`), and they too render one coherent character
 per pose. `WALK` is the slow-walk clip (`|vx| ≤ 2.0` at VA `0x411F79`), not the
-moving clip.
+moving clip (unsettled, see Q38). The `dx`/`dy` sign convention below is also
+unsettled (Q39); both are queued for the planned §2.6.2 (clip → selector → VA)
+in `docs/roadmap/46-character-animation-plan.md` (slice AN1).
 
 **Frame selector when a clip has more steps than its chunk has frames `[H]`.**
 `step` indexes the chunk 1-based (`step - 1`), which is exact for the two clips
