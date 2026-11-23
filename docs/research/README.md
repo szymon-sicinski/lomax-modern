@@ -15,6 +15,7 @@ document says which of its claims were measured in the session that produced it.
 | [`07-wp1-patching-surface.md`](07-wp1-patching-surface.md) | **How do we reach the finished frame without touching `LOMAX.EXE`?** — PE32 identity, the full 13-DLL import table, and why a `ddraw.dll` proxy is the mechanism to build |
 | [`07-wp3-asset-pipeline.md`](07-wp3-asset-pipeline.md) | **What does 2× `WLD`/`SPR` re-authoring need?** — a 15-item gap list with a test each, the `TTAB` framing measured, and the two documented claims that measurement falsified |
 | [`07-wp4-runtime-distribution.md`](07-wp4-runtime-distribution.md) | **Wine/Proton, a shim, or a native port?** — the GDI colour gate at `0x40799c`, what dgVoodoo 2, DxWnd and DXVK can and cannot clear, and a package set verified for Fedora 44 |
+| [`08-player-animation-selector.md`](08-player-animation-selector.md) | **How does the original pick, time and place the player's poses?** — reproduction commands (read-only `objdump` VAs and an audit script) for `file-formats.md` §2.6.2: the `WALK`/`RUN` gate, the jump/fall/landing clips, the `dx`/`dy` blit and the per-clip rate |
 | [`sources.md`](sources.md) | Provenance for every `[S#]` citation |
 | [`../roadmap/00-research-plan.md`](../roadmap/00-research-plan.md) | The staged roadmap (research plan, milestones, releases, risks, budget) |
 

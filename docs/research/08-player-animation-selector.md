@@ -49,6 +49,7 @@ python3 /path/outside/repo/an1_audit.py hero    "$LOMAX_GAME_DIR"   # rate, pose
 python3 /path/outside/repo/an1_audit.py anchor  "$LOMAX_GAME_DIR"   # top/bottom rows under the blit's placement
 python3 /path/outside/repo/an1_audit.py overrun "$LOMAX_GAME_DIR"   # 0 of 4,788 drawn keyframes overrun
 python3 /path/outside/repo/an1_audit.py step0   "$LOMAX_GAME_DIR"   # unresolved bytes sit only on step 0
+python3 /path/outside/repo/an1_audit.py overlap "$LOMAX_GAME_DIR"   # overlay-on-body share, both placements
 ```
 
 Output on the author's install (`main` = `0523602`, 2026-11-23):
@@ -67,6 +68,11 @@ Output on the author's install (`main` = `0523602`, 2026-11-23):
   exactly 0 in every pose of 16 clips (`WALK`, `STA1`, `STA2`, `THR2`, `DUCK`,
   `BRAK`, `PUSH`, `LND1`, `EDGE`, `WAHL`, `DIZZ`, `DIG1`, `IN`, `OUT`, `HEL5`,
   `HEL8`).
+* `overlap` → share of each overlay's opaque pixels on its body layer, verified
+  placement vs the retracted `(dx, −dy)`: `WALK` 52–66 % vs 65–100 %, `RUN`
+  21–65 % vs 39–97 %, `STA1` 39–54 % vs 98–100 %, `JMP1` 38–75 % vs 100 %. The
+  retracted column reproduces §2.6.1's earlier `RUN`/`WALK` figures, so those
+  were measured under the retracted placement.
 
 ```python
 """an1_audit.py -- reproduce the AN1 measurements (docs/file-formats.md s2.6.2).
@@ -207,6 +213,38 @@ def step0(game):
     print("unresolved sprite bytes on step>0 keyframes:", dict(sorted(unresolved_drawn.items())))
 
 
+def overlap(game):
+    """Share of each overlay's opaque pixels that land on its pose's body layer,
+    under the verified placement (top = +dy) and the retracted one ((dx, -dy))."""
+    from lomax_modern.anim_clip import resolve_clip
+
+    w = wld.parse_file(game / "WORLDS" / "MAIN.WLD")
+
+    def opaque(fr, sign):
+        p = fr.pixels
+        return {(fr.dx + x, sign * fr.dy + y)
+                for y in range(p.height) for x in range(p.width) if p.at(x, y)}
+
+    for tag in ("WALK", "RUN", "STA1", "JMP1"):
+        ps, cur = [], []
+        for f in resolve_clip(w, record_name="Hero", clip_tag=tag):
+            cur.append(f)
+            if f.flags & 0x80:
+                ps.append(cur)
+                cur = []
+        for label, sign in (("verified top=+dy", 1), ("retracted (dx,-dy)", -1)):
+            shares = []
+            for p in ps:
+                drawn = [f for f in p if f.resolved]
+                body = opaque(drawn[-1], sign)
+                for o in drawn[:-1]:
+                    ov = opaque(o, sign)
+                    shares.append(len(ov & body) / len(ov))
+            print(f"{tag} {label}: overlay pixels on body {min(shares) * 100:.0f}-"
+                  f"{max(shares) * 100:.0f}% over {len(shares)} overlays")
+
+
 if __name__ == "__main__":
-    {"hero": hero, "anchor": anchor, "overrun": overrun, "step0": step0}[sys.argv[1]](Path(sys.argv[2]))
+    {"hero": hero, "anchor": anchor, "overrun": overrun, "step0": step0,
+     "overlap": overlap}[sys.argv[1]](Path(sys.argv[2]))
 ```

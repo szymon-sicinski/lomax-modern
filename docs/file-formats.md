@@ -384,12 +384,17 @@ install:
 
 ```
 u8 sprite   # ANIM sprite slot, 1-based: type_index = sprite - 1   [V]
-u8 step     # stride pose index; step-1 selects the chunk's own frame;
-            # step 0 draws nothing (resolver returns NULL)          [V]
-i16 dx      # signed horizontal draw offset               [V structure]
-i16 dy      # signed vertical draw offset, y-up           [V]
-u16 flags   # per-frame flag word; bit 0x80's role is unresolved     [H]
+u8 step     # 1-based frame of THIS keyframe's own sprite (step-1); not a
+            # pose index; step 0 = not blitted, an attachment point  [V, §2.6.2]
+i16 dx      # layer left edge relative to the actor origin x        [V, §2.6.2]
+i16 dy      # layer top edge relative to the actor origin y, y DOWN [V, §2.6.2]
+u16 flags   # 0x80 = last keyframe of a pose; 0x18 = per-layer mirror
+            # (XOR with the actor's); 0x07 = layer / callback slot   [V, §2.6.2]
 ```
+
+*Updated by §2.6.2 (AN1, 2026-11-23).* The previous block called `step` a
+"stride pose index", `dy` "y-up" and the `0x80` bit "unresolved"; those three
+readings are **retracted** — the blit at `0x40C270` settles each (§2.6.2 c/d).
 
 **Chunk ↔ clip mapping `[V]`.** A keyframe's first byte is **1-based**: it is
 the slot the `ANIM` reader stored the chunk in, `type_index + 1`. The reader
@@ -412,13 +417,15 @@ world's bank —
 keyframes) — and are kept as explicit gaps. Reading the byte 0-based shifts
 **every** clip onto its *neighbouring* chunk, which is why `WALK` looked like a
 18×23/16×17 pair and the maintainer's six state labels were all wrong: the
-0-based read gave `RUN` the 54×57 art that is really `SPIN`'s. `169` is the
-hero's shared contact pose (used by `WALK`/`RUN`/`BRAK`/`SPIN`/… and
-`Krug.CLAY`); its pixels are not in any `.WLD` (they are likely embedded in
-`LOMAX.EXE`), so `WALK`'s two contact keyframes stay unresolved (Q34).
+0-based read gave `RUN` the 54×57 art that is really `SPIN`'s. `169` occurs in
+`WALK`/`RUN`/`BRAK`/`SPIN`/… and `Krug.CLAY`. **Retracted** (§2.6.2 d): the
+earlier reading "the hero's shared contact pose, its pixels likely embedded in
+`LOMAX.EXE`". Every one of the 12 non-zero unresolved bytes sits only on a
+`step 0` keyframe, which the blit never draws — it calls an actor callback at
+that point — so `169` is an attachment-point marker, not a missing sprite.
 
 **Pose structure `[V]` (step grouping and paint order); the `0x80` bit's
-meaning `[H]`.** `Hero.WALK` is **10 stride poses × 2 sprite layers**, not 22
+meaning — settled in §2.6.2 d.** `Hero.WALK` is **10 stride poses × 2 sprite layers**, not 22
 independent frames. Grouping the 22 keyframes by their second byte (`step`)
 gives exactly two keyframes per `step` 1..10 — a **base** layer (sprite byte
 33 → `type_index` 32, 36–42 × 44–48, the whole character) and a smaller
@@ -428,17 +435,21 @@ frames and 33's first 10 frames are used, so `step - 1` selects the matching
 frame of each layer: the two keyframes sharing a `step` are one composite pose,
 not two separate frames. The compositor paints the **base first, then the
 overlay** on top. `flags 0x80` sits on the **base** keyframe in 9/10 steps
-(step 6's base keyframe 12 is `0x00`), so the bit's exact role — a pose-run
-terminator, a flip flag, or a priority hint — is still **[H]**, not settled;
-the paint order is derived from layer *size*, not from the flag.
+(step 6's base keyframe 12 is `0x00`). *Settled by §2.6.2 d `[V]`:* `0x80`
+ends a pose — a pose is the run of keyframes up to and including the next
+`0x80` (step 6's pose ends on the `step 0` marker after the base, flagged
+`0x82`) — and the paint order base-first/overlay-on-top is now shown by the
+renderer's list order, not inferred from layer size. Grouping by `step` happens
+to agree with the `0x80` grouping in `WALK`; it does not in general (`STA1`:
+30 poses over 7 distinct steps).
 
-**Timing `[H]`.** No keyframe field and none of the animation's 9 `u16` params
-carry a per-frame hold: `dx`/`dy` are small signed offsets, `flags` is a flag
-word and `step` a monotonic stride counter. The engine advances one pose every
-**three** 60 Hz ticks (`engine.state.MOVE_ANIM_TICKS_PER_POSE = 3`, 20 poses/s),
-so a 12-pose `RUN` cycle takes 36 ticks = **0.6 s**. That rate is **chosen by
-eye**, not measured; the previous wiring advanced one pose per tick (12 fps of
-animation, ~5 cycles/s) and stuttered by construction. Q36.
+**Timing.** *Retracted (§2.6.2 d):* "none of the animation's 9 `u16` params
+carry a per-frame hold". The first of them is the clip's **rate** in `/256`
+poses per tick (64 = 4 ticks per pose), and the selector overrides it for
+`WALK` (`|vx| / 0x700`, 3.5 ticks per pose at 2.0 px/tick) and `RUN`
+(`|vx| >> 11`). The engine still advances one pose every **three** 60 Hz ticks
+(`engine.state.MOVE_ANIM_TICKS_PER_POSE = 3`), a rate chosen by eye `[H]`; the
+previous wiring advanced one pose per tick and stuttered by construction. Q36.
 
 **The moving player draws `RUN`, one whole-body sprite per step `[V]` structure,
 `[H]` layer choice.** `Hero.RUN` is 26 keyframes over **12 steps**: per step a
@@ -447,7 +458,11 @@ the 12 frames: one image of head, torso, arms and legs) plus a smaller companion
 (sprite byte **24** → `type_index` 23, 26×13–34×14). Measured on the retail install at the recorded
 `(dx, -dy)`, the companion's opaque pixels land **on** the body layer's pixels
 **39–97 %** of the time (WALK's pair: 65–100 %) — it is a genuine overlay on the
-character, not a detached fragment. The 0-based read made it look detached
+character, not a detached fragment. *Those two ranges were taken under the
+`(dx, −dy)` placement that §2.6.2 c retracts; under the verified placement
+(top = `+dy`) the same measure is `RUN` 21–65 %, `WALK` 52–66 %
+(`an1_audit.py overlap`, [`research/08`](research/08-player-animation-selector.md)):
+the overlay still overlaps the body but partly extends beyond it.* The 0-based read made it look detached
 (0–8 %) because it paired each clip's overlay with its *neighbour's* body;
 `docs/file-formats.md` §2.6.1's `RUN`/`SPIN` swap is the same mistake. The
 engine's moving player still blits the whole-body layer alone
@@ -455,25 +470,36 @@ engine's moving player still blits the whole-body layer alone
 hard-coded sprite id) because that renders a complete figure on its own; what
 the overlay depicts is open (**Q37**). The `anim-clip` strips composite both
 layers (`anim_clip.resolve_poses`), and they too render one coherent character
-per pose. `WALK` is the slow-walk clip (`|vx| ≤ 2.0` at VA `0x411F79`), not the
-moving clip (unsettled, see Q38). The `dx`/`dy` sign convention below is also
-unsettled (Q39); both are queued for the planned §2.6.2 (clip → selector → VA)
-in `docs/roadmap/46-character-animation-plan.md` (slice AN1).
+per pose. **Which clip the original draws while moving is settled `[V]`
+(§2.6.2 a, Q38):** `cmp esi, 0x20000` / `jg` at VA `0x411F79` with `esi = |vx|`
+draws `WALK` for `0 < |vx| ≤ 2.0` and `RUN` only above 2.0 — so at the
+terrain-0 walking speed of exactly 2.0 px/tick the original draws **`WALK`**,
+and the engine's `RUN` for every `vx ≠ 0` is a divergence to correct, not the
+original's rule. The `dx`/`dy` placement below is likewise settled in §2.6.2 c
+(Q39).
 
-**Frame selector when a clip has more steps than its chunk has frames `[H]`.**
-`step` indexes the chunk 1-based (`step - 1`), which is exact for the two clips
-this card renders: `WALK` (10 steps over `type_index` 32's 10 frames) and `RUN`
-(12 steps over `type_index` 22's 12 frames). It is **not** exact everywhere:
-**45 of 691** retail clips declare a step beyond at least one of their layers'
-frame counts (`Hero.STA2`: 10 steps over `type_index` 27's 7 frames). The
-selector therefore wraps modulo the frame count
-(`anim_clip.frame_for_step`, Q36) instead of clamping, so such a clip keeps
-moving rather than freezing on its last frame. Which rule the original uses is
-not yet traced, so the wrap is a chosen convention **[H]**; `step == 0` is the
-one case the resolver settles: it returns NULL (VA `0x4163D3`), so nothing is
-drawn.
+**Frame selector when a clip has more steps than its chunk has frames —
+retracted (§2.6.2 d).** This paragraph claimed that **45 of 691** retail clips
+declare a step beyond one of their layers' frame counts (`Hero.STA2`: 10 steps
+over `type_index` 27's 7 frames), and the engine wraps modulo the frame count
+(`anim_clip.frame_for_step`) as a chosen convention `[H]`. The count came from
+treating `step` as a pose index shared by all layers. In the original each
+keyframe's `step` selects a frame of **its own** sprite, and **0 of 4,788**
+drawn keyframes in the nine worlds exceed their own sprite's frame count, so
+the wrap never fires on retail data and no wrap/clamp rule exists to recover.
+`step == 0` is not drawn: the resolver returns NULL (VA `0x4163D3`) and the blit
+treats such a keyframe as an attachment point (§2.6.2 d).
 
-**Alignment `[V]` structure, `[H]` anchor.** `dx`/`dy` are signed offsets with
+**Alignment — the placement is retracted and replaced (§2.6.2 c, Q39).** *The
+claim that follows — "`dy` is y-up because the decompressor negates the height
+(`neg ecx` at `0x415FF9`), so a layer is drawn at `(dx, -dy)`" — is
+**retracted**: that `neg` writes a top-down GDI DIB height, and the actor blit
+(`0x40C270`) places a layer's top-left at `origin + (dx, dy)` with y down. The
+composite measurements in the rest of this paragraph (connectivity, canvas
+size) were taken under the retracted placement and are kept only as a record
+of what `anim_clip.resolve_poses` currently does; re-measuring them under the
+verified placement belongs to the anchoring slice (AN3).* Original text:
+`dx`/`dy` are signed offsets with
 the game's **y-up** axis — the sprite decompressor at VA `0x415E30` negates the
 frame height before storing it (`neg ecx` at `0x415FF9`), so a layer is drawn at
 screen position `(dx, -dy)`, which is what puts the head *above* the body. Each
@@ -491,7 +517,11 @@ also named the wrong steps. The exact anchor — which point
 on the collision box the offsets are relative to — is still not confirmed, so
 `engine.render_tiles` anchors the composite like the standing sprite: bottom at
 the collision-box bottom, horizontally centred, mirrored by the player's facing
-direction. Anchor and facing convention are graded `[H]`. Because
+direction. Anchor and facing convention are graded `[H]`. *(§2.6.2 c: the
+original's origin is the actor's integer position `0x59F23C`/`0x59F240`, the
+standing body's bottom row sits exactly on it, and mirroring reflects about
+the origin column, `x ↦ −x`; only the engine-to-original position mapping is
+still open.)* Because
 `engine.render_tiles` draws each `RUN` pose's whole-body layer and **discards
 that pose's `dx`/`dy`**, the bottom-anchored blit moves the top of the sprite —
 the head — from pose to pose: the twelve body layers are 34–43 px tall
@@ -499,7 +529,8 @@ the head — from pose to pose: the twelve body layers are 34–43 px tall
 is a known artefact of the chosen anchor, not a claim about the original's
 registration. The `ANIM` frame's
 `d`/`e` words (carried verbatim as `field_d`/`field_e`) look like per-frame
-registration offsets but their sign and role are unresolved (Q35).
+registration offsets but their sign and role are unresolved (Q35); the actor
+blit does not read them (§2.6.2 c).
 
 **Sprite palette slot `[H]` (user-confirmed against retail).** Sprites resolve
 their indices through `HEAD` palette **slot 0**, not the tile slot (1): slot 0

@@ -8,6 +8,27 @@ Versioning: [Semantic Versioning](https://semver.org/).
 
 ### Added
 
+- **`file-formats.md` §2.6.2 — how the original picks, times and places the
+  player's poses (AN1, docs only, no code).** A read-only `objdump` pass over
+  the player routine (`0x40FB70`) and the actor blit (`0x40C270`) lists all 47
+  `Hero` clips with their selector, VA and grade. **Q38 answered:**
+  `cmp esi, 0x20000` / `jg` at `0x411F79` with `esi = |vx|`, so the ordinary
+  2.0 px/tick walk draws `WALK` and `RUN` needs more than 2.0. `JMP1` is the
+  straight jump and `JMP2` the moving jump, with poses driven by `vy` once the
+  jump lockout ends. `FLO1`/`FLO2` are the fast-fall clips (`vy` ≥ 2.5).
+  `LND1` holds for 10 ticks, and only after a straight jump. **Q39 answered
+  for the placement:** a layer's top-left is at origin + (dx, dy), screen y
+  down, and facing mirrors about the origin column. **Q36 answered:** a pose
+  ends at flag `0x80`, each keyframe's `step` picks its own sprite's frame
+  (0 of 4,788 overrun), and the clip's first `u16` field is its rate in
+  1/256 poses per tick. Step-0 keyframes, including byte `169`, are
+  attachment points, not missing sprites. §2.6.1's `(dx, −dy)`/y-up reading,
+  its "45 of 691 overrun" count and its "`169` embedded in `LOMAX.EXE`" guess
+  are marked retracted, and Q34/Q35/Q37 are updated to match. Reproduction
+  commands are in the new `research/08-player-animation-selector.md`.
+- **Fixed the `07-wp1-patching-surface.md` link in `file-formats.md` §2.9**
+  (`../research/…` → `research/…`).
+
 - **`46-character-animation-plan.md` — plan + budget for more player-character
   animations (docs only, no code).** Scopes the next milestone to stand / move /
   jump-fall / land with per-pose `dx`/`dy` anchoring (stretch: duck, idle

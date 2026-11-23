@@ -168,6 +168,18 @@ Everything else below is a **name-based guess [H]**.
 
 ### 2.3 The candidate table
 
+> **AN1 outcome (2026-11-23), read this first.** The disassembly pass
+> ([`../file-formats.md`](../file-formats.md) §2.6.2) overturns four `[H]`
+> entries below. Where this table or §2.4/§3 disagree, §2.6.2 wins.
+> (1) **`JMP1` is the straight-up jump and `JMP2` the moving jump** — the
+> reverse of the fallback order in §3. (2) **`FLO1`/`FLO2` are the
+> fast-fall clips** (`vy` ≥ 2.5), not a slow float, so the engine can already
+> trigger them. (3) **`WALK`, not `RUN`, is drawn at 2.0 px/tick** (Q38;
+> the gate is `jg`). (4) `STA2` is part of the data-driven idle cycle (frozen
+> `STA1` for 30–93 ticks, then `STA1` or `STA2` once), so AN6 needs no invented
+> delay, and Q36 is answered. The `dx`/`dy` placement is top-left =
+> origin + (dx, dy), y down (Q39).
+
 "In scope" = reachable with today's inputs (`left`/`right`/`jump`) and physics;
 "stretch" = needs one new input or one resolved question; "deferred" = needs a
 mechanic the engine does not have. Sizes are `[M]` from Appendix A.
