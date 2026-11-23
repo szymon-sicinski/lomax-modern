@@ -278,3 +278,48 @@ def synthetic_world(
         ("END", b""),
     ]
     return build_container(chunks, order=order, endian=endian)
+
+
+def hero_nmy_payload(
+    clips: Sequence[tuple[str, Sequence[tuple[int, int, int, int, int]]]],
+) -> bytes:
+    """An ``NMY`` payload with one ``Hero`` record carrying ``clips``.
+
+    ``clips`` entries are ``(tag, keyframes)``; tags are stored byte-swapped
+    exactly as the game writes them, so ``"RUN"`` reaches the decoder as ``RUN``
+    after ``anim_tag_name`` reverses the dword.  A keyframe is
+    ``(sprite byte, step, dx, dy, flags)`` and the sprite byte is **1-based**.
+    """
+    name = b"Hero\x00"
+    name_size = len(name) + (-len(name) % 4)
+    nmy = bytearray()
+    nmy += struct.pack("<H", name_size)
+    nmy += name + b"\x00" * (name_size - len(name))
+    nmy += struct.pack("<H", 0x0000)  # W_A
+    nmy += struct.pack("<H", len(clips))  # W_B = animation count
+    nmy += b"\x00" * 2  # gap1
+    for tag, keyframes in clips:
+        tag_bytes = tag.encode("ascii").ljust(4, b" ")
+        nmy += struct.pack("<I", struct.unpack("<I", tag_bytes[::-1])[0])
+        nmy += struct.pack("<I", 20 + 8 * len(keyframes))  # size field
+        nmy += struct.pack("<H", len(keyframes))  # count2
+        nmy += b"\x00" * 18  # 9 x u16 params
+        for sprite, step, dx, dy, flags in keyframes:
+            nmy += struct.pack("<BBHHH", sprite, step, dx & 0xFFFF, dy & 0xFFFF, flags)
+    nmy += b"\x00" * 2  # u16 terminator
+    nmy += b"\x00" * 2  # pad
+    return bytes(nmy)
+
+
+def main_world_with_clips(
+    clips: Sequence[tuple[str, Sequence[tuple[int, int, int, int, int]]]],
+    sprites: Sequence[bytes],
+) -> bytes:
+    """A synthetic ``MAIN.WLD``: one ``Hero`` record with ``clips`` + its sprites."""
+    chunks: list[tuple[str, bytes]] = [
+        ("WRLD", b"PS-X" + b"\x00" * 4),
+        ("NMY", hero_nmy_payload(clips)),
+    ]
+    chunks += [("ANIM", payload) for payload in sprites]
+    chunks.append(("END", b""))
+    return build_container(chunks, endian=">")

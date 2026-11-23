@@ -34,7 +34,7 @@ from lomax_modern.engine import (
 from lomax_modern.engine.level import (
     PLAYER_MOVE_ANIM,
     PLAYER_STAND_ANIM,
-    load_move_poses,
+    load_clip_table,
 )
 from lomax_modern.engine.state import MOVE_ANIM_TICKS_PER_POSE
 from lomax_modern.engine.render import COLOUR_PLAYER, COLOUR_SKY
@@ -45,6 +45,7 @@ from tests.fixtures.synth import (
     cell_payload,
     gnmy_payload,
     head_payload,
+    main_world_with_clips,
     map_payload,
     ttab_payload,
 )
@@ -409,55 +410,12 @@ def test_render_tiles_sprite_slot0_tile_slot1(tmp_path: Path) -> None:
 # ---------------------------------------------------------------------------
 
 
-def _hero_nmy(
-    clips: tuple[tuple[str, tuple[tuple[int, int, int, int, int], ...]], ...],
-) -> bytes:
-    """An ``NMY`` payload with one ``Hero`` record carrying ``clips``.
-
-    ``clips`` entries are ``(tag, keyframes)``; tags are stored byte-swapped
-    exactly as the game writes them, so ``"RUN"`` reaches the decoder as ``RUN``
-    after ``anim_tag_name`` reverses the dword.
-    """
-    name = b"Hero\x00"
-    name_size = len(name) + (-len(name) % 4)
-    nmy = bytearray()
-    nmy += struct.pack("<H", name_size)
-    nmy += name + b"\x00" * (name_size - len(name))
-    nmy += struct.pack("<H", 0x0000)  # W_A
-    nmy += struct.pack("<H", len(clips))  # W_B = animation count
-    nmy += b"\x00" * 2  # gap1
-    for tag, keyframes in clips:
-        tag_bytes = tag.encode("ascii").ljust(4, b" ")
-        nmy += struct.pack("<I", struct.unpack("<I", tag_bytes[::-1])[0])
-        nmy += struct.pack("<I", 20 + 8 * len(keyframes))  # size field
-        nmy += struct.pack("<H", len(keyframes))  # count2
-        nmy += b"\x00" * 18  # 9 x u16 params
-        for sprite, step, dx, dy, flags in keyframes:
-            nmy += struct.pack("<BBHHH", sprite, step, dx & 0xFFFF, dy & 0xFFFF, flags)
-    nmy += b"\x00" * 2  # u16 terminator
-    nmy += b"\x00" * 2  # pad
-    return bytes(nmy)
-
-
-def _main_world_with_clips(
-    clips: tuple[tuple[str, tuple[tuple[int, int, int, int, int], ...]], ...],
-    sprites: tuple[bytes, ...],
-) -> bytes:
-    """A synthetic ``MAIN.WLD``: one ``Hero`` record with ``clips`` + its sprites."""
-    chunks: list[tuple[str, bytes]] = [
-        ("WRLD", b"PS-X" + b"\x00" * 4),
-        ("NMY", _hero_nmy(clips)),
-    ]
-    chunks += [("ANIM", payload) for payload in sprites]
-    chunks.append(("END", b""))
-    return build_container(chunks, endian=">")
-
-
 def test_move_clip_is_run_and_the_whole_body_sprite(tmp_path: Path) -> None:
     """The moving player is wired to ``RUN``'s full-body sprite, not ``WALK``.
 
     ``WALK`` is the slow-walk clip (speed gate at VA ``0x411F79``); the engine
-    must read the clip whose per-step layer is a whole character.
+    must read the clip whose per-step layer is a whole character.  The table is
+    keyed by tag, so "not ``WALK``" is visible as ``WALK`` being absent.
     """
     assert PLAYER_MOVE_ANIM == "RUN"
     run_sprite = anim_payload(
@@ -469,7 +427,7 @@ def test_move_clip_is_run_and_the_whole_body_sprite(tmp_path: Path) -> None:
         pixels=bytes([3] * 4),
     )
     (tmp_path / "MAIN.WLD").write_bytes(
-        _main_world_with_clips(
+        main_world_with_clips(
             (
                 # Keyframe sprite bytes are 1-based: 6 -> type_index 5, 8 -> 7.
                 ("RUN", ((6, 1, -6, -44, 0x01), (6, 2, -6, -47, 0x01))),
@@ -478,7 +436,9 @@ def test_move_clip_is_run_and_the_whole_body_sprite(tmp_path: Path) -> None:
             (run_sprite, walk_sprite),
         )
     )
-    poses = load_move_poses(tmp_path / "MAIN.WLD")
+    table = load_clip_table(tmp_path / "MAIN.WLD")
+    assert set(table) == {PLAYER_MOVE_ANIM}  # RUN, never WALK
+    poses = table[PLAYER_MOVE_ANIM]
     assert [p.step for p in poses] == [1, 2]
     assert {p.sprite_index for p in poses} == {6}
     assert [(p.pixels.width, p.pixels.height) for p in poses] == [(6, 8), (6, 8)]
@@ -487,7 +447,7 @@ def test_move_clip_is_run_and_the_whole_body_sprite(tmp_path: Path) -> None:
 
 
 def test_move_clip_is_absent_without_a_main_world(tmp_path: Path) -> None:
-    assert load_move_poses(tmp_path / "MAIN.WLD") == ()
+    assert load_clip_table(tmp_path / "MAIN.WLD") == {}
 
 
 def _floor_world(
@@ -525,7 +485,7 @@ def test_moving_player_draws_the_run_pose_through_the_sprite_slot(
         )
     )
     (tmp_path / "MAIN.WLD").write_bytes(
-        _main_world_with_clips(
+        main_world_with_clips(
             # Keyframe sprite bytes are 1-based: 6 -> type_index 5.
             (("RUN", ((6, 1, 0, 0, 0x01),)),),
             (
@@ -537,7 +497,7 @@ def test_moving_player_draws_the_run_pose_through_the_sprite_slot(
         )
     )
     level = load_level(tmp_path / "VILLAGE.WLD")
-    assert len(level.move_poses) == 1
+    assert len(level.clips[PLAYER_MOVE_ANIM]) == 1
 
     state = new_game_state(level, spawn_x=48.0, spawn_y=0.0)
     state.tick(Input(right=True))
@@ -548,7 +508,7 @@ def test_moving_player_draws_the_run_pose_through_the_sprite_slot(
 
     # Floor tiles through the tile slot (1): red.
     assert frame.pixel(24, 24) == RED565
-    sprite = level.move_poses[0].pixels
+    sprite = level.clips[PLAYER_MOVE_ANIM][0].pixels
     sx = int(state.player.centre_x - sprite.width / 2) - cam_x
     sy = int(state.player.y + state.player.height - sprite.height) - cam_y
     assert frame.pixel(sx, sy) == BLUE565  # sprite slot (0), not the tile slot
@@ -572,7 +532,7 @@ def test_moving_player_advances_a_pose_per_hold_and_idles_identically(
         )
     )
     (tmp_path / "MAIN.WLD").write_bytes(
-        _main_world_with_clips(
+        main_world_with_clips(
             (
                 # Keyframe sprite bytes are 1-based: 6 -> type_index 5,
                 # 7 -> type_index 6.
@@ -594,14 +554,14 @@ def test_moving_player_advances_a_pose_per_hold_and_idles_identically(
         )
     )
     level = load_level(tmp_path / "VILLAGE.WLD")
-    assert len(level.move_poses) == 2
+    assert len(level.clips[PLAYER_MOVE_ANIM]) == 2
     hold = MOVE_ANIM_TICKS_PER_POSE
     assert hold == 3  # pins the documented constant, not just its use
     # 12 retail RUN poses at this hold = 36 ticks = 0.6 s per cycle at 60 Hz.
     assert 12 * hold == 36
 
     def corner_colour(state) -> int:
-        pose = level.move_poses[state.player.anim_frame % len(level.move_poses)]
+        pose = level.clip_pose(PLAYER_MOVE_ANIM, state.player.anim_frame)
         sx = int(state.player.centre_x - pose.pixels.width / 2)
         sy = int(state.player.y + state.player.height - pose.pixels.height)
         return render_tiles(level, state).pixel(sx, sy)
@@ -642,7 +602,7 @@ def test_moving_player_mirrors_the_pose_for_the_facing(tmp_path: Path) -> None:
         )
     )
     (tmp_path / "MAIN.WLD").write_bytes(
-        _main_world_with_clips(
+        main_world_with_clips(
             (("RUN", ((6, 1, 0, 0, 0x01),)),),
             (
                 anim_payload(
@@ -658,7 +618,7 @@ def test_moving_player_mirrors_the_pose_for_the_facing(tmp_path: Path) -> None:
         state = new_game_state(level, spawn_x=48.0, spawn_y=0.0)
         state.tick(Input(**{direction: True}))
         cam_x, cam_y = camera(level, state.player, 320, 240)
-        sprite = level.move_poses[0].pixels
+        sprite = level.clips[PLAYER_MOVE_ANIM][0].pixels
         sx = int(state.player.centre_x - sprite.width / 2) - cam_x
         sy = int(state.player.y + state.player.height - sprite.height) - cam_y
         frame = render_tiles(level, state)

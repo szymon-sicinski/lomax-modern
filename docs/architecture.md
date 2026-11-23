@@ -238,17 +238,20 @@ tick (input, gravity, axis-separated collision, collect, exit) to a 16-bit
   (Q32) — and `new_game_state` turns them into the live spawn, exit and
   collectables. A plane without a `Start` placement falls back to the first
   passable cell; the remaining names are unmapped and yield no entity.
-- **Player as a decoded ANIM sprite.** `render_tiles` draws the player as its
-  standing `ANIM` frame, not a marker: `decode_anim_pixels` expands the frame's
+- **Player as a decoded ANIM sprite.** `render_tiles` draws the player as a
+  whole-body `ANIM` frame, not a marker: `decode_anim_pixels` expands the frame's
   packed 4-bit (low nibble first, `[V]` from the sprite decompressor at VA
-  `0x415E30`) or raw 8-bit pixels to palette indices, and `load_player_sprite`
-  resolves that frame from `MAIN.WLD`'s `Hero` → `STA1` animation (the
-  keyframe's first byte is a **1-based** `ANIM` sprite slot, `type_index =
-  byte - 1`; the standing pose is that step's whole-body layer). The indexed
-  sprite is blitted through the level's `HEAD` palette; a synthetic world
-  without `MAIN.WLD` falls back to the marker. The moving player cycles the
-  `RUN` clip's 12 whole-body poses (`anim_clip.resolve_body_poses`); the
-  keyframe's remaining fields are mapped in `file-formats.md` §2.6.1 (Q34).
+  `0x415E30`) or raw 8-bit pixels to palette indices, and the level's **clip
+  table** (`engine.level.load_clip_table`) resolves a clip **tag** to its poses
+  from `MAIN.WLD`'s `Hero` record (`STA1` and `RUN` today; the keyframe's first
+  byte is a **1-based** `ANIM` sprite slot, `type_index = byte - 1`, and each
+  pose is that step's whole-body layer — `load_player_sprite` is the `STA1`
+  case). Which clip is drawn is data, not a sprite id: the pure
+  `engine.state.select_clip(player)` returns `(tag, pose index)` — `vx != 0` →
+  `RUN`, else `STA1` — and `Level.clip_pose` resolves it. The indexed sprite is
+  blitted through the level's `HEAD` palette; a synthetic world without
+  `MAIN.WLD` falls back to the marker. The keyframe's remaining fields are
+  mapped in `file-formats.md` §2.6.1 (Q34).
 
 ## 5. Future components and where they sit
 
