@@ -202,10 +202,10 @@ class NmyAnim:
 
     ``frames`` is one entry per 8-byte per-frame record.  Each is the raw
     ``(sprite, b1, w2, w3, w4)`` tuple decoded ``u8, u8, u16, u16, u16``.  Only
-    the first byte is mapped: ``sprite`` is the referenced ``ANIM`` type_index
-    (measured on the retail install — 99%+ of the sub-256 values resolve to a
-    same-world ``ANIM`` chunk, the rest being global-bank/cross-world
-    references).  ``b1``/``w2``/``w3``/``w4`` are carried verbatim; their
+    the first byte is mapped: ``sprite`` is a **1-based** ``ANIM`` sprite slot,
+    selecting ``type_index`` ``sprite - 1`` (byte 0 draws nothing; see
+    :func:`lomax_modern.anim_clip.chunk_index_for_sprite`).
+    ``b1``/``w2``/``w3``/``w4`` are carried verbatim; their
     meaning (sub-frame index, draw offset, flip/duration flags) is read by the
     animation scheduler, not this module, and is left unresolved here.
     """

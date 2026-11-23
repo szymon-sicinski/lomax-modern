@@ -23,6 +23,18 @@ from .entities import (
 )
 from .level import CELL_PX, Level
 
+#: Ticks one whole-body moving pose is held for before the next pose.
+#:
+#: **Chosen by eye [H]**, not measured: the clip data carries no per-frame hold
+#: — `NMY`'s nine animation `u16` params and the keyframe itself (`step`, `dx`,
+#: `dy`, `flags`) have no duration field (`docs/file-formats.md` §2.6.1,
+#: Q36) — so the rate is a presentation constant.  ``RUN`` has 12 poses, so 3
+#: ticks per pose is one stride cycle every **36 ticks = 0.6 s at the 60 Hz
+#: logic rate** (≈1.7 cycles/s), which reads as a run at 320x240 and does not
+#: strobe.  The previous wiring used 1 pose per tick (12 fps of animation,
+#: ≈5 cycles/s) and stuttered by construction.
+MOVE_ANIM_TICKS_PER_POSE = 3
+
 
 def _overlaps_cell(player: Player, cell_x: int, cell_y: int) -> bool:
     """Whether the player's box overlaps a 16x16 map cell."""
@@ -102,6 +114,22 @@ def step_player(level: Level, player: Player, inp: Input) -> None:
         player.vx = WALK_SPEED
     else:
         player.vx = 0.0
+
+    # Moving-animation bookkeeping: one stride pose every
+    # ``MOVE_ANIM_TICKS_PER_POSE`` ticks of horizontal movement (the clip data
+    # carries no per-frame hold, so the rate is a chosen constant — see that
+    # constant).  The facing is the sign of the current velocity and is kept
+    # when the player stops, so a standing player still faces where they were
+    # going; the pose index resets when they stop.
+    if player.vx != 0.0:
+        player.facing = 1 if player.vx > 0 else -1
+        if player.anim_ticks >= MOVE_ANIM_TICKS_PER_POSE:
+            player.anim_ticks = 0
+            player.anim_frame += 1
+        player.anim_ticks += 1
+    else:
+        player.anim_ticks = 0
+        player.anim_frame = 0
 
     if inp.jump and player.on_ground:
         player.vy = JUMP_SPEED

@@ -189,6 +189,28 @@ def anim_payload(
     return bytes(out)
 
 
+def anim_frames_payload(
+    type_index: int,
+    frames: tuple[bytes, ...],
+    *,
+    width: int = 4,
+    height: int = 4,
+) -> bytes:
+    """An ``ANIM`` payload whose frames carry *different* pixels, in order.
+
+    :func:`anim_payload` repeats one pixel buffer across ``frame_count`` frames,
+    which cannot show which frame a selector picked.  Here each entry of
+    ``frames`` is one raw (unpacked) frame's pixel run, so a test can assert
+    "step 2 selected frame 1" by the pixel values themselves.
+    """
+    out = bytearray(struct.pack("<6H", 1, 2, len(frames), 0, type_index, 0))
+    pixel_bytes = (width * height + 3) & ~3
+    for pixels in frames:
+        out += struct.pack("<hhHH", width, height, 0, 0)
+        out += (pixels + b"\0" * pixel_bytes)[:pixel_bytes]
+    return bytes(out)
+
+
 def nmy_payload(
     names: Iterable[tuple[str, int]] = (("Type", 0),),
     *,

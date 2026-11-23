@@ -20,6 +20,46 @@ Versioning: [Semantic Versioning](https://semver.org/).
   cards over the plan's single S1). The 35-card ≈$5.78 figure is pinned to the
   PR #61 merge.
 
+- **The moving player draws `RUN`, one whole-body sprite per step.** While the
+  player moves, `engine.render_tiles` blits a complete character — `Hero.RUN`'s
+  whole-body layer (sprite byte 23 → `type_index` 22, 48–62 × 34–43), 12 poses
+  — mirrored for the facing direction. The standing path is the `STA1`
+  whole-body layer (sprite byte 27 → `type_index` 26, 44×47–49), previously the
+  neighbouring chunk's 54×41 art. `ANIM` sprites still resolve through `HEAD`
+  palette slot 0 while tiles keep slot 1, and output is still refused inside the
+  game folder (`art.refuse_into_game_folder`). Two measured conventions
+  (`docs/file-formats.md` §2.6.1, Q36/Q37): the frame selector **wraps** because
+  45 of 691 retail clips declare more steps than a layer's frame count (RUN and
+  WALK themselves are exact: 12/12 and 10/10), and the pose hold is **3 ticks at
+  60 Hz** (`state.MOVE_ANIM_TICKS_PER_POSE`, 0.6 s per cycle), chosen by eye
+  `[H]` rather than the previous one-pose-per-tick strobe. RUN's companion layer
+  (sprite byte 24 → `type_index` 23, 26×13–34×14) overlaps the body **39–97 %**
+  at its recorded offset once the byte is read 1-based — it is a real overlay,
+  so what it depicts is Q37; the engine draws the body layer alone.
+  `WALK` is the slow-walk clip (`|vx| ≤ 2.0` at VA `0x411F79`).
+
+- **`Hero.WALK` animated end to end (animation spike).** A new `anim-clip`
+  command renders any `NMY` clip to per-pose PNGs plus a preview strip and a
+  GIF: `lomax-modern anim-clip <install> --world MAIN --name WALK --out DIR`.
+  The `anim-clip` command and the WALK composite remain the research surface;
+  the engine's moving player is wired to `RUN` instead (entry above), because
+  `WALK` is the slow-walk clip the original enters below 2.0 px/tick. The
+  keyframe record is
+  resolved (`docs/file-formats.md` §2.6.1): byte 0 is a **1-based** `ANIM`
+  sprite slot — `type_index = byte - 1`, byte 0 draws nothing **[V]** — then a
+  stride **pose index** (`step`, 0 draws nothing), two signed draw offsets and a
+  flag word whose bit `0x80` is still **[H]** (9/10 steps, contradicted by
+  step 6). `Hero.WALK` is **10 poses × 2 layers** — a *base* sprite (byte 33 →
+  `type_index` 32, the whole character) plus a smaller *overlay* (byte 34 → 33)
+  — each composited at its
+  recorded `(dx, -dy)` screen offset into one shared canvas, base first and
+  overlay on top. Sprites now resolve through their own palette slot
+  (`SPRITE_PALETTE_SLOT = 0`, the true Lomax colours) while tiles stay on
+  slot 1; this is `[H]` "user-confirmed against retail" pending a VA trace. The
+  two contact frames reference the shared pose `169`, which is not in any
+  `.WLD` bank and stays an explicit gap (Q34); the exact anchor the offsets are
+  relative to and the per-frame hold remain hypotheses.
+
 - **C-playable milestone closed (S1).** The one-playable-level plan
   (`docs/roadmap/45-playable-level-plan.md` §8) landed end to end: all seven
   implementation cards (P1–P7) are merged and verified by execution on `main` —
@@ -273,6 +313,26 @@ Versioning: [Semantic Versioning](https://semver.org/).
   layout as unknown or unmeasured — those modules simply do not decode it.
 
 ### Fixed
+
+- **Every sprite we drew was the neighbouring one: the `NMY` keyframe's sprite
+  byte is 1-based.** `anim_clip` read the byte as a 0-based `type_index`, so
+  each clip resolved to the chunk before the one it names — `RUN` drew `SPIN`'s
+  54×57 art, `WALK` drew a cape and a boot, `STA1` drew a 14×23 fragment, and
+  the maintainer's six state labels were all off by one. The byte is the sprite
+  table slot `type_index + 1` (reader `inc edi` at VA `0x414A9A`, resolver reads
+  the raw byte with no offset at `0x4163FC`; `[V]`, `docs/file-formats.md`
+  §2.6.1), and the mapping now lives in one place
+  (`anim_clip.chunk_index_for_sprite` / `sprite_for`). Byte 0 stays unresolvable
+  and out-of-bank bytes are still gaps. Re-rendered on the retail install:
+  `Hero.WALK`'s 10 poses, `Hero.RUN`'s 12 and `Hero.STA1`'s 7 each show one
+  coherent character, and the standing sprite the engine draws is now `STA1`'s
+  44×47–49 whole body instead of the 54×41 chunk next door.
+- **`step == 0` now draws nothing instead of a frame.** The frame resolver
+  returns NULL for a zero step (VA `0x4163D3`), and `anim_clip.frame_for_step`
+  returns `None` for it (previously it wrapped to the chunk's *last* frame);
+  such a keyframe is reported unresolved, its step is dropped from the pose
+  list, and no pose invents frame 0. Pinned by
+  `tests/unit/test_anim_clip.py::test_step_zero_draws_nothing`.
 
 - `measure --json` and `probe-anim-nmy --json` now refuse a report destination
   inside the game folder, with the same wording and exit code as every other
