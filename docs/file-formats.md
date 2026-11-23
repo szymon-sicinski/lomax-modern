@@ -615,7 +615,7 @@ pass, 2026-11-19). The player's position and velocity are **16.16 fixed point**
 velocity `vx`/`vy` at `0x59F24C`/`0x59F250` (each store then re-reads the high
 word back as the integer coordinate — the fixed-point signature). The tick is
 the 60 Hz `WINMM.timeSetEvent` loop
-([`07-wp1-patching-surface.md`](../research/07-wp1-patching-surface.md) §4),
+([`07-wp1-patching-surface.md`](research/07-wp1-patching-surface.md) §4),
 so "per tick" is "per 1/60 s". The four rates, which the engine carries as
 `engine/entities.py` constants:
 
