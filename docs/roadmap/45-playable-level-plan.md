@@ -265,8 +265,9 @@ Two cards cycled a second pass; one of them was unpredicted:
   (`_cmd_play` still called P7's `_hud_line` with 5 args after it grew to 7,
   a `TypeError` under live input), fixed in the same pass.
 - **P2 (unpredicted).** Not in §5's risk table. PR #57 opened against an older
-  `main`; once P3 (#55) and P6 (#56) merged, it needed a rebase onto `main`, and
-  the rebased head was re-reviewed.
+  `main`; once P3 (#55) and P6 (#56) merged, it merged `main` into the branch —
+  merge commit `40c23e9`, parents `958b58f` + `7cfea87`, no rebase, history
+  never rewritten — and the new head was re-reviewed.
 
 The two predicted unfamiliar cards that *did not* cycle were **P5** (sprite
 pixel format — one review, clean) and **P6** (physics RE — one review, clean).
@@ -303,12 +304,18 @@ be quoted interchangeably:
 |---|---:|---:|
 | the plan's graph (P1–P7 + R1–R7 + S1) | 15 | ≈$2.48 |
 | graph + rework cycles + explicit merge cards | 21 | ≈$3.47 |
-| **every card dispatched since the plan card** | **35** | **≈$5.78** |
+| **every card dispatched since the plan card, as of the PR #61 merge** | **35** | **≈$5.78** |
 
-The third row is the honest one for a budget question: it counts what was
-actually spent, including the review cards the poller opened for a PR whose head
-moved (PR #51 ×3, PR #57 ×2, PR #59 ×2), the duplicated Q32 review cards, and
-the per-PR merge cards that the plan assumed would be one synthesis card.
+The 21 is the plan's 15 plus **3 rework cards** (P2's re-review, P2's
+merge-of-`main` cycle, P4's re-review) plus **3 net merge cards** (the plan
+modelled a single S1; #55/#59/#60 were tracked individually). It is the
+**superseded estimate** — what §8.4 originally concluded — and stays in the
+table only so the older figure can be traced to its composition. The third row
+is the honest one for a budget question: it counts what was actually spent
+through the PR #61 merge, including the review cards the poller opened for a PR
+whose head moved (PR #51 ×3, PR #57 ×2, PR #59 ×2), the duplicated Q32 review
+cards, and the per-PR merge cards that the plan assumed would be one synthesis
+card.
 
 So the milestone came in at roughly **2.3× the forecast**, past the high band.
 The implementation itself was the predicted 7 cards; the overrun is
@@ -316,9 +323,17 @@ coordination overhead — re-reviews after heads moved, merge cards the plan did
 not model, and duplicate review cards (several created by the coordinator, not
 by the poller).
 
-Caveats on the unit rate: $0.165 is a board-wide average, and
-`scripts/token_cost_report.py` reports **73 of 186** measured cards with no
-matching log line, so every figure here is a **lower bound**.
+Caveats on the unit rate: $0.165 is a **board-wide average** taken from
+[`43-demo-plan.md`](43-demo-plan.md) §3, **not re-measured here**, and it is a
+**lower bound**. The tool behind it — `scripts/token_cost_report.py` — prints two
+different counts on its summary line, `cards measured: N   runs without a
+matching log: M`, and they must not be folded into one fraction: a *card* counts
+as measured only when at least one of its runs joined a log line, while the
+unmatched count is per **run**. §4 records that measurement as "34 of 92
+measured runs had no matching log line". Refreshing it needs the per-profile
+`logs/agent.log` files, which live on the host and are not in the review
+container, so no newer count is quoted here and every figure above stays a
+**lower bound**.
 
 The rework *itself* (2 cycles + 1 merge of `main`) stayed small. What the plan
 under-modelled is the cost of a head moving after review: each move buys a new

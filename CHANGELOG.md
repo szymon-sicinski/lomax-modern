@@ -8,6 +8,18 @@ Versioning: [Semantic Versioning](https://semver.org/).
 
 ### Added
 
+- **`45-playable-level-plan.md` §8.4 spend figures corrected and scoped.** The
+  §8.2 rework note no longer claims P2 was rebased: PR #57 merged `main` into
+  its branch (merge commit `40c23e9`, parents `958b58f` + `7cfea87`), so §8.1,
+  §8.2 and §8.4 now say the same thing and the sentence a reader quotes for the
+  never-rewrite-published-history rule is true. The unit-rate caveat names the
+  counts `scripts/token_cost_report.py` actually prints — `cards measured` and
+  `runs without a matching log`, which are per-card and per-run and must not be
+  folded into one fraction — and the 21-card ≈$3.47 row is labelled the
+  superseded estimate with its composition shown (+3 rework cards, +3 net merge
+  cards over the plan's single S1). The 35-card ≈$5.78 figure is pinned to the
+  PR #61 merge.
+
 - **C-playable milestone closed (S1).** The one-playable-level plan
   (`docs/roadmap/45-playable-level-plan.md` §8) landed end to end: all seven
   implementation cards (P1–P7) are merged and verified by execution on `main` —
