@@ -8,6 +8,20 @@ Versioning: [Semantic Versioning](https://semver.org/).
 
 ### Added
 
+- **`46-character-animation-plan.md` — plan + budget for more player-character
+  animations (docs only, no code).** Scopes the next milestone to stand / move /
+  jump-fall / land with per-pose `dx`/`dy` anchoring (stretch: duck, idle
+  fidget), lists all 47 `Hero` clips in `MAIN.WLD` with measured steps, layers
+  and sizes (no other world carries a `Hero` record), grades every trigger
+  `[V]`/`[H]` (only the `WALK` gate and the two-jump-kind split are located),
+  slices the work into six reviewable PRs with owners, and budgets it in tokens
+  and dollars (core 16 / 20 / 37 cards ≈ $2.64 / $3.30 / $6.11) against the
+  previous milestone's measured 2.3× overrun. Acceptance criteria are checked
+  for reachability against the data (scripted walk ends at 40.7 s on `VILLAGE`,
+  31.8 s on `ED`). Opens Q38 (does the ordinary 2.0 px/tick walk draw `WALK` or
+  `RUN`?) and Q39 (which reading of `dx`/`dy` places a pose). Every figure
+  reproduces with the audit script embedded in the document.
+
 - **`45-playable-level-plan.md` §8.4 spend figures corrected and scoped.** The
   §8.2 rework note no longer claims P2 was rebased: PR #57 merged `main` into
   its branch (merge commit `40c23e9`, parents `958b58f` + `7cfea87`), so §8.1,
