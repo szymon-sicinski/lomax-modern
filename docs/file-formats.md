@@ -491,11 +491,11 @@ on the collision box the offsets are relative to — is still not confirmed, so
 the collision-box bottom, horizontally centred, mirrored by the player's facing
 direction. Anchor and facing convention are graded `[H]`. Because
 `engine.render_tiles` draws each `RUN` pose's whole-body layer and **discards
-that pose's `dx`/`dy`**, bottom-anchoring it on the collision box lets the drawn
-head bob by up to **9 px** per cycle — the twelve body layers are 34–43 px tall,
-so a fixed bottom anchor moves their top by the same spread. That is a known
-artefact of the chosen anchor, not a claim about the original's registration.
-The `ANIM` frame's
+that pose's `dx`/`dy`**, the bottom-anchored blit moves the top of the sprite —
+the head — from pose to pose: the twelve body layers are 34–43 px tall
+(measured), so one fixed bottom anchor puts their tops up to **9 px** apart. That
+is a known artefact of the chosen anchor, not a claim about the original's
+registration. The `ANIM` frame's
 `d`/`e` words (carried verbatim as `field_d`/`field_e`) look like per-frame
 registration offsets but their sign and role are unresolved (Q35).
 
