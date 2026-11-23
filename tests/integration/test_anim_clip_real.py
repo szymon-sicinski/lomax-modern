@@ -72,9 +72,12 @@ def test_walk_clip_resolves_to_10_composited_poses() -> None:
     assert len(widths) == 1 and len(heights) == 1
     width, height = poses[0].pixels.width, poses[0].pixels.height
     assert width > 0 and height > 0
-    # Every pose carries real opaque pixels (a whole character, not a fragment).
+    # Every pose carries a whole character, not a fragment: at this head the
+    # smallest of the ten has 890 opaque px on the shared 40x51 canvas, so
+    # assert a floor far above what a stray fragment could produce.
     for pose in poses:
-        assert any(pose.pixels.indices)
+        opaque = sum(1 for index in pose.pixels.indices if index)
+        assert opaque >= 800
 
 
 def test_walk_clip_poses_are_renderable() -> None:

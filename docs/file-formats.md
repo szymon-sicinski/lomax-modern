@@ -442,9 +442,9 @@ animation, ~5 cycles/s) and stuttered by construction. Q36.
 
 **The moving player draws `RUN`, one whole-body sprite per step `[V]` structure,
 `[H]` layer choice.** `Hero.RUN` is 26 keyframes over **12 steps**: per step a
-**whole-body** layer (sprite byte **23** → `type_index` 22, 60×34 one image of
-head, torso, arms and legs) plus a smaller companion (sprite byte **24** →
-`type_index` 23, 26×13–34×14). Measured on the retail install at the recorded
+**whole-body** layer (sprite byte **23** → `type_index` 22, 48–62 × 34–43 across
+the 12 frames: one image of head, torso, arms and legs) plus a smaller companion
+(sprite byte **24** → `type_index` 23, 26×13–34×14). Measured on the retail install at the recorded
 `(dx, -dy)`, the companion's opaque pixels land **on** the body layer's pixels
 **39–97 %** of the time (WALK's pair: 65–100 %) — it is a genuine overlay on the
 character, not a detached fragment. The 0-based read made it look detached
@@ -489,7 +489,13 @@ also named the wrong steps. The exact anchor — which point
 on the collision box the offsets are relative to — is still not confirmed, so
 `engine.render_tiles` anchors the composite like the standing sprite: bottom at
 the collision-box bottom, horizontally centred, mirrored by the player's facing
-direction. Anchor and facing convention are graded `[H]`. The `ANIM` frame's
+direction. Anchor and facing convention are graded `[H]`. Because
+`engine.render_tiles` draws each `RUN` pose's whole-body layer and **discards
+that pose's `dx`/`dy`**, bottom-anchoring it on the collision box lets the drawn
+head bob by up to **9 px** per cycle — the twelve body layers are 34–43 px tall,
+so a fixed bottom anchor moves their top by the same spread. That is a known
+artefact of the chosen anchor, not a claim about the original's registration.
+The `ANIM` frame's
 `d`/`e` words (carried verbatim as `field_d`/`field_e`) look like per-frame
 registration offsets but their sign and role are unresolved (Q35).
 

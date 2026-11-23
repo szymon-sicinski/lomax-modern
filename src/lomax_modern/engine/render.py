@@ -297,7 +297,7 @@ def render_tiles(
     moving = state.player.vx != 0.0
     if moving and level.move_poses:
         # Moving: one whole-body sprite per pose (anim_clip.resolve_body_poses —
-        # RUN's whole-body layer, sprite byte 23 -> type_index 22, 60x34), and
+        # RUN's whole-body layer, sprite byte 23 -> type_index 22, 48-62 x 34-43), and
         # advanced every
         # ``state.MOVE_ANIM_TICKS_PER_POSE`` ticks by the step function and
         # mirrored for the facing direction: the clip stores a single facing, so

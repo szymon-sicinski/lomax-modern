@@ -45,7 +45,8 @@ PLAYER_STAND_ANIM = "STA1"
 
 #: The animation tag whose steps drive the player's **moving** animation.  It is
 #: the clip with a whole-body sprite per step (``RUN``: sprite byte 23 →
-#: ``type_index`` 22, 60x34 — a complete character).  ``WALK`` is the slow-walk
+#: ``type_index`` 22, 48-62 x 34-43 over its 12 frames — a complete character).
+#: ``WALK`` is the slow-walk
 #: clip the original enters below 2.0 px/tick (speed gate at VA ``0x411F79``);
 #: ``anim_clip.resolve_body_poses`` turns the clip into renderable whole-body
 #: frames.  See ``docs/file-formats.md`` §2.6.1.

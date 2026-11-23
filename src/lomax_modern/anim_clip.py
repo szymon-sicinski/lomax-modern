@@ -356,7 +356,8 @@ def resolve_body_poses(
     This is the "one character, one sprite" reading that ``engine.render_tiles``
     draws the moving player from.  ``Hero.RUN`` has 26 keyframes over 12 steps:
     per step a **whole-body** layer (sprite byte **23** → ``type_index`` 22,
-    60×34 — head, torso, arms and legs in one image) plus a much smaller
+    48–62 × 34–43 over the 12 frames — head, torso, arms and legs in one image)
+    plus a much smaller
     companion (sprite byte **24** → ``type_index`` 23, 26×13–34×14).  The body
     layer is the one with the larger content bounding box, so the selection is a
     measurement (:func:`_content_area`), not a hard-coded id.

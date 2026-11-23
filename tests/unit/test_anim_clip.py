@@ -412,7 +412,8 @@ def test_resolve_body_poses_keeps_the_whole_body_layer_only() -> None:
     """Per step, the pose is the layer with the larger content box — not a composite.
 
     ``Hero.RUN``'s steps carry a whole-body sprite (sprite byte 23 → ``type_index``
-    22, 60×34) plus a 26×13 companion (byte 24 → ``type_index`` 23); the body is
+    22, 48–62 × 34–43 across the 12 frames) plus a 26×13 companion
+    (byte 24 → ``type_index`` 23); the body is
     the larger layer, so the engine's per-step sprite is that one.
     """
     world = _world_with_clip(
