@@ -94,6 +94,23 @@ DUCK_RATE = 65
 #: one-shot: it holds the last pose (``0x4161B0``) instead of wrapping.
 DUCK_POSES = 6
 
+#: The idle cycle (§2.6.2 a rows 30-31, d "Idle").  The idle counter ``0x46ABBC``
+#: is compared with the threshold ``0x52C584``, which is 100 at level start
+#: (``0x40F986``, [V]); row 30 draws ``STA1`` pose 0 (rate 0) while the counter
+#: is below it, and sets a new threshold of ``30 + (rand & 63)`` ticks [V].
+IDLE_START_THRESHOLD = 100  # [V] 0x40F986
+IDLE_MIN_THRESHOLD = 30  # [V] row 30: 30 + (rand & 63)
+IDLE_THRESHOLD_MASK = 63
+#: Row 31: when the played clip wraps the threshold becomes 10,000 so row 30
+#: re-freezes ``STA1`` next tick [V].
+IDLE_REFREEZE_THRESHOLD = 10_000  # [V] row 31: the post-wrap sentinel
+#: Row 31's played clips: their own rates in 1/256 poses per tick and pose counts
+#: [M] (Appendix A / §2.6.2 d).
+STA1_RATE = 64  # [M] row 31 (the clip's own rate)
+STA2_RATE = 68  # [M] row 31
+STA1_POSES = 7  # [M] Appendix A / §2.6.2 d
+STA2_POSES = 10  # [M]
+
 
 @dataclass(frozen=True)
 class Input:
@@ -146,6 +163,13 @@ class Player:
     duck_frame: int = 0  # the clip's current pose index
     duck_phase: int = 0  # its 1/256-pose position (advanced at DUCK_RATE)
     duck_shown: bool = False  # set by step_player when this tick selected DUCK
+    # The idle cycle (rows 30-31).  The counter's increment site and the reset on
+    # leaving the idle branch are [H].
+    idle_counter: int = 0  # 0x46ABBC
+    idle_threshold: int = IDLE_START_THRESHOLD  # 0x52C584
+    idle_clip_tag: str = ""  # "" = frozen STA1; else the clip being played once
+    idle_frame: int = 0  # its pose index
+    idle_phase: int = 0  # its 1/256-pose position
 
     @property
     def centre_x(self) -> float:

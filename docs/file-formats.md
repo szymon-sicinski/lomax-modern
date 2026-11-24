@@ -633,8 +633,8 @@ Rates are `/256` poses per tick: 64 = one pose every 4 ticks.
 | 27 | `EDGE` | ground, `\|vx\|` = 0, the ledge probe `0x413940` true, not yet teetered (`0x46ABB4`) | `0x411DAB` | [V] test; "ledge" [H] | 68 |
 | 28 | `DIZZ` | ground, `\|vx\|` = 0, `0x4770B0` ≠ 0 (decremented per loop) | `0x411DFA` | [V] | 76 |
 | 29 | `WAHL` | ground, `\|vx\|` = 0, `0x52C56C` ≤ 0 | `0x411E46` | [V] test; meaning [H] | 47 |
-| 30 | **`STA1`** (frozen) | ground, `\|vx\|` = 0, idle counter `0x46ABBC` < threshold `0x52C584`: **force** `STA1` with **rate 0** (pose 0 held), counter reset, new threshold `30 + (rand & 63)` ticks (`0x411EE7`–`0x411F11`) | `0x411EE7` | **[V]** | **override 0** |
-| 31 | **`STA2`** or **`STA1`** (played) | ground, idle counter **=** threshold: **force** `STA2` or `STA1` at the clip's own rate, chosen by bit 0 of `0x43AAD0()` (`0x411E7C`–`0x411E9C`); when it wraps the threshold becomes 10,000 so row 30 re-freezes `STA1` next tick | `0x411E85` / `0x411E9C` | **[V]** (that `0x43AAD0` is a random-number routine is [H]) | 68 / 64 |
+| 30 | **`STA1`** (frozen) | ground, `\|vx\|` = 0, idle counter `0x46ABBC` < threshold `0x52C584`: **force** `STA1` with **rate 0** (pose 0 held), counter reset, new threshold `30 + (rand & 63)` ticks (`0x411EE7`–`0x411F11`). **Engine rule [M]/[H]:** `engine/state.py` `_update_idle` holds `STA1` pose 0 for 100 ticks at level start; the counter's increment site and the reset to 0 on leaving the idle branch are [H], and the reset/new threshold fires on (re-)entry of the frozen state, not every tick [H] | `0x411EE7` | **[V]** | **override 0** |
+| 31 | **`STA2`** or **`STA1`** (played) | ground, idle counter **=** threshold: **force** `STA2` or `STA1` at the clip's own rate, chosen by bit 0 of `0x43AAD0()` (`0x411E7C`–`0x411E9C`); when it wraps the threshold becomes 10,000 so row 30 re-freezes `STA1` next tick. **Engine rule [M]/[H]:** `engine/state.py` `_update_idle` plays exactly one clip from pose 0 at rate 68/64 (`STA2`/`STA1`, 10/7 poses [M]); bit 0 set means `STA2` [H] | `0x411E85` / `0x411E9C` | **[V]** (that `0x43AAD0` is a random-number routine is [H]) | 68 / 64 |
 | 32 | `RU45` | ground, `\|vx\|` ≠ 0, `0x52C574` = 2 | `0x411F25` | [V] test; "slope" [H] | **override `\|vx\|` / 0x900** (`0x411F37`) |
 | 33 | `BRAK` | ground, `\|vx\|` ≠ 0, the brake flag: the input opposite the facing (`0x8000` while not mirrored, `0x2000` while mirrored) with `vx` ≠ 0 (`0x41038A`, `0x41043B`) | `0x411F54` | [V] | 93 |
 | 34 | **`WALK`** | ground, `\|vx\|` ≠ 0, **`\|vx\|` ≤ 2.0** — `cmp esi, 0x20000` / **`jg`** to `RUN` | **`0x411F79`** | **[V]** | **override `\|vx\|` / 0x700** (`0x411F93`) — 73 at 2.0 px/tick |
@@ -829,7 +829,7 @@ is frame *S − 1*, confirming §2.6.1's 1-based step **[V]**), then:
   30–93 ticks (threshold 100 at level start, `0x40F986`), then plays `STA2` or
   `STA1` once at its own rate (50/50), then freezes again (rows 30–31). `STA2`
   is therefore the idle fidget, and it needs no idle *delay* to be invented —
-  it is part of the data-driven idle cycle.
+  it is part of the data-driven idle cycle. The engine models it in `engine/state.py` (`_update_idle`, `select_clip`; `tests/unit/test_idle.py`); the counter's increment site, the reset on leaving the idle branch, row 30's reset firing on (re-)entry rather than every tick, and bit 0 set meaning `STA2` are this engine's [H] choices.
 
 **What stays open.** The *meaning* of several state bits (rows graded [H]); the
 owner of the clips drawn on other actors; whether anything other than terrain

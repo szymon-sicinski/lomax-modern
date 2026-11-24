@@ -8,6 +8,15 @@ Versioning: [Semantic Versioning](https://semver.org/).
 
 ### Added
 
+- **The idle cycle (AN6).** Standing still no longer freezes on `STA1`: the
+  player holds `STA1` pose 0 for 100 ticks at level start, then plays `STA1` or
+  `STA2` once at the clip's own rate (28 / 38 ticks), then holds `STA1` again
+  for a new 30-93 tick threshold (`30 + (rand & 63)`), and repeats. Moving,
+  jumping, landing (`LND1`) or ducking resets it. The thresholds, rates and
+  pose counts are `[V]`/`[M]` (§2.6.2 a rows 30-31); the counter's increment
+  site, the reset on leaving idle, row 30's reset firing on re-entry and
+  "bit 0 set means `STA2`" are `[H]`. The random source is seedable
+  (`new_game_state(..., seed=)`) and snapshots keep the idle fields.
 - **`DUCK` while Down is held (AN5).** `Input` gains `down` (level-triggered)
   and the default keymap binds it to `↓` / `S`. A grounded player holding Down
   draws `DUCK`: a one-shot, 6-pose clip at rate 65/256 that starts at pose 0

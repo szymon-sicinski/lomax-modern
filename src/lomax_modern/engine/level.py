@@ -43,6 +43,10 @@ PLAYER_NMY_NAME = "Hero"
 #: keyframe is the player's standing pose (``STA1`` = "stand").
 PLAYER_STAND_ANIM = "STA1"
 
+#: Row 31's idle fidget clip (§2.6.2 a/d): played once, at rate 68, when the idle
+#: counter reaches the threshold and bit 0 of the random source is set [H].
+PLAYER_IDLE_ANIM = "STA2"
+
 #: The clip drawn for a grounded player with ``0 < |vx| <= 2.0``.  The original
 #: selects ``WALK`` below the speed gate (``cmp |vx|, 0x20000`` / ``jg`` at VA
 #: ``0x411F79``; ``docs/file-formats.md`` §2.6.2 a row 34), and 2.0 px/tick is this
@@ -83,6 +87,7 @@ PLAYER_DUCK_ANIM = "DUCK"
 #: by naming it here — ``STA2`` (AN6) needs no new loader.
 PLAYER_CLIP_TAGS = (
     PLAYER_STAND_ANIM,
+    PLAYER_IDLE_ANIM,
     PLAYER_WALK_ANIM,
     PLAYER_RUN_ANIM,
     PLAYER_DUCK_ANIM,
