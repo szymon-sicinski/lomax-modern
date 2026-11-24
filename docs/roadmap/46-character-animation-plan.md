@@ -1,7 +1,10 @@
 # 46. Character animation — plan + budget
 
 > **Status: shipped.** On `main` = `ed69950` slices AN1–AN6 (including
-> AN3b) are merged and AC1–AC9 are verified. The player is a small state
+> AN3b) are merged. AC1–AC7 were verified by execution on merged `main`; AC8
+> (duck) and AC9 (idle) were verified by unit tests only until the maintainer
+> watched the animations on a real display (Wayland, his machine, 2026-11-24)
+> and judged them correct — that look is their visual verification. The player is a small state
 > machine that draws the original's own clips, each pose placed by its
 > `dx`/`dy` (§2.6.2 c): `STA1`/`STA2` (the data-driven idle cycle), `WALK`/`RUN`
 > chosen by `|vx|`, `JMP1`/`JMP2`, `FLO1`/`FLO2`, `LND1`, and `DUCK` while Down

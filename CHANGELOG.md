@@ -8,6 +8,22 @@ Versioning: [Semantic Versioning](https://semver.org/).
 
 ### Added
 
+- **First-level plan (`docs/roadmap/47-first-level-plan.md`, docs only, no
+  code).** The next milestone — make the first level of the first world fully
+  recreated and improve the test worlds — is scoped. Reading the executable's
+  24-entry section table (VA `0x466450`) shows the first level is
+  `MEDIEVAL.WLD` section 0, sub-level 0 (plane 0, 198 x 40 cells, backdrop
+  planes 11-13); `VILLAGE` and `ED`, today's test worlds, are sections 2 and 18.
+  The plan defines "fully recreated" as 19 acceptance criteria, measures the
+  engine against them (no backdrop, all-solid collision, no fail state, 3 of 15
+  object names resolved, a text-only HUD, no enemies), adds Q41-Q50 to the open
+  questions, and slices the work into 5 disassembly passes, 13 builder PRs and a
+  closing synthesis. Per the maintainer's answers the `Henchlemming` moves (its
+  handler is read in its own pass; no other enemy AI is ported), and the section
+  table is read at runtime from the user's own `LOMAX.EXE` — nothing from the
+  executable is embedded. Plan 46's Status block now says AC8/AC9 were verified
+  by unit tests only until the maintainer watched them on a real display.
+
 - **Character-animation milestone shipped (plan 46, slices AN1-AN6).**
   The engine now draws the original's own clips for the player: `STA1`/`STA2`
   idle, `WALK`/`RUN`, `JMP1`/`JMP2`, `FLO1`/`FLO2`, `LND1` and `DUCK`.
