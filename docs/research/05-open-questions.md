@@ -108,6 +108,11 @@ these can be answered from public documentation alone.
 > 18; the questions are what the engine still lacks to recreate it — flow and
 > fail rule, collision values, backdrop, camera, HUD, object roles, `Start`'s
 > origin, and the provenance of the maintainer's references.
+>
+> **Revision v13** (first-level plan revision 2, 2026-11-24). Q49 answered by the
+> maintainer: both references are from a **console** version, so their HUD
+> layout, view width and translucency may differ from the PC build. Q50 added:
+> the `Henchlemming` handler (`0x42DD70`), brought into scope by the maintainer.
 
 | # | Question | Why it matters | How to resolve |
 |---|---|---|---|
@@ -159,7 +164,8 @@ these can be answered from public documentation alone.
 | Q46 | Which sprites, positions, initial values and update rules make up the four HUD elements, and what is a `Moneybag` worth? | The reference shows four elements; the engine prints one text line | ❓ **open** `[H]` — candidates are `MAIN.WLD`'s `Display`, `Icons`, `Items`, `Inserts` and `Timer` records |
 | Q47 | What are the role and idle clip of each of the 15 names placed in `MEDIEVAL` plane 0, and which does the route to `Exit` need? | 12 of the 15 names are one grey marker today (plan 47 G5) | ❓ **open** `[H]` — read the 89 handlers at VA `0x4647B8` for those 15 indices |
 | Q48 | Is `Start`'s `(x, y)` the collision box's top-left or the actor's feet origin; what are the hero's initial facing, jump kind (Q40a) and collision box? | The engine places a 12 × 14 box top-left on the placement; the hero falls 73 px at the first level's start | ❓ **open** `[H]` — read the spawn build `0x40F856` |
-| Q49 | Are the maintainer's screenshot and gameplay video captures of the PC build or of a console build, and what differs (HUD layout, view width, translucency)? | The references are 16:9 and dithered; the engine's frame is 320 × 240 | ❓ **open** — a maintainer answer |
+| Q49 | Are the maintainer's screenshot and gameplay video captures of the PC build or of a console build, and what differs (HUD layout, view width, translucency)? | The references are 16:9 and dithered; the engine's frame is 320 × 240 | ✅ **answered (maintainer, 2026-11-24)** — both are from a **console** version; the HUD layout, view width and translucency may differ from the PC build, so plan 47's criteria are anchored to the code and data of the PC install and the references are scene-content evidence only |
+| Q50 | What does the `Henchlemming` handler (`0x42DD70`, table index 84) do: states and transitions, movement (speed, direction, what drives its `JUMP` clip), turning, collision with the level, ledge and wall reaction, wake rule, contact with the hero (damage, life, knockback, invulnerability), whether and how it dies, randomness, and which routines it shares with the other enemy handlers? | The maintainer wants the 8 `Henchlemming`s of the first level to move (plan 47, D2). Today the engine has no enemy entity; the type has two clips only, `STAY` (5 keyframes) and `JUMP` (6), and 8 placements in plane 0 `[M]` | ❓ **open** `[H]` — read `0x4647B8[84]` = `0x42DD70` and what it calls (plan 47 FL4b) |
 
 **Opened by the LMX-7 reports (2026-11-17), resolved by the tile-pipeline pass
 (2026-11-18).** The LMX-7 `TTAB` framing — "8 bytes per 16×16 tile, four
