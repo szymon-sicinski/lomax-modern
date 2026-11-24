@@ -677,7 +677,12 @@ at the engine's only ground speed (2.0) draws `WALK`, so
 * **Falling without a jump [V path, H coverage].** Walking off a ledge sets
   the airborne bit at `0x410F3A` without touching bit `0x2`, and touchdown
   (`0x410E19`) does not clear it either — so such a fall draws the clip of the
-  *last* jump kind. Every writer of bit `0x2` was not enumerated.
+  *last* jump kind. Every writer of bit `0x2` was not enumerated. Its value at
+  **level load** is not traced either, so the engine keeps it in one constant,
+  `JUMP_STRAIGHT_AT_LEVEL_START = False` — bit clear, the moving kind **[H]**
+  (Q40a) — and with it the 120-tick `VILLAGE` slice's spawn fall draws `JMP2`
+  on ticks 0–5 and `FLO2` on ticks 6–17, whose landing at tick 18 arms no
+  `LND1` (measured; plan §1.3 AC1).
 * **`FLO1` / `FLO2` are the fast-fall clips, not a slow float [V].** They are
   selected when `vy` ≥ 2.5 px/tick downward (rows 18/21), on the same bit `0x2`
   split. The 0.125 held-down fall of §2.9 is a different mechanic; this
@@ -690,7 +695,18 @@ at the engine's only ground speed (2.0) draws `WALK`, so
   current clip is not `SPIN` and state `0x100` is clear; otherwise 0. The
   ground branch then draws `LND1` (one pose) while the counter is non-zero
   (row 26), so **`LND1` is shown for 10 ticks after a straight jump, never after
-  a moving jump**, and a left/right input cuts it short.
+  a moving jump**, and a left/right input cuts it short. The engine follows
+  that order (`engine/state.py`, `_update_air_and_landing`): the counter is
+  decremented and `LND1` selected first, and only then does a left/right input
+  zero the counter (`0x411D50`) — so held left/right draws **exactly one** tick
+  and an input first pressed on the *k*-th `LND1` tick draws *k* (both covered
+  by `tests/unit/test_air_states.py`). Measured: `slice --world VILLAGE
+  --frames 120` prints `clips: STA1 49, WALK 8, LND1 1, JMP1 24, JMP2 23,
+  FLO2 15`; the single `LND1` tick is the tick-79 landing after the straight
+  jump at tick 65, with right held **[M — measured in this engine, not in the
+  original]**. Which frame the arm at `0x410EB4` shares with this block, and
+  that no earlier selector branch bypasses `0x411D2D` on that tick, remain
+  untraced **[H]**.
 
 #### c. Placement: the sign and origin of `dx`/`dy` (Q39)
 
@@ -803,7 +819,12 @@ is frame *S − 1*, confirming §2.6.1's 1-based step **[V]**), then:
   `vy` > 1.0 → pose 6; > −0.5 → 5; > −2.0 → 4; otherwise 3, and pose 2 when
   `vy` ≤ −3.5 (`JMP1`) / ≤ −3.875 (`JMP2`). During the lockout the clip runs at
   rate 64 from pose 0, which reaches poses 0–2 over a straight jump's 10 ticks
-  and 0–1 over a moving jump's 5 [derived].
+  and 0–1 over a moving jump's 5 [derived]. The engine implements exactly this
+  (`engine/state.py`: `select_air_clip`, `air_pose_from_vy`,
+  `air_clip_rate_px256`, and the lockout pose carried in `Player.air_frame` at
+  rate 64), and AN4 measured the resulting per-tick tags on the `VILLAGE`
+  slice: 62 airborne ticks drawn as `JMP1` 24 + `JMP2` 23 + `FLO2` 15, with no
+  ground clip inside an air span **[M]** (plan §1.3 AC1).
 * **Idle [V].** Standing still holds `STA1` pose 0 (rate 0) for a random
   30–93 ticks (threshold 100 at level start, `0x40F986`), then plays `STA2` or
   `STA1` once at its own rate (50/50), then freezes again (rows 30–31). `STA2`
@@ -812,9 +833,12 @@ is frame *S − 1*, confirming §2.6.1's 1-based step **[V]**), then:
 
 **What stays open.** The *meaning* of several state bits (rows graded [H]); the
 owner of the clips drawn on other actors; whether anything other than terrain
-1 lifts `|vx|` above 2.0; and how the engine's player position maps onto the
+1 lifts `|vx|` above 2.0; how the engine's player position maps onto the
 original's origin (`0x59F23C`/`0x59F240`) — the placement rule itself is
-settled.
+settled; and, for the air states, the jump kind at level start and whether the
+original zeroes `vx` on a wall contact, so that a jump launched against a wall is
+a *straight* jump there too (Q40; the engine draws the straight kind in that
+case and says so in its `JUMP_STRAIGHT_AT_LEVEL_START` comment).
 
 ### 2.7 Palette rules that bite any art pipeline
 

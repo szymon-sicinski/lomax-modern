@@ -305,6 +305,26 @@ Versioning: [Semantic Versioning](https://semver.org/).
 
 ### Changed
 
+- **An airborne player draws the original's jump and fast-fall clips, and a
+  straight jump lands on `LND1`** — AN4 of
+  `docs/roadmap/46-character-animation-plan.md`, per `docs/file-formats.md`
+  §2.6.2 a rows 14–21/26, b and d. The jump kind comes from the **resolved**
+  `vx` at launch (a wall zeroes it): `vx = 0` → `JMP1` with a 10-tick lockout,
+  `vx ≠ 0` → `JMP2` with 5, and a fall without a jump keeps the last kind (its
+  value at level start is not traced, so one constant,
+  `JUMP_STRAIGHT_AT_LEVEL_START = False`, holds the choice **[H]**). The
+  lockout clip runs at 64/256 pose per tick from pose 0; after it the pose is
+  taken from `vy` (> 1.0 → 6, > −0.5 → 5, > −2.0 → 4, else 3, pose 2 near the
+  apex) at rate 0, and `vy ≥ 2.5` switches to `FLO1`/`FLO2` (rates 64/68).
+  Touchdown arms a 10-tick `LND1` counter only after the straight kind, and a
+  left/right input cancels it **after** that tick's `LND1` is selected, so a
+  straight-jump landing with left/right held draws exactly one tick. `LND1`,
+  `JMP1`, `JMP2`, `FLO1`, `FLO2` join the clip table, and no airborne tick can
+  select `STA1`/`WALK`/`RUN` any more; `slice --world VILLAGE --frames 120`
+  prints `clips: STA1 49, WALK 8, LND1 1, JMP1 24, JMP2 23, FLO2 15` (was
+  `STA1 61, WALK 59`), with the air-clip total equal to the 62 airborne ticks.
+  Q40 records what stays untraced: the original's level-start kind, and
+  whether it zeroes `0x59F24C` on a wall contact.
 - **The ground-moving player draws `WALK`, not `RUN`** — the original's rule
   (`docs/file-formats.md` §2.6.2 a rows 34–35, VA `0x411F79`): grounded and
   `0 < |vx| ≤ 2.0` → `WALK`, `|vx| > 2.0` → `RUN`, tested with a strict `>`, so

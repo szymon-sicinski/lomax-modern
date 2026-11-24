@@ -220,7 +220,10 @@ def run_slice(
             f"{PLAYER_WALK_ANIM} {len(walk_poses)} whole-body poses at "
             f"{rate}/{POSE_PHASE} pose per tick at {WALK_SPEED:g} px/tick "
             f"(|vx|/0x700; {POSE_PHASE / rate:.1f} ticks per pose) [V]; "
-            f"{run_note}; facing = single sprite mirrored; ANIM "
+            f"{run_note}; airborne: JMP1/JMP2 by jump kind (a launch at the "
+            f"resolved vx = 0 is straight), FLO1/FLO2 at vy >= 2.5, LND1 for 10 "
+            f"ticks after a straight landing, cut to 1 while left/right is held; "
+            f"facing = single sprite mirrored; ANIM "
             f"sprites through HEAD palette slot {SPRITE_PALETTE_SLOT}, tiles "
             f"through slot {DEFAULT_PALETTE_SLOT}"
         )

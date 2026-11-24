@@ -11,8 +11,20 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 
 from .entities import (
+    AIR_POSE2_MAX_VY_MOVING,
+    AIR_POSE2_MAX_VY_STRAIGHT,
+    AIR_POSE4_MIN_VY,
+    AIR_POSE5_MIN_VY,
+    AIR_POSE6_MIN_VY,
+    FASTFALL_MIN_VY,
+    FLO1_RATE,
+    FLO2_RATE,
     GRAVITY,
+    JUMP_LOCKOUT_MOVING,
+    JUMP_LOCKOUT_RATE,
+    JUMP_LOCKOUT_STRAIGHT,
     JUMP_SPEED,
+    LANDING_TICKS,
     MAX_FALL,
     WALK_SPEED,
     Collectible,
@@ -23,6 +35,11 @@ from .entities import (
 )
 from .level import (
     CELL_PX,
+    PLAYER_FASTFALL_ANIM,
+    PLAYER_FASTFALL_MOVING_ANIM,
+    PLAYER_JUMP_ANIM,
+    PLAYER_JUMP_MOVING_ANIM,
+    PLAYER_LAND_ANIM,
     PLAYER_RUN_ANIM,
     PLAYER_STAND_ANIM,
     PLAYER_WALK_ANIM,
@@ -89,14 +106,73 @@ def pose_rate_px256(vx: float) -> int:
     return speed_px16(vx) // rule.rate_divisor
 
 
+def _advance(phase: int, frame: int, rate_px256: int) -> tuple[int, int]:
+    """Add ``rate_px256`` to a 1/256-pose position; return ``(frame, phase)``."""
+    phase += rate_px256
+    steps, phase = divmod(phase, POSE_PHASE)
+    return frame + steps, phase
+
+
 def advance_pose(player: Player, rate_px256: int) -> None:
     """Add ``rate_px256`` to the phase and carry whole poses into ``anim_frame``.
 
     Integer only, so rate 73 holds 3, 4, 3, 4... ticks and never drifts.
     """
-    player.anim_phase += rate_px256
-    steps, player.anim_phase = divmod(player.anim_phase, POSE_PHASE)
-    player.anim_frame += steps
+    player.anim_frame, player.anim_phase = _advance(
+        player.anim_phase, player.anim_frame, rate_px256
+    )
+
+
+def air_pose_from_vy(vy: float, *, straight: bool) -> int:
+    """The post-lockout jump pose, taken from ``vy`` (down positive) [V].
+
+    ``docs/file-formats.md`` §2.6.2 d "Air poses follow ``vy``, not time"
+    (``0x411A68``-``0x411AB5`` for ``JMP1``, ``0x411BEB``-``0x411C38`` for
+    ``JMP2``).  Order matters: the near-apex pose 2 is tested first, because
+    every other gate is a ``>`` on a larger ``vy``.
+    """
+    if straight and vy <= AIR_POSE2_MAX_VY_STRAIGHT:
+        return 2
+    if not straight and vy <= AIR_POSE2_MAX_VY_MOVING:
+        return 2
+    if vy > AIR_POSE6_MIN_VY:
+        return 6
+    if vy > AIR_POSE5_MIN_VY:
+        return 5
+    if vy > AIR_POSE4_MIN_VY:
+        return 4
+    return 3
+
+
+def air_clip_tags(player: Player) -> tuple[str, str]:
+    """``(jump tag, fast-fall tag)`` for the player's jump kind (rows 14/18/20/21)."""
+    if player.jump_straight:
+        return PLAYER_JUMP_ANIM, PLAYER_FASTFALL_ANIM
+    return PLAYER_JUMP_MOVING_ANIM, PLAYER_FASTFALL_MOVING_ANIM
+
+
+def select_air_clip(player: Player) -> tuple[str, int]:
+    """The airborne clip: the jump clip, or the fast-fall clip in a fast fall [V]."""
+    jump_tag, fall_tag = air_clip_tags(player)
+    if player.jump_lockout > 0:
+        return jump_tag, player.air_frame
+    if player.vy >= FASTFALL_MIN_VY:
+        return fall_tag, player.air_frame
+    return jump_tag, air_pose_from_vy(player.vy, straight=player.jump_straight)
+
+
+def air_clip_rate_px256(player: Player) -> int:
+    """The air clip's pose advance this tick, in 1/256 poses.
+
+    64 while the jump lockout runs (time-driven, rows 14/20), 64/68 for
+    ``FLO1``/``FLO2`` (their own rates, rows 18/21), and **0** once the lockout
+    has ended and the pose is forced from ``vy`` (row 19, ``0x411975``).
+    """
+    if player.jump_lockout > 0:
+        return JUMP_LOCKOUT_RATE
+    if player.vy >= FASTFALL_MIN_VY:
+        return FLO1_RATE if player.jump_straight else FLO2_RATE
+    return 0
 
 
 def select_clip(player: Player) -> tuple[str, int]:
@@ -105,19 +181,26 @@ def select_clip(player: Player) -> tuple[str, int]:
     **Pure**: a function of the player's own state — no I/O, no module-level
     mutable state, no level.  The pair is the key into the level's clip table
     (``Level.clip_pose``), so the render path names no sprite id and needs no
-    branch per clip; a later slice changes *this* function (air states in AN4,
-    duck in AN5, idle in AN6) instead of the renderer.
+    branch per clip; a later slice changes *this* function (duck in AN5, idle
+    in AN6) instead of the renderer.
 
-    Rules (``docs/file-formats.md`` §2.6.2 a rows 34-35; Q38 is answered [V]):
+    Rules (``docs/file-formats.md`` §2.6.2 a; Q38 is answered [V]):
 
+    * airborne (``not on_ground``) → :func:`select_air_clip`: ``JMP1``/``JMP2``
+      by jump kind, ``FLO1``/``FLO2`` in a fast fall; never a ground clip;
+    * grounded with the landing flag set by :func:`step_player` →
+      :data:`PLAYER_LAND_ANIM` (``LND1``), pose 0 (the clip is one pose);
     * standing (``|vx| == 0``) → :data:`PLAYER_STAND_ANIM` (``STA1``), pose 0;
     * ``0 < |vx| <= 2.0`` → ``WALK``; ``|vx| > 2.0`` → ``RUN``; the pose index is
       :attr:`Player.anim_frame`.
 
     Facing is not part of the choice (the sign of ``vx`` only sets
-    ``player.facing``).  Airborne is not special-cased yet (AN4), so a moving
-    airborne player resolves to ``WALK`` too.
+    ``player.facing``).
     """
+    if not player.on_ground:
+        return select_air_clip(player)
+    if player.lnd1_shown:
+        return PLAYER_LAND_ANIM, 0
     rule = ground_clip_rule(player.vx)
     if rule is None:
         return PLAYER_STAND_ANIM, 0
@@ -190,6 +273,59 @@ def _resolve_y(level: Level, player: Player) -> None:
                 break
 
 
+def _update_air_and_landing(
+    player: Player, inp: Input, *, was_grounded: bool, launched: bool
+) -> None:
+    """The touchdown, landing-counter and air-clip bookkeeping of one tick.
+
+    Mirrors the original's order: the physics (jump kind, landing counter at
+    ``0x410E96``-``0x410EBF``) runs first, then the selector's own state
+    (``0x411D2D``-``0x411D5D`` for ``LND1``, rows 14-21 for the air clips).
+    ``select_clip`` reads what this leaves, so it stays pure and a caller may
+    call it more than once per tick (the slice books the clip it drew, the
+    renderer draws one).
+    """
+    if launched:
+        # 0x4106DE-0x41070B: the kind comes from the *resolved* vx -- the value
+        # _resolve_x leaves, so a jump launched pressed against a wall (vx
+        # zeroed by the wall) is the straight kind.
+        player.jump_straight = player.vx == 0.0
+        player.jump_lockout = (
+            JUMP_LOCKOUT_STRAIGHT if player.jump_straight else JUMP_LOCKOUT_MOVING
+        )
+        player.air_clip_tag = ""  # the clip is set afresh: pose 0, position 0
+    elif player.jump_lockout > 0:
+        # The decrement's own VA is not in §2.6.2 [H]: modelled as one per tick,
+        # ground or air, so a lockout cannot survive a landing.
+        player.jump_lockout -= 1
+
+    player.lnd1_shown = False
+    if player.on_ground:
+        if not was_grounded:
+            # Touchdown: 10 only after the straight kind (bit 0x2), else 0.
+            player.landing_counter = LANDING_TICKS if player.jump_straight else 0
+        if player.landing_counter > 0:
+            player.landing_counter -= 1
+            player.lnd1_shown = True
+            if inp.left or inp.right:
+                # 0x411D50 (`test BYTE PTR ds:0x464435, 0xa0`) runs *after* this
+                # tick's LND1 was selected, so held left/right still draws 1 tick.
+                player.landing_counter = 0
+        return
+
+    tag, _pose = select_air_clip(player)
+    if tag != player.air_clip_tag:
+        # 0x416110: set-if-different resets the clip position; the same clip
+        # keeps advancing, which is why a switch lands on pose 0.
+        player.air_clip_tag = tag
+        player.air_frame = 0
+        player.air_phase = 0
+    else:
+        player.air_frame, player.air_phase = _advance(
+            player.air_phase, player.air_frame, air_clip_rate_px256(player)
+        )
+
+
 def step_player(level: Level, player: Player, inp: Input) -> None:
     """Advance the player one tick: input, gravity, then axis-separated moves.
 
@@ -214,7 +350,9 @@ def step_player(level: Level, player: Player, inp: Input) -> None:
         player.anim_phase = 0
         player.anim_frame = 0
 
-    if inp.jump and player.on_ground:
+    was_grounded = player.on_ground  # capture first, before the jump
+    launched = bool(inp.jump and player.on_ground)
+    if launched:
         player.vy = JUMP_SPEED
         player.on_ground = False
     player.vy = min(player.vy + GRAVITY, MAX_FALL)
@@ -224,6 +362,7 @@ def step_player(level: Level, player: Player, inp: Input) -> None:
     player.y += player.vy
     player.on_ground = False
     _resolve_y(level, player)
+    _update_air_and_landing(player, inp, was_grounded=was_grounded, launched=launched)
 
 
 @dataclass

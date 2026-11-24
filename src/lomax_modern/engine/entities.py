@@ -43,6 +43,48 @@ JUMP_SPEED = -4.0
 #: ``0x410BC2`` (``docs/file-formats.md`` §2.9).
 MAX_FALL = 6.0
 
+#: Ticks of ``LND1`` after a straight-jump touchdown: the landing counter
+#: ``0x59F1CC`` is written with 10 there (``0x410E96``-``0x410EBF``;
+#: ``docs/file-formats.md`` §2.6.2 b).
+LANDING_TICKS = 10
+
+#: The jump lockout ``0x59E764`` in ticks: a launch at ``vx == 0`` — the
+#: straight kind, state bit ``0x2`` — sets 10, a launch at ``vx != 0`` sets 5
+#: (``0x4106DE``-``0x41070B``, §2.6.2 b).
+JUMP_LOCKOUT_STRAIGHT = 10
+JUMP_LOCKOUT_MOVING = 5
+
+#: The jump clip's rate **while the lockout runs**, in 1/256 poses per tick:
+#: 64, one pose every 4 ticks (§2.6.2 a rows 14/20).  Once it reaches 0 the
+#: pose is forced from ``vy`` at rate 0 (row 19, ``0x411975``).
+JUMP_LOCKOUT_RATE = 64
+
+#: ``FLO1`` and ``FLO2``'s own clip rate, in 1/256 poses per tick — the fast-fall
+#: clips, not a slow float (§2.6.2 a rows 18/21).
+FLO1_RATE = 64
+FLO2_RATE = 68
+
+#: The fast-fall clips take over at ``vy`` >= 2.5 px/tick downward
+#: (``cmp vy, 0x28000`` / ``jl`` at ``0x411A33``; §2.6.2 a rows 18/21).
+FASTFALL_MIN_VY = 2.5
+
+#: ``vy`` gates for the post-lockout jump pose, ``vy`` positive downward
+#: (§2.6.2 d "Air poses follow ``vy``, not time", ``0x411A68``-``0x411AB5`` and
+#: ``0x411BEB``-``0x411C38``): above 1.0 pose 6, above -0.5 pose 5, above -2.0
+#: pose 4, otherwise 3 — plus pose 2 while ``vy`` is still at or above -3.5
+#: (``JMP1``) / -3.875 (``JMP2``).
+AIR_POSE6_MIN_VY = 1.0
+AIR_POSE5_MIN_VY = -0.5
+AIR_POSE4_MIN_VY = -2.0
+AIR_POSE2_MAX_VY_STRAIGHT = -3.5
+AIR_POSE2_MAX_VY_MOVING = -3.875
+
+#: The jump kind before any jump has set state bit 0x2: ``False`` = the moving
+#: kind (bit clear, ``JMP2``/``FLO2``).  **[H]** -- §2.6.2 b traces every writer
+#: of the bit (the launch sites) but not what 0x49C4C4 holds at level load, so
+#: a zero-initialised global (bit clear) is this engine's choice, in one place.
+JUMP_STRAIGHT_AT_LEVEL_START = False
+
 
 @dataclass(frozen=True)
 class Input:
@@ -80,6 +122,13 @@ class Player:
     #: Sub-pose accumulator in 1/256-pose units (0..255 is the remainder); the
     #: pose advances whenever it reaches 256 (``state.advance_pose``).
     anim_phase: int = 0
+    jump_straight: bool = JUMP_STRAIGHT_AT_LEVEL_START  # state bit 0x2; straight == JMP1/FLO1
+    jump_lockout: int = 0  # 0x59E764, ticks of the time-driven jump clip still to draw
+    landing_counter: int = 0  # 0x59F1CC, ticks of LND1 still to draw
+    lnd1_shown: bool = False  # set by step_player when this tick's ground branch drew LND1
+    air_clip_tag: str = ""  # the air clip set last tick (actor+0x08's role in the air branch)
+    air_frame: int = 0  # its pose index
+    air_phase: int = 0  # its 1/256-pose position (rate 64/68 while it runs)
 
     @property
     def centre_x(self) -> float:
