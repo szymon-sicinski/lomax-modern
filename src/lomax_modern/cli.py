@@ -981,7 +981,7 @@ def _cmd_anim_clip(args: argparse.Namespace) -> int:
     game folder (:func:`lomax_modern.art.refuse_into_game_folder`).
 
     Each output frame is a *composited stride pose* — every sprite layer of one
-    ``step`` painted at its recorded ``(dx, -dy)`` offset — not a single
+    ``step`` painted at its recorded ``(dx, dy)`` offset (y down) — not a single
     keyframe layer, so the strip/GIF show a whole character walking.
     """
     game_dir = args.game_dir or os.environ.get("LOMAX_GAME_DIR")
@@ -1060,12 +1060,28 @@ def _cmd_anim_clip(args: argparse.Namespace) -> int:
         return 1
 
     unresolved = sorted({f.sprite_index for f in keyframes if not f.resolved})
+    body = anim_clip.body_anchor(
+        anim_clip.resolve_body_poses(
+            world, record_name=args.record, clip_tag=args.name
+        )
+    )
+    if body is None:
+        anchor_line = "anchor: none (clip has no whole-body pose)"
+    else:
+        anchor_line = (
+            f"anchor: body top row dy {body.top_min}..{body.top_max} "
+            f"(offset-placed spread {body.offset_spread} px); bottom-pinned top "
+            f"spread {body.bottom_pinned_spread} px; body bottom row "
+            f"{body.bottom_min}..{body.bottom_max} -- placement [V] "
+            f"docs/file-formats.md 2.6.2 c"
+        )
     lines = [
         f"world: {world_path.name}",
         f"clip: {args.record}.{args.name} ({len(keyframes)} keyframes -> "
         f"{len(poses)} composited poses)",
+        anchor_line,
         f"poses: {len(poses)} frames, each a base sprite (the whole character) "
-        f"with its smaller overlay painted on top at (dx, -dy)",
+        f"with its smaller overlay painted on top at (dx, dy), y down",
     ]
     if unresolved:
         lines.append(
@@ -1079,9 +1095,9 @@ def _cmd_anim_clip(args: argparse.Namespace) -> int:
     lines.append(f"strip: {stem}_strip.png")
     lines.append(f"gif: {stem}.gif ({args.fps} fps)")
     lines.append(
-        "alignment: dx/dy are signed draw offsets with the game's y-up axis; "
-        "each pose composites its layers at (dx, -dy) -- docs/file-formats.md "
-        "2.6.1 (anchor [H])"
+        "alignment: top-left = origin + (dx, dy), y down, mirrored about the "
+        "origin column for facing -x; each pose composites its layers there "
+        "-- docs/file-formats.md 2.6.2 c [V]"
     )
     print("\n".join(lines))
     return 0

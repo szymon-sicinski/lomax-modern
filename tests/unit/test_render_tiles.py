@@ -37,7 +37,12 @@ from lomax_modern.engine.level import (
     load_clip_table,
 )
 from lomax_modern.engine.state import MOVE_ANIM_TICKS_PER_POSE
-from lomax_modern.engine.render import COLOUR_PLAYER, COLOUR_SKY
+from lomax_modern.engine.render import (
+    COLOUR_PLAYER,
+    COLOUR_SKY,
+    pose_origin,
+    pose_top_left,
+)
 from tests.fixtures.synth import (
     anim_frames_payload,
     anim_payload,
@@ -360,10 +365,10 @@ def test_render_tiles_blits_the_player_sprite_not_the_marker(tmp_path: Path) -> 
     # The marker is gone: the sprite (palette index 2 -> blue, via the sprite
     # slot 0) is drawn instead.
     assert COLOUR_PLAYER not in frame.pixels
-    # Player box at (0,0) is 12x14; a 4x4 sprite is centred (x=4) with feet at
-    # the box bottom (y=10), so its top-left is (4, 10) in the frame.
-    assert frame.pixel(4, 10) == BLUE565
-    assert frame.pixel(7, 13) == BLUE565  # the sprite's bottom-right corner
+    # Player box at (0,0) is 12x14: origin = (centre_x 6, feet row 13); the
+    # STA1 pose has dx=dy=0, so the 4x4 sprite's top-left is (6, 13).
+    assert frame.pixel(6, 13) == BLUE565
+    assert frame.pixel(9, 16) == BLUE565  # the sprite's bottom-right corner
 
 
 def test_render_tiles_sprite_slot0_tile_slot1(tmp_path: Path) -> None:
@@ -395,12 +400,11 @@ def test_render_tiles_sprite_slot0_tile_slot1(tmp_path: Path) -> None:
     # The standing sprite (index 1 through slot 0) is green at its top-left —
     # it must NOT reuse the tile slot's red.  Camera is clamped to (0,0) here
     # (the 64x64 playfield is smaller than the 320x240 viewport).
-    sprite = level.player_sprite
-    assert sprite is not None
+    pose = level.clip_pose(PLAYER_STAND_ANIM, 0)
+    assert pose is not None
     cam_x, cam_y = camera(level, state.player, 320, 240)
     assert (cam_x, cam_y) == (0, 0)
-    sx = int(state.player.centre_x - sprite.width / 2) - cam_x
-    sy = int(state.player.y + state.player.height - sprite.height) - cam_y
+    sx, sy = pose_top_left(state.player, pose)
     assert frame.pixel(sx, sy) == GREEN565
     assert frame.pixel(sx, sy) != RED565
 
@@ -508,9 +512,9 @@ def test_moving_player_draws_the_run_pose_through_the_sprite_slot(
 
     # Floor tiles through the tile slot (1): red.
     assert frame.pixel(24, 24) == RED565
-    sprite = level.clips[PLAYER_MOVE_ANIM][0].pixels
-    sx = int(state.player.centre_x - sprite.width / 2) - cam_x
-    sy = int(state.player.y + state.player.height - sprite.height) - cam_y
+    pose = level.clips[PLAYER_MOVE_ANIM][0]
+    sx, sy = pose_top_left(state.player, pose)
+    sx, sy = sx - cam_x, sy - cam_y
     assert frame.pixel(sx, sy) == BLUE565  # sprite slot (0), not the tile slot
     assert COLOUR_PLAYER not in frame.pixels
 
@@ -562,8 +566,7 @@ def test_moving_player_advances_a_pose_per_hold_and_idles_identically(
 
     def corner_colour(state) -> int:
         pose = level.clip_pose(PLAYER_MOVE_ANIM, state.player.anim_frame)
-        sx = int(state.player.centre_x - pose.pixels.width / 2)
-        sy = int(state.player.y + state.player.height - pose.pixels.height)
+        sx, sy = pose_top_left(state.player, pose)
         return render_tiles(level, state).pixel(sx, sy)
 
     # Moving: the pose is held, then advances, then wraps.
@@ -618,9 +621,9 @@ def test_moving_player_mirrors_the_pose_for_the_facing(tmp_path: Path) -> None:
         state = new_game_state(level, spawn_x=48.0, spawn_y=0.0)
         state.tick(Input(**{direction: True}))
         cam_x, cam_y = camera(level, state.player, 320, 240)
-        sprite = level.clips[PLAYER_MOVE_ANIM][0].pixels
-        sx = int(state.player.centre_x - sprite.width / 2) - cam_x
-        sy = int(state.player.y + state.player.height - sprite.height) - cam_y
+        pose = level.clips[PLAYER_MOVE_ANIM][0]
+        sx, sy = pose_top_left(state.player, pose)
+        sx, sy = sx - cam_x, sy - cam_y
         frame = render_tiles(level, state)
         return sx, sy, frame.pixel(sx, sy), frame.pixel(sx + 3, sy)
 
@@ -629,3 +632,96 @@ def test_moving_player_mirrors_the_pose_for_the_facing(tmp_path: Path) -> None:
     assert right[2] == GREEN565 and right[3] != GREEN565  # corner top-left
     assert left[3] == GREEN565 and left[2] != GREEN565  # mirrored: top-right
     assert right[2] == left[3]
+
+
+# ---------------------------------------------------------------------------
+# AN3: pose placement = origin + (dx, dy), y down, mirrored about the origin
+# (docs/file-formats.md 2.6.2 c; the origin mapping is the engine's choice [H])
+# ---------------------------------------------------------------------------
+
+
+def _placement_level(tmp_path: Path, dx: int, dy: int):
+    (tmp_path / "VILLAGE.WLD").write_bytes(
+        _floor_world(
+            8,
+            palette_slot0={1: GREEN15},
+            palette_slot1={1: RED15},
+        )
+    )
+    (tmp_path / "MAIN.WLD").write_bytes(
+        main_world_with_clips(
+            (("RUN", ((6, 1, dx, dy, 0x01),)),),
+            (
+                anim_payload(
+                    frame_count=1, packed=False, width=4, height=4, type_index=5,
+                    pixels=bytes([1]) + bytes(15),
+                ),
+            ),
+        )
+    )
+    return load_level(tmp_path / "VILLAGE.WLD")
+
+
+def _moving(level, direction: str, y: float = 0.0):
+    state = new_game_state(level, spawn_x=48.0, spawn_y=y)
+    state.tick(Input(**{direction: True}))
+    return state
+
+
+def test_pose_is_placed_at_origin_plus_dx_dy(tmp_path: Path) -> None:
+    dx, dy = -3, -8
+    level = _placement_level(tmp_path, dx, dy)
+    state = _moving(level, "right")
+    player = state.player
+    assert player.facing >= 0
+    pose = level.clips[PLAYER_MOVE_ANIM][0]
+    assert (pose.dx, pose.dy) == (dx, dy)
+    assert pose_origin(player) == (
+        int(player.centre_x),
+        int(player.y + player.height - 1),
+    )
+    x, y = pose_top_left(player, pose)
+    assert (x, y) == (
+        int(player.centre_x) + dx,
+        int(player.y + player.height - 1) + dy,
+    )
+    assert camera(level, player, 320, 240) == (0, 0)
+    frame = render_tiles(level, state)
+    assert frame.pixel(x, y) == GREEN565
+    assert frame.pixel(x + 3, y) != GREEN565
+
+
+def test_pose_mirrors_about_the_origin_column(tmp_path: Path) -> None:
+    dx, dy = -3, -8
+    level = _placement_level(tmp_path, dx, dy)
+    state = _moving(level, "left")
+    player = state.player
+    assert player.facing < 0
+    pose = level.clips[PLAYER_MOVE_ANIM][0]
+    w = pose.pixels.width
+    x, y = pose_top_left(player, pose)
+    assert x == int(player.centre_x) + 1 - w - dx
+    assert y == int(player.y + player.height - 1) + dy
+    frame = render_tiles(level, state)
+    assert frame.pixel(x + w - 1, y) == GREEN565  # mirrored corner: top-right
+    assert frame.pixel(x, y) != GREEN565
+
+
+def test_dy_is_added_on_top_of_the_physics_y_without_compensation(
+    tmp_path: Path,
+) -> None:
+    """A 20 px physics displacement moves the drawn row by exactly 20 px."""
+    dy = -10
+    level = _placement_level(tmp_path, 0, dy)
+    ground = _moving(level, "right", y=40.0)
+    air = _moving(level, "right", y=40.0)
+    air.player.y -= 20.0  # as a jump arc would
+    pose = level.clips[PLAYER_MOVE_ANIM][0]
+    for state in (ground, air):
+        _, row = pose_top_left(state.player, pose)
+        assert row == pose_origin(state.player)[1] + dy
+    g_row = pose_top_left(ground.player, pose)[1]
+    a_row = pose_top_left(air.player, pose)[1]
+    assert g_row - a_row == 20
+    x = pose_top_left(air.player, pose)[0]
+    assert render_tiles(level, air).pixel(x, a_row) == GREEN565

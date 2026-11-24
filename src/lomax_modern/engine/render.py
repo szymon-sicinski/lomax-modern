@@ -236,6 +236,27 @@ def overlay_gnmy(
         frame.fill_rect(sx - d // 2, sy - d // 2, d, d, style.colour)
 
 
+def pose_origin(player: Player) -> tuple[int, int]:
+    """Origin column/row the original places poses on (AN3's chosen mapping).
+
+    A **choice**, not a finding [H]: the column is the collision box's
+    horizontal centre, the row is its last row (the feet row).
+    ``docs/file-formats.md`` §2.6.2 c.
+    """
+    return int(player.centre_x), int(player.y + player.height - 1)
+
+
+def pose_top_left(player: Player, pose: anim_clip.BodyPose) -> tuple[int, int]:
+    """Top-left of a pose's drawn layer, in level pixels (y down).
+
+    ``origin + (dx, dy)``; facing -x mirrors about the origin column,
+    ``dx' = 1 - w - dx`` (``0x40C696``).  ``dy`` is applied as-is.
+    """
+    dx = pose.dx if player.facing >= 0 else 1 - pose.pixels.width - pose.dx
+    ox, oy = pose_origin(player)
+    return ox + dx, oy + pose.dy
+
+
 def render_tiles(
     level: Level,
     state: GameState,
@@ -304,20 +325,25 @@ def render_tiles(
     tag, pose_index = select_clip(state.player)
     pose = level.clip_pose(tag, pose_index)
     if pose is not None:
-        # One whole-body sprite per pose (anim_clip.resolve_body_poses), mirrored
-        # for the facing direction: the clip stores a single facing, so left is a
-        # horizontal flip of the right-facing art [H].  Anchored with its bottom
-        # at the collision-box bottom and horizontally centred (the same
-        # convention for every clip; docs/file-formats.md §2.6.1 anchor [H]).
+        # One whole-body sprite per pose (anim_clip.resolve_body_poses).  The
+        # clip stores a single facing (+x), so left is a horizontal flip of the
+        # pixels.  Placement is the original's verified rule: top-left =
+        # origin + (dx, dy), y down, mirrored about the origin column for
+        # facing -x, dy applied as-is on top of the physics y
+        # (docs/file-formats.md 2.6.2 c [V]).  The origin itself is this
+        # engine's chosen mapping -- see pose_origin.
         pixels = pose.pixels
         if state.player.facing < 0:
             pixels = anim_clip.mirrored(pixels)
-        sx = int(state.player.centre_x - pixels.width / 2) - cam_x
-        sy = int(state.player.y + state.player.height - pixels.height) - cam_y
+        sx, sy = pose_top_left(state.player, pose)
+        sx -= cam_x
+        sy -= cam_y
         fb.blit_sprite(pixels.indices, pixels.width, pixels.height, sprite_palette, sx, sy)
     elif (sprite := level.player_sprite) is not None:
         # The clip table has no pose for the chosen tag (a world whose MAIN.WLD
         # lacks the clip): reuse the standing sprite rather than inventing art.
+        # No dx/dy here, so this and the marker path keep their centred /
+        # bottom-pinned placement.
         # Standing pose: centre the sprite on the player's collision box; feet at
         # its bottom.  Flipped to the facing direction.
         if state.player.facing < 0:

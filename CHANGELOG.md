@@ -305,6 +305,14 @@ Versioning: [Semantic Versioning](https://semver.org/).
 
 ### Changed
 
+- **Player poses are placed at origin + (dx, dy), y down, mirrored about the
+  origin column** (`docs/file-formats.md` §2.6.2 c). `render_tiles` no longer
+  bottom-pins and centres the pose and discards `dx`/`dy`; the origin is the
+  collision box's centre column and feet row (a documented choice, Q39).
+  `anim-clip` prints an `anchor:` line (`RUN` 8 px offset-placed vs 9 px
+  bottom-pinned, `WALK` 4 px both). The `(dx, −dy)` composite is gone, and the
+  stale "slow-walk" / "below 2.0" wording is corrected (the original draws
+  `WALK` for `0 < |vx| ≤ 2.0`; this engine still draws `RUN` until AN3b).
 - **The player's clip choice is data: a tag-keyed clip table plus a pure
   `select_clip(player)`.** `engine.level.load_move_poses` (one hard-coded clip)
   becomes `load_clip_table`, which resolves **any** clip tag to its whole-body
