@@ -8,6 +8,14 @@ Versioning: [Semantic Versioning](https://semver.org/).
 
 ### Added
 
+- **`DUCK` while Down is held (AN5).** `Input` gains `down` (level-triggered)
+  and the default keymap binds it to `↓` / `S`. A grounded player holding Down
+  draws `DUCK`: a one-shot, 6-pose clip at rate 65/256 that starts at pose 0
+  and holds its last pose; releasing Down resumes stand/walk. Down on the
+  ground suppresses horizontal input; the collision box is unchanged. The
+  clip, its rate and its hold-last behaviour are `[V]` (§2.6.2 a row 23); when
+  the original sets state `0x4` is untraced, so the engine's setter rule is
+  `[H]`.
 - **`file-formats.md` §2.6.2 — how the original picks, times and places the
   player's poses (AN1, docs only, no code).** A read-only `objdump` pass over
   the player routine (`0x40FB70`) and the actor blit (`0x40C270`) lists all 47

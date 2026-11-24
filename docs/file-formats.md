@@ -626,7 +626,7 @@ Rates are `/256` poses per tick: 64 = one pose every 4 ticks.
 | 20 | **`JMP2`** | air, state bit `0x2` **clear** (moving jump): the same chain as 14–19 with `JMP2` / `FLO2` (`0x411AD8`, `0x411B19`, `0x411B3C`, `0x411B8B`, `0x411BBD`, `0x411BD4`) | `0x411AD8` / `0x411BD4` | **[V]** | as 14 / 19 |
 | 21 | **`FLO2`** | air, `0x2` clear, `vy` ≥ 2.5 | `0x411BBD` | **[V]** | 68 |
 | 22 | `TUMB` | ground, state `0x8` | `0x411C5A` | [V] test; meaning [H] | 64 |
-| 23 | `DUCK` | ground, state `0x4`; one-shot (holds its last pose) | `0x411C7A` | [V] test; state `0x4` is set at `0x410A89` together with a facing update from the left/right input bits | 65 |
+| 23 | `DUCK` | ground, state `0x4`; one-shot (holds its last pose) | `0x411C7A` | [V] test; state `0x4` is set at `0x410A89` together with a facing update from the left/right input bits. **Engine rule [M]/[H]:** this engine selects `DUCK` while grounded and Down is held, one-shot from pose 0 at rate 65, holding its last pose (`engine/state.py`, `_update_duck`); whether the original sets state `0x4` while moving is untraced, and the engine suppresses horizontal input while ducking [H] | 65 |
 | 24 | `DIG1` | ground, state `0x1000000`; clears the bit when it ends | `0x411CD1` | [V] | 73 |
 | 25 | `PUSH` | ground, `0x59F1FC` ≠ 0 (an object pointer) and not state `0x200000` | `0x411CFD` | [V] test; "pushing" [H] | 64 |
 | 26 | **`LND1`** | ground, landing counter `0x59F1CC` ≠ 0 (decremented here, `0x411D37`); cancelled by a left/right input (`test 0x464435, 0xA0` at `0x411D50`) | `0x411D3E` | **[V]** | 64 |

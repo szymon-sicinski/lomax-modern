@@ -29,6 +29,7 @@ from lomax_modern.engine import (
 from lomax_modern.engine.entities import WALK_SPEED
 from lomax_modern.engine.level import (
     PLAYER_CLIP_TAGS,
+    PLAYER_DUCK_ANIM,
     PLAYER_FASTFALL_ANIM,
     PLAYER_FASTFALL_MOVING_ANIM,
     PLAYER_JUMP_ANIM,
@@ -141,6 +142,7 @@ def test_clip_loader_takes_any_tag_not_a_fixed_pair(tmp_path: Path) -> None:
         PLAYER_STAND_ANIM,
         PLAYER_WALK_ANIM,
         PLAYER_RUN_ANIM,
+        PLAYER_DUCK_ANIM,
         PLAYER_LAND_ANIM,
         PLAYER_JUMP_ANIM,
         PLAYER_JUMP_MOVING_ANIM,
@@ -148,7 +150,8 @@ def test_clip_loader_takes_any_tag_not_a_fixed_pair(tmp_path: Path) -> None:
         PLAYER_FASTFALL_MOVING_ANIM,
     )
     # ``STA1`` and ``RUN`` are declared but this file has no such clips: absent, not invented.
-    assert set(default) == {PLAYER_WALK_ANIM}
+    # ``DUCK`` is a declared tag since AN5, so it loads by default as well.
+    assert set(default) == {PLAYER_WALK_ANIM, PLAYER_DUCK_ANIM}
 
     duck = load_clip_table(tmp_path / "MAIN.WLD", clip_tags=("DUCK",))
     assert set(duck) == {"DUCK"}
@@ -313,6 +316,7 @@ def test_slice_report_names_the_clips_it_drew_and_counts_every_tick(
     a straight-jump landing, so it does not arm the landing counter.
     """
     air_tags = (
+        PLAYER_DUCK_ANIM,
         PLAYER_LAND_ANIM,
         PLAYER_JUMP_ANIM,
         PLAYER_JUMP_MOVING_ANIM,
@@ -349,6 +353,7 @@ def test_slice_report_names_the_clips_it_drew_and_counts_every_tick(
         PLAYER_STAND_ANIM: 4,
         PLAYER_WALK_ANIM: 2,
         PLAYER_RUN_ANIM: 0,
+        PLAYER_DUCK_ANIM: 0,
         PLAYER_LAND_ANIM: 0,
         PLAYER_JUMP_ANIM: 0,
         PLAYER_JUMP_MOVING_ANIM: 2,

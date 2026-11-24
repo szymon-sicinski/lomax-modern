@@ -17,7 +17,8 @@ tick:
 
 :meth:`Keymap.update` folds those two sets into one
 :class:`~lomax_modern.engine.entities.Input`.  ``left``/``right`` are
-level-triggered and mutually exclusive (both held ⇒ neutral), while ``jump``
+level-triggered and mutually exclusive (both held ⇒ neutral), ``down`` is
+level-triggered too (true while any down key is held), while ``jump``
 is *edge-triggered*: it is set only from ``pressed``, so a held jump key does
 not re-jump on landing — the exact ``Input.jump`` contract
 (``engine/entities.py``).
@@ -38,6 +39,7 @@ from .engine.entities import Input
 SDLK_SPACE = 0x20  # 32
 SDLK_a = 0x61  # 97
 SDLK_d = 0x64  # 100
+SDLK_s = 0x73  # 115
 SDLK_w = 0x77  # 119
 SDLK_UP = 0x40000052  # 1073741906
 SDLK_DOWN = 0x40000051  # 1073741905
@@ -54,6 +56,7 @@ __all__ = [
     "SDLK_UP",
     "SDLK_a",
     "SDLK_d",
+    "SDLK_s",
     "SDLK_w",
 ]
 
@@ -62,29 +65,31 @@ __all__ = [
 class Keymap:
     """Bindings from keycodes to the ``Input`` axes.
 
-    ``left``/``right``/``jump`` are keycode sets.  ``update`` is level
-    (``left``/``right``) and edge (``jump``) triggered as documented at the
-    module level.  Constructing one with lists or sets coerces them to
+    ``left``/``right``/``jump``/``down`` are keycode sets.  ``update`` is level
+    (``left``/``right``/``down``) and edge (``jump``) triggered as documented at
+    the module level.  Constructing one with lists or sets coerces them to
     ``frozenset`` so the value stays hashable and immutable.
     """
 
     left: frozenset[int] = field(default_factory=frozenset)
     right: frozenset[int] = field(default_factory=frozenset)
     jump: frozenset[int] = field(default_factory=frozenset)
+    down: frozenset[int] = field(default_factory=frozenset)
 
     def __post_init__(self) -> None:
-        for name in ("left", "right", "jump"):
+        for name in ("left", "right", "jump", "down"):
             binding = getattr(self, name)
             if not isinstance(binding, frozenset):
                 object.__setattr__(self, name, frozenset(binding))
 
     @classmethod
     def default(cls) -> "Keymap":
-        """Arrow keys and WASD, with Space / Up / W as jump."""
+        """Arrow keys and WASD, with Space / Up / W as jump and Down / S as duck."""
         return cls(
             left=(SDLK_LEFT, SDLK_a),
             right=(SDLK_RIGHT, SDLK_d),
             jump=(SDLK_SPACE, SDLK_UP, SDLK_w),
+            down=(SDLK_DOWN, SDLK_s),
         )
 
     def update(self, held: Iterable[int], pressed: Iterable[int]) -> Input:
@@ -93,7 +98,8 @@ class Keymap:
         ``held`` is every keycode currently down; ``pressed`` is the subset
         whose press landed this tick.  ``left``/``right`` are set when only
         one side is held (both ⇒ neutral); ``jump`` is set only when a jump
-        key appears in ``pressed``, so holding it never re-triggers a jump.
+        key appears in ``pressed``, so holding it never re-triggers a jump;
+        ``down`` is level-triggered: set while any down key is in ``held``.
         """
         held_keys = frozenset(held)
         pressed_keys = frozenset(pressed)
@@ -103,6 +109,7 @@ class Keymap:
             left=left_held and not right_held,
             right=right_held and not left_held,
             jump=bool(self.jump & pressed_keys),
+            down=bool(self.down & held_keys),
         )
 
 

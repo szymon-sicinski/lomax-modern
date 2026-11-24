@@ -170,10 +170,10 @@ The pads are the letterbox: 4× of 320×240 is 1280×960, centred in 1920×1080.
 
 **Controls.** `lomax-modern play "<install>"` opens the same window as `window`
 and reads the keyboard every tick: arrows or WASD to move, Space / ↑ / `W` to
-jump, Esc to quit (see the runbook, §5). `present`, `slice` and `window` stay
-scripted — they run the engine's built-in walk-right input and never read the
-keyboard. Gamepad support and rebinding remain M5; the engine's actions are
-left, right and jump.
+jump, ↓ / `S` to duck, Esc to quit (see the runbook, §5). `present`, `slice` and
+`window` stay scripted — they run the engine's built-in walk-right input and
+never read the keyboard. Gamepad support and rebinding remain M5; the engine's
+actions are left, right, jump and down.
 
 **There is no music track.** The PC soundtrack was CD audio and a disc-less
 install has none: ambience, jingles and SFX only. Nothing is bundled, downloaded
@@ -269,7 +269,7 @@ the other writers (`present --frame`, `slice --frame/--frames`, `export --out`,
 | `slice <dir>` | Headless vertical slice: map, collision, 60 Hz tick, 16-bit frame. |
 | `present <dir>` | Present the frame at an integer scale; writes a PNG. |
 | `window <dir>` | Run the 60 Hz slice in a live SDL2 window (letterboxed, HUD, scripted input). |
-| `play <dir>` | Play a level live: the keyboard drives the 60 Hz tick (arrows/WASD to move, Space to jump, Esc to quit). |
+| `play <dir>` | Play a level live: the keyboard drives the 60 Hz tick (arrows/WASD to move, Space to jump, ↓/S to duck, Esc to quit). |
 | `gif <frame-dir> --out PATH` | Fold a directory of frame PNGs into one looping animated GIF89a; `--fps` sets the delay, `--max-frames` samples evenly. |
 | `probe-anim-nmy <dir>` | Structural probe of `ANIM`/`NMY`/`GNMY`: offsets and hypotheses scored by coverage, never a claimed parse. |
 | `anim-nmy <dir>` | Decode the recovered `ANIM`/`NMY` framings; report per-world counts. |
