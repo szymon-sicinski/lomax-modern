@@ -678,9 +678,10 @@ at the engine's only ground speed (2.0) draws `WALK`, so
   the airborne bit at `0x410F3A` without touching bit `0x2`, and touchdown
   (`0x410E19`) does not clear it either — so such a fall draws the clip of the
   *last* jump kind. Every writer of bit `0x2` was not enumerated. Its value at
-  **level load** is not traced either, so the engine keeps it in one constant,
-  `JUMP_STRAIGHT_AT_LEVEL_START = False` — bit clear, the moving kind **[H]**
-  (Q40a) — and with it the 120-tick `VILLAGE` slice's spawn fall draws `JMP2`
+  **level load** is now traced (§2.10.c, FL1): a fresh entry sets it — the
+  straight kind **[V]**. The engine still keeps it in one constant,
+  `JUMP_STRAIGHT_AT_LEVEL_START = False` — bit clear, the moving kind, which
+  plan 47's FL8 is to change — and with it the 120-tick `VILLAGE` slice's spawn fall draws `JMP2`
   on ticks 0–5 and `FLO2` on ticks 6–17, whose landing at tick 18 arms no
   `LND1` (measured; plan §1.3 AC1).
 * **`FLO1` / `FLO2` are the fast-fall clips, not a slow float [V].** They are
@@ -835,10 +836,11 @@ is frame *S − 1*, confirming §2.6.1's 1-based step **[V]**), then:
 owner of the clips drawn on other actors; whether anything other than terrain
 1 lifts `|vx|` above 2.0; how the engine's player position maps onto the
 original's origin (`0x59F23C`/`0x59F240`) — the placement rule itself is
-settled; and, for the air states, the jump kind at level start and whether the
-original zeroes `vx` on a wall contact, so that a jump launched against a wall is
-a *straight* jump there too (Q40; the engine draws the straight kind in that
-case and says so in its `JUMP_STRAIGHT_AT_LEVEL_START` comment).
+settled; and, for the air states, whether the original zeroes `vx` on a wall
+contact, so that a jump launched against a wall is a *straight* jump there too
+(Q40b; the jump kind at level start, Q40a, is answered in §2.10.c — a fresh entry
+is the straight kind, which the engine's `JUMP_STRAIGHT_AT_LEVEL_START = False`
+does not yet follow, FL8).
 
 ### 2.7 Palette rules that bite any art pipeline
 
@@ -873,7 +875,7 @@ virtual address + file offset:
 | placement-list resolver (extra word → Nth node, 0-based) | `0x4165F0` | `0x159F0` |
 | player-spawn plane scan (finds the type-0 `Start` placement) | `0x40ED7C` | `0xE17C` |
 | player build (uses the spawn plane index) | `0x40F856` | `0xEC56` |
-| `Exit` handler (proximity → level-complete flag) | `0x427670` | `0x26A70` |
+| `Exit` handler (last 50 px of the plane at the Exit's height → exit flag `0x49C4B0`; §2.10.b) | `0x427670` | `0x26A70` |
 | `Mone` handler (collectable pickup) | `0x428190` | `0x27590` |
 | name→type table (89 four-byte names) — **data** | `0x464650` | — |
 | type handler table (89 function pointers) — **data** | `0x4647B8` | — |
@@ -919,8 +921,9 @@ The player is *not* spawned from this list: a separate level-load scan
 (`0x40ED7C`) walks each plane's list for the `record+0x16 == 0` node (the
 `Start` placement), records its plane in `0x52C540`, and `0x40F856` builds the
 player struct (`0x498F1C`) from that plane — so the player start is the `Start`
-placement's *plane*, and `Start`/`Exit`/`Finish`/`Revive`/`Moneybag` are the
-spawn / exit / checkpoint / collectable types respectively (§2.5).
+placement's *plane*. `Start` (placement flag `0x4000`) is the hero's entry
+point, `Exit` the sub-level exit, `Finish` (flag `0x4000` clear) a section-ending
+lift, `Revive` a checkpoint and `Moneybag` a collectable (§2.5, §2.10).
 
 ### 2.9 Player movement constants (walk/jump/gravity/fall) **[V]**
 
@@ -968,6 +971,315 @@ The jump gravity-lockout and the hold-to-rise counter are the two measured
 mechanics that would make the engine's jump feel exactly like the original's;
 adopting them is follow-up work, not an open question — the mechanism is
 measured, only the engine's adoption is missing.
+
+### 2.10 Level flow, start state and the fail rule (2026-11-24, FL1)
+
+Recovered by a read-only objdump pass over `LOMAX.EXE` for the first-level plan
+([`../roadmap/47-first-level-plan.md`](../roadmap/47-first-level-plan.md), FL1;
+Q41, Q42, Q48). Grades as in §2.6.2: **[V]** an instruction in `LOMAX.EXE`
+carries it, **[M]** measured by running a command, **[H]** a guess /
+interpretation, **[derived]** arithmetic on graded numbers. Every VA can be
+re-read with `objdump -d -M intel --no-show-raw-insn "$LOMAX_GAME_DIR/LOMAX.EXE"`
+written to a file outside the repository.
+
+| Global | Meaning | Grade |
+|---|---|---|
+| `0x4645C4` | section to load (index into the 24-entry table at `0x466450`) | [V] |
+| `0x4645BC` | sub-level within the section | [V] |
+| `0x4645C0` | the section actually loaded (copy of `0x4645C4`, `0x40EBDB`, `0x417CF8`) | [V] |
+| `0x4645C8` | the *story* section: set to the loaded section only when the entry's world index is ≤ 4 (`0x40EBE3`–`0x40EBEF`; indices 0–4 are `MEDIEVAL`…`ED`, plan 47 §1.2), so bonus/map/title loads do not overwrite it | [V] |
+| `0x52C56C` | lives | [V] |
+| `0x59F160` | credits (continues) | [V] |
+| `0x52C6C4` / `0x59E958` / `0x59C718` / `0x52C6D0` | the selector's four mode flags: title, map, bonus, attract demo (names [H], the branches they select are [V]) | [V]/[H] |
+| `0x52C59C` | "level ended — run the selector" flag (main loop `0x404AC4`–`0x404AD6` calls the selector `0x417BD0` when it is set and `0x59F1DC` is clear) | [V] |
+| `0x52C5F4` | screen-transition counter: set to `+64` at a level start and to `−64` when a level ends or the hero dies; the negative count runs up to 0 and then calls `0x405990` and, unless `0x52C59C` is set, rebuilds the level with `0x40F670` (`0x40F646`–`0x40F65D`). Calling it a fade is [H] | [V] |
+| `0x49C4B0` | "exit reached" flag (set by the `Exit` handler) | [V] |
+| `0x46AB44` / `0x46AB48` | respawn point x / y: `−1` on every level load (`0x40EC7A`), set by a touched `Revive` | [V] |
+| `0x59C708` | death timer (300 at a death) | [V] |
+| `0x49C4C4` | hero state bits: `0x1` airborne, `0x2` straight-jump kind (§2.6.2 b), `0x10` frozen (vx and vy zeroed every tick, `0x410BD9`–`0x410BE4`; input cleared, `0x40FBE3`–`0x40FBF8`), `0x200` set at `0x431C89`, inside the code of the `Water` handler (name index 81, `0x4317F0`) [V by address range], `0x40000000` suppresses every life decrement (writers `0x419DEB`, `0x41A00F`; meaning [H]) | [V] bits as read; names [H] where marked |
+| `0x59F23C` / `0x59F240` | hero integer x / y (§2.9) — **the feet origin**, see §2.10.c | [V] |
+
+**Reproduce.** The scripts are scratch files outside the repository and are not
+committed; run them against the user's install:
+
+```
+objdump -d -M intel --no-show-raw-insn "$LOMAX_GAME_DIR/LOMAX.EXE" > /tmp/fl1/lomax.asm
+python3 -I names.py "$LOMAX_GAME_DIR/LOMAX.EXE"      # name index -> handler VA (0x464650 / 0x4647B8)
+python3 -I demo_check.py "$LOMAX_GAME_DIR"           # 0x466410 entries vs DEMOS/: 8/8 exist, 0 name section 0
+env PYTHONPATH=src python3 spawn_facts.py "$LOMAX_GAME_DIR" MEDIEVAL Hero   # Start/Exit/Finish/Revive flags; Hero clip boxes
+```
+
+Measured outputs: handler VAs as listed in §2.10.b; `entries 8, DEMOS file
+exists for 8/8, entries naming section 0: 0`; `DEMOS files: 14`; `Start`
+placement flags have bit `0x4000` in all 11 planes 0–10 that have a `Start`
+(plane 3's is `0x4300`, also with bit `0x4000`); `0x464424` = 240 and
+`0x464420` = 160 (initialised data) [M].
+
+#### §2.10.a How a new game reaches section 0 (Q41)
+
+1. **The reset `0x40EDC0` [V].** Writes 0 to the sub-level `0x4645BC`
+   (`0x40EDD8`) and the story section `0x4645C8` (`0x40EDCD`), 3 to lives
+   `0x52C56C` (`0x40EE06`) and credits `0x59F160` (`0x40EDFA`), 1 to the title
+   flag `0x52C6C4` (`0x40EE2F`) and the map flag `0x59E958` (`0x40EE35`), 0 to
+   the bonus flag `0x59C718` (`0x40EE25`) and the demo flag `0x52C6D0`
+   (`0x40EE3B`). It does not write `0x4645C4`. Callers: `0x403453` (start-up),
+   `0x40E2AA` (it also sets `0x52C59C` at `0x40E2AF`; a menu "new game"
+   command is the reading [H]), `0x417A43` (password accepted), `0x417C27`
+   (selector, game over), `0x41D674` and `0x41D86F` (the `TITLE` level's
+   handler) [V].
+2. **The selector `0x417BD0` [V]** (the branch block is `0x417C2C`–`0x417CDF`).
+   It first resets the game (`0x417C27`) when lives < 0, or when lives and
+   credits are both 0 (`0x417BFC`–`0x417C25`). Then, first match wins:
+   title flag → section 23 (`TITLE`), sub-level 1, lives := 3
+   (`0x417C35`–`0x417C49`); bonus flag → section 21 (`BONUS`), sub-level from a
+   counter `0x59F178` that cycles 0…4, flag cleared (`0x417C5A`–`0x417C90`);
+   map flag → section 22 (`MAP`), sub-level 0 (`0x417C9B`–`0x417CA5`);
+   demo flag → section and sub-level from the table at `0x466410`
+   (`0x417CBA`–`0x417CDA`); otherwise `0x4645C4`/`0x4645BC` are kept as they
+   are. A section ≥ 24 becomes 0 (`0x417CE4`–`0x417CE9`) [V]. Section numbers
+   to world names: plan 47 §1.2 [M].
+3. **`0x466410` is the attract-mode demo playlist, not a map-node table
+   [V]+[M].** Each 8-byte entry holds `section + 1` and `sub-level + 1` as its
+   first two `i16`s (`0x417CC4`–`0x417CD3` subtract 1 from each). The selector
+   then formats a `DEMOS` file name from `section + 1` and `sub-level + 1` with
+   the format string at VA `0x4668A8` (`0x417D02`–`0x417D1A`) and, in title or
+   demo mode only, opens it and copies `0x2000` bytes of it to `0x59C758` as
+   the input record (`0x417D22`–`0x417D83`). Measured: all **8/8** entries name
+   an existing file in `DEMOS/` (14 files), and **0** entries name section 0;
+   the `TITLE` load (section 23, sub-level 1) names an existing file too [M,
+   commands above]. So section 0 is absent from it because it is a demo list.
+   This also narrows Q6 (the `DEMOS` file name is `section + 1`,
+   `sub-level + 1`). The demo flag is set by the `TITLE` handler when the hero's
+   x passes `plane+0x30` + 320 (`0x41D7BA`–`0x41D7D6` store `0x4D2`, then
+   `0x41D88B`) [V] — on the title the hero is driven by the title demo's input,
+   so this acts as an idle time-out [H] — and by `0x419E1F`;
+   the playlist index `0x46AB50` advances and wraps at `0x41C9D8`–`0x41C9EB`
+   [V].
+4. **The path of a new game [V for each write; order of ticks H].** Reset
+   (title = 1, map = 1, story section = 0) → selector loads `TITLE` (23 / 1) →
+   the `TITLE` handler (name-table index 14, `0x41D670`) waits for a key
+   (`0x464440` bits `0x1F8` or `0x40`, `0x41D812`–`0x41D832`), sets `0x52C59C`,
+   and at the end of the transition calls the reset again and clears the title
+   flag (`0x41D86F`–`0x41D874`), leaving the map flag set → selector loads
+   `MAP` (22 / 0) → the `MAP` handler (index 41, `0x424100`) clears the map
+   flag (`0x424109`), and its update `0x4241C0` writes sub-level := 0
+   (`0x424234`), `0x52C59C` := 1 (`0x42423E`) and section := `0x4645C8`
+   (`0x424244`–`0x42424A`) once `0x59F1DC` is set (`0x424224`) → selector, no
+   flag set → **section 0, sub-level 0** is loaded by `0x40EB80(0)`
+   (`0x417DE3`). So a new game reaches section 0 through `TITLE` and `MAP`,
+   with no player choice of a node: the map just carries the story section
+   [V]. The password path is the same with the decoded section:
+   `0x417A43`–`0x417A9C` reset, then set section, lives, credits, story
+   section, sub-level 0, title 0, map 1 [V].
+5. **Section advance is the story section + 1 [V].** The banner routine
+   `0x427940(kind)` with kind 4 (`0x427AFE`) or 6 (`0x427B9E`) sets the map
+   flag and `0x52C59C` and adds 1 to `0x4645C8` when the loaded entry's world
+   index is ≤ 4 (`0x427B56`–`0x427B62`, `0x427BE7`–`0x427BF3`) — the next `MAP`
+   load then hands section + 1 to the selector. Kind 4 is raised by a
+   `Finish`-type lift (§2.10.b); kind 6 by `0x41B495` (handler not identified
+   [H]). The F1/F2/F3 keys call next-section `0x417DF0`, next-sub-level
+   `0x417E30` and the selector only while `0x4645B8` is set
+   (`0x40468C`–`0x4046BC`) — a debug path; neither routine has another caller
+   [V].
+
+#### §2.10.b `Exit`, `Finish`, `Revive` and the continue screen (Q42)
+
+Handler VAs from the name/handler tables (name index → `0x4647B8[index]`) [M,
+the `names.py` command above]: `Start` 0 → `0x42A780`, `Finish` 1 →
+`0x42A7B0`, `Exit` 2 → `0x427670`, `Revive` 3 → `0x427760`, the `TITLE`
+handler 14 → `0x41D670`, the `MAP` handler 41 → `0x424100`, the continue
+handler 42 → `0x424500`.
+
+- **`Exit` (`0x427670`) [V].** Init: clip `EXIT`, `+0x80` := 0, `+0x84` := 30
+  (`0x427687`–`0x427694`). Update `0x4276A0`: it fires when the hero is on the
+  Exit's plane (`0x4276E7`), is **not airborne** (state bit `0x1`, `0x4276F8`),
+  its x is **greater than the plane width in pixels − 50** (`plane+0x10` is the
+  width in 16-px cells, written by the `HEAD` reader at `0x414E4B`; compare at
+  `0x427701`–`0x427717`) and `|hero y − Exit y| < 48` (`0x427719`–`0x42772B`).
+  **The Exit's own x is not read**: the trigger is the last 50 px of the plane
+  at the Exit's height. On firing it sets `+0x80` := 1, `0x59F174` := 1,
+  `0x52C52C` := 1 (input is cleared every tick while this is set,
+  `0x40FBE7`–`0x40FBF8`) and `0x49C4B0` := 1 (`0x42772D`–`0x427744`). It
+  **writes neither `0x4645C4` nor `0x4645BC`**. 30 ticks later it starts the
+  `−64` transition (`0x4276B9`–`0x4276DB`). For L1 (198 cells wide, `Exit` at
+  `(3079, 444)` [M plan 47]): hero x ≥ 3,119 and 396 < hero y < 492 [derived].
+- **The sub-level advance is in the level rebuild `0x40F670` [V].** When the
+  transition ends without `0x52C59C`, `0x40F670` runs; with lives ≠ 0,
+  `0x59C748` = 0 and `0x49C4B0` ≠ 0 it increments `0x4645BC`
+  (`0x40F718`–`0x40F720`), reloads the world with `0x40EB80(0)` and rescans the
+  spawn with `0x40EC40(0)`. **There is no check against the section's
+  sub-level count** at this site [V]; the last sub-level of a section ends on a
+  `Finish` instead (section 0's plane 2 has a `Finish` and no `Exit` [M]).
+- **`Start` and `Finish` are one object [V].** Both handlers call the same init
+  `0x42A820`; placement flag bit `0x4000` (`[placement+0x11] & 0x40`,
+  `0x42A853`, `0x42A867`) chooses the role, **not the name**. With the bit set
+  it is the **hero's entry point** (§2.10.c). With it clear it is a **lift**:
+  update `0x42AD80`, active because `+0x94` = 1 (`0x42A8DC`; `0x42ADF2`). When
+  the hero is on its plane, `|hero x − lift x| < 32`, lift y < hero y <
+  lift y + 120, not airborne, `0x52C52C` = 0 and the input has bit `0x1000`
+  (Up — the bit that subtracts vy at `0x40FDF4`–`0x40FE07`), or any of
+  `0x10F0` when lives < 0 (`0x42ADDF`–`0x42ADED`, `0x42AFF2`–`0x42B06F`), the
+  hero is launched (vy := −4.0, state `|= 0x43`, `0x42B071`–`0x42B094`),
+  pulled to the lift's x and raised (`0x42AF5C`–`0x42AFAF`); once it is 50 px
+  above the lift it raises banner kind 4 (`0x42AFE3`), which advances the story
+  section and returns to `MAP` (§2.10.a 5). Placement flags measured: every
+  `Start` in `MEDIEVAL` planes 0–10 has bit `0x4000` set (11/11) and every
+  `Finish`, `Exit` and `Revive` has it clear [M, `spawn_facts.py`]. L1 has no
+  `Finish`.
+- **`Revive` (`0x427760`) is a checkpoint [V].** Init picks clip `ZWEI` if the
+  placement node's run-time bit 0 (`[node+0x14] & 1`) is set, else `EINS`
+  (`0x42777C`–`0x427797`). Update `0x4277A0`: when not yet touched, no death in
+  progress (`0x59C708` = 0), on the hero's plane, and the Revive's point lies
+  inside the hero's box (the current clip's box, §2.10.c, with 20 px slack
+  below; `0x4277F0`–`0x427831`), it sets node bit 0, stores its own (x, y) in
+  `0x46AB44`/`0x46AB48`, keeps the plane pointer in `0x59E918`, switches to
+  `ZWEI` and plays sound `0x21` (`0x427837`–`0x4278AF`). The node bit survives
+  a death (the rebuild does not clear it) and is cleared only when the level is
+  loaded: `0x40EC40(0)` writes 0 to every node's `+0x14` (`0x40ED8B`) and sets
+  `0x46AB44` := −1 (`0x40EC7A`).
+- **Respawn rule [V].** After a death the rebuild re-runs the entry point's
+  init: if `0x46AB44` ≥ 0 the hero is placed **at the touched `Revive`'s
+  (x, y)** with state 0 (`0x42AAB9`–`0x42AB51`); otherwise the entry sequence
+  of §2.10.c runs again from the `Start`. After an `Exit` (`0x49C4B0` set) the
+  next sub-level's entry point instead places the hero at x = −100 on the
+  floor under the `Start` (`0x42A95F`–`0x42AA15`), and `0x49C4B0` is cleared
+  when the hero x reaches the `Start`'s x (`0x42ADB5`–`0x42ADD9`) — a walk-in
+  [V writes; that the hero walks in on its own is H].
+
+#### §2.10.c The spawn: origin, facing, jump kind, box (Q48, Q40a)
+
+- **The player build `0x40F856`–`0x40FB5D` [V]** (inside the level rebuild
+  `0x40F670`): plane from `0x52C540` (the plane of the last type-0 node found
+  by the scan `0x40ED7C`), clip `STA1` (`0x40F89A`), a placeholder position
+  x = 160, y = the floor probe `0x413B90(plane, 160, 32, 100)`
+  (`0x40F8B9`–`0x40F8DB`), vx = vy = 0, entity flags `0x59F258` := 0
+  (`0x40F8FD`), **state `0x49C4C4` := 0** (`0x40F9A7`), jump lockout
+  `0x59E764` := 0, death timer and contact timer `0x59E938` := 0. Then the
+  spawn pass (`0x4123A0`, called at `0x40FB45`) runs every placement's init,
+  and the entry point overrides the placeholder.
+- **Start origin = the hero's feet, 40 px above the placement [V].** Fresh
+  entry (`0x46AB44` < 0, `0x49C4B0` = 0; `0x42ABA0`–`0x42ACDF`): hero x :=
+  `Start` x, hero y := `Start` y − 40 (`0x42AC10`, `0x42AC22`–`0x42AC3E`).
+  `(x, y)` is the **feet origin (bottom-centre)**, not a box corner: the hero's
+  box offsets are signed and straddle it — `STA1`'s box is x −9…+9,
+  y −41…−1 [M, `spawn_facts.py`] — and the ground probe reads at the origin
+  column `0x413B90(plane, x, y, 4)` (`0x410C4E`–`0x410C66`) [V]. For L1
+  (`Start` (89, 407) [M]): the hero's feet start at **(89, 367)** and the first
+  solid row under x = 89 is y = 480 (plan 47 G6) — a 113 px drop [derived].
+  The engine's "12 × 14 box, top-left on the placement" is therefore not the
+  original's [V].
+- **The entry sequence [V writes; physical reading H].** The same branch sets
+  state `|= 0x53` (airborne `0x1`, straight-jump `0x2`, frozen `0x10`, `0x40`)
+  (`0x42AC35`–`0x42AC56`), the entry point's clip `EINS`, its timer `+0x80` :=
+  240 (`0x42AC6A`), the camera's left/top to hero x − 160 / floor y − 160
+  (`0x42AC77`–`0x42AC9D`; `0x464420` = 160 [M]), `0x59E938` := −1, and starts
+  the `+64` transition. While `+0x80` > −200 the input is cleared (`0x42B257`).
+  The hero is held (state `0x10` zeroes vx/vy) for **240 ticks**; at 0 the
+  entry point clears `0x10`, sets **vy := +4.0 (downward)** and plays sound
+  `0x45` (`0x42B18B`–`0x42B1AF`); when the hero is no longer airborne it clears
+  `0x40`, plays sound `0x1A` and raises banner kind 1 (clip `ZWEI` of the
+  banner object) (`0x42B1ED`–`0x42B242`). Reading the 4 s hold as "the hero
+  appears inside the entry object and drops out" is [H].
+- **Initial facing: +x (right) [V].** Facing is bit `0x8` of the hero's entity
+  flags `0x59F258` (set by Left input `0x8000`, cleared by Right `0x2000`,
+  `0x410A8C`–`0x410ABA`; `0x8000` subtracts and `0x2000` adds vx,
+  `0x40FDC7`–`0x40FDEF`). The build writes 0 (`0x40F8FD`) and no entry branch
+  writes it, so a level starts facing right.
+- **Jump kind at level start — answers Q40a [V].** A fresh entry sets bit `0x2`
+  (`0x42AC3B`, `or 0x53`): the **straight kind**. The drop therefore draws the
+  bit-`0x2` clips (`JMP1`, then `FLO1` once vy ≥ 2.5 — already true at the
+  +4.0 launch) and its touchdown arms `LND1` for 10 ticks, state `0x100` being
+  clear (§2.6.2 b) [derived from §2.6.2 b]. A respawn at a `Revive` and the
+  walk-in after an `Exit` keep the build's state 0 — bit clear, the moving kind
+  (`JMP2`/`FLO2`) [V]. The engine's `JUMP_STRAIGHT_AT_LEVEL_START = False`
+  (`engine/entities.py`) is therefore wrong for a fresh entry; changing it is
+  FL8's, not this pass's.
+- **Collision box [V]+[M].** The hero's box for objects is the **current
+  clip's** four signed words at animation-node `+0x10..+0x16` (the 2nd–5th of
+  the nine `NMY` animation parameters, stored by the `NMY` reader at
+  `0x41528D`–`0x4152A3`): left, top, right, bottom, relative to the feet
+  origin. The player's contact loop builds it from `[0x59F208] + 0x10`
+  (`0x40FB73`–`0x40FB96`, `0x40FE66`–`0x40FEA5`), and the `Revive` test reads
+  the same words (`0x4277B0`). It changes with the clip: `STA1` −9, −41, 9, −1;
+  `WALK` −9, −42, 9, −1; `JMP1` −11, −31, 11, −4; `JMP2` −10, −33, 12, −2;
+  `DUCK` −11, −19, 15, −1 [M, `MAIN.WLD` `Hero` record]. The terrain probes
+  this pass read take the origin column only; how wide the hero is against
+  walls is FL2's question [H].
+
+#### §2.10.d What takes a life (Q42)
+
+- **Contact with a harmful object [V].** The player update walks the entity
+  table at `0x46ABC0` (stride `0x120`, active-slot bitmask `0x52C5A0`,
+  `0x40FED7`–`0x40FF0A`; a second bank from `0x59E768`,
+  `0x4100B2`–`0x4100C9`). An entity counts when its flags `+0x58` have bit
+  `0x20`, it is on the hero's plane, and the hero's clip is not `SPIN` or
+  `TUMB` (unless the entity has `0x200000`) (`0x40FF07`–`0x40FF3C`), and its
+  box overlaps the hero's (entity box mirrored when its flag `0x8` is set,
+  `0x40FF42`–`0x41004F`). The loop is skipped while a death is in progress,
+  while `0x59E938` ≠ 0 or `0x52C568` ≠ 0 (`0x40FE8F`–`0x40FEC9`). If the
+  entity has flag `0x10000` and the hero is airborne, falling, and its feet
+  were above the entity's top on the previous tick, it is a **stomp**:
+  `0x412D90` bounces the hero (vy := −4.0) and plays sound 2
+  (`0x40FFB6`–`0x410092`). Otherwise the hero is **hurt**:
+  `0x412E30(entity x)` (`0x41009A`).
+- **The hurt routine `0x412E30` [V].** No effect while dying, while
+  `0x59E938` ≠ 0, while `0x59F174` is set or with state `0x20000`
+  (`0x412E30`–`0x412E65`). Otherwise state `|= 0x3`. **Without** the power-up
+  (`0x52C570` = 0 and `0x59E944` = 0): a death — death timer `0x59C708` := 300,
+  `0x59E938` := 1000, vy := −4.0, sound `0x20` (`0x412E9F`–`0x412ECC`).
+  **With** it: the power-up is lost (`0x42E850`), sound `0x22`,
+  `0x59E938` := 180, vy := −5.0 (`0x412EDB`–`0x412F14`). Both knock the hero
+  2.5 px/tick away from the source's x unless state `0x200`
+  (`0x412F1E`–`0x412F3C`). While `0x59E938` > 0 the input is cleared and it
+  counts down by 1 a tick (`0x4100D0`–`0x4100E7`). Calling `0x52C570`/`0x59E944`
+  "a power-up" (a helmet, say) is [H]. Other callers of `0x412E30`: `0x41E0D4`,
+  `0x41F849`, `0x428ED1` (inside handlers not identified [H]). Direct writers
+  of the 300 death timer: `0x410216` (the pit, below), `0x412EAE`, `0x41BE99`,
+  `0x41C0F2`, `0x41C3E3` [V]; which objects own the last three is FL4's [H].
+- **The pit [V].** In the player update (`0x4101B4`–`0x41025A`): when state
+  `0x200` is clear, vy ≥ 0 and hero y − camera top (`plane+0x8`) > view height
+  (`0x464424` = 240 [M]) + 60 — i.e. the feet are **more than 60 px below the
+  bottom of the view** — the hero dies: death timer 300, `0x59E938` := 1000,
+  vy := −6.0, sound `0x20`, the power-up is dropped. In a `BONUS`-world
+  section (world index 5) the same fall instead ends the level and returns to
+  `MAP` (`0x4101D3`–`0x41020A`) [V]. **So the original has a pit and no solid
+  floor under the plane** — the engine's solid bottom border (plan 47 G7) is
+  not the original's [derived]. Where the camera may scroll to is Q45 (FL3).
+- **Water [V].** With state `0x200` (set at `0x431C89`, inside the code of the `Water` handler, name index 81, `0x4317F0` [V by address range])
+  the threshold is 30 px below the view (`0x41011A`–`0x410126`) and the life
+  is taken at once, without the death timer (`0x410160`–`0x410166`), then the
+  transition starts or, with no lives and no credits, the game-over banner.
+  "Drowning" is [H].
+- **The death timer [V].** `0x59C708` counts down once a tick
+  (`0x41025F`–`0x41026D`). At **250** (50 ticks after the hit): state
+  `|= 0x10`, `0x42FFB0` on the hero (the death clip [H]), entity flag `0x4`,
+  and **lives − 1** unless state `0x40000000` (`0x4102AA`–`0x4102FB`). At
+  **150**: with lives = 0 and credits = 0 the game-over banner `0x427940(2)`,
+  else the `−64` transition (`0x410272`–`0x4102A0`). The transition then
+  rebuilds the level (64 ticks) — **214 ticks from the hit to the respawn**
+  [derived]. While dying, gravity is 0.125/tick clamped at 6.0
+  (`0x410B27`–`0x410B50`). **The lives decrement sites are `0x410166` and
+  `0x4102FB`**, nowhere else (the other writers: reset `0x40EE06`, selector
+  `0x417C49` and password `0x417A4E` set it, the continue handler sets 0 at
+  `0x4245C5` and −1 at `0x42463F`, `0x42B0C3` sets 3, and `0x40F775`,
+  `0x42CA3D`, `0x42CAD1` add 1 up to 30) [V].
+- **Game over and the spent credit [V].** Lives 0 and credits 0: banner kind 2
+  (`0x427A4D`) sets the title flag and `0x52C59C` → the selector resets the
+  game (`0x417C27`) → `TITLE`. Lives 0 and credits > 0: the rebuild `0x40F670`
+  calls `0x40EC40(0)`, which with lives = 0 scans **only plane slot 19** for
+  the entry point (`0x40EC5B`–`0x40EC6E`) — the continue screen [H: which file
+  supplies slot 19 is not traced]. The continue handler (index 42, `0x424500`)
+  raises banner kind 5 (clip `CONT`), sets lives := 0, shows the credit count,
+  and when the hero lands sets **lives := −1** and `0x52C59C`
+  (`0x42462B`–`0x424649`). A lift (the rule in §2.10.b, with lives < 0) then
+  decides — that the screen carries two of them is [H], the plane was not read:
+  a lift at x < 160 (`0x42B0A4`–`0x42B0CE`) **spends a credit**: credits − 1,
+  lives := 3, `0x52C59C` := 0, `0x59C748` := 1 — the rebuild then skips the
+  sub-level advance and **restarts the same section and sub-level from its
+  `Start`** (`0x40F706`–`0x40F72D`; `0x40EC40(0)` resets the `Revive`s). A lift
+  at x ≥ 160 leaves `0x52C59C` set with lives −1 → the selector resets the game
+  → `TITLE`. Which lift reads "yes" and which "no" is [H] (clips set at
+  `0x42A90C`–`0x42A922`). **The only credit decrement is `0x42B0CE`** [V].
 
 ## 3. `SFX/*.WAV` **[V]**
 
