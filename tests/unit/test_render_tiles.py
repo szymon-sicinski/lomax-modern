@@ -32,11 +32,11 @@ from lomax_modern.engine import (
     run_slice,
 )
 from lomax_modern.engine.level import (
-    PLAYER_MOVE_ANIM,
+    PLAYER_RUN_ANIM,
     PLAYER_STAND_ANIM,
+    PLAYER_WALK_ANIM,
     load_clip_table,
 )
-from lomax_modern.engine.state import MOVE_ANIM_TICKS_PER_POSE
 from lomax_modern.engine.render import (
     COLOUR_PLAYER,
     COLOUR_SKY,
@@ -410,23 +410,25 @@ def test_render_tiles_sprite_slot0_tile_slot1(tmp_path: Path) -> None:
 
 
 # ---------------------------------------------------------------------------
-# The moving player: the RUN clip, its hold rate and its mirrored facing
+# The moving player: the WALK clip, its hold rate and its mirrored facing
 # ---------------------------------------------------------------------------
 
 
-def test_move_clip_is_run_and_the_whole_body_sprite(tmp_path: Path) -> None:
-    """The moving player is wired to ``RUN``'s full-body sprite, not ``WALK``.
+def test_move_clip_is_walk_and_the_whole_body_sprite(tmp_path: Path) -> None:
+    """The moving player is wired to ``WALK``'s whole-body sprite at ground speed.
 
-    ``WALK`` is the slow-walk clip (speed gate at VA ``0x411F79``); the engine
-    must read the clip whose per-step layer is a whole character.  The table is
-    keyed by tag, so "not ``WALK``" is visible as ``WALK`` being absent.
+    The original draws ``WALK`` for ``0 < |vx| <= 2.0`` and ``RUN`` only above
+    it (``docs/file-formats.md`` §2.6.2 a rows 34-35), so the engine's only
+    ground speed (2.0) is ``WALK``.  ``RUN`` stays in the table, loaded but not
+    drawn.
     """
-    assert PLAYER_MOVE_ANIM == "RUN"
-    run_sprite = anim_payload(
+    assert PLAYER_WALK_ANIM == "WALK"
+    assert PLAYER_RUN_ANIM == "RUN"
+    walk_sprite = anim_payload(
         frame_count=2, packed=False, width=6, height=8, type_index=5,
         pixels=bytes([2] * 48),
     )
-    walk_sprite = anim_payload(
+    run_sprite = anim_payload(
         frame_count=1, packed=False, width=2, height=2, type_index=7,
         pixels=bytes([3] * 4),
     )
@@ -434,15 +436,15 @@ def test_move_clip_is_run_and_the_whole_body_sprite(tmp_path: Path) -> None:
         main_world_with_clips(
             (
                 # Keyframe sprite bytes are 1-based: 6 -> type_index 5, 8 -> 7.
-                ("RUN", ((6, 1, -6, -44, 0x01), (6, 2, -6, -47, 0x01))),
-                ("WALK", ((8, 1, 0, 0, 0x01),)),
+                ("WALK", ((6, 1, -6, -44, 0x01), (6, 2, -6, -47, 0x01))),
+                ("RUN", ((8, 1, 0, 0, 0x01),)),
             ),
-            (run_sprite, walk_sprite),
+            (walk_sprite, run_sprite),
         )
     )
     table = load_clip_table(tmp_path / "MAIN.WLD")
-    assert set(table) == {PLAYER_MOVE_ANIM}  # RUN, never WALK
-    poses = table[PLAYER_MOVE_ANIM]
+    assert set(table) == {PLAYER_WALK_ANIM, PLAYER_RUN_ANIM}
+    poses = table[PLAYER_WALK_ANIM]
     assert [p.step for p in poses] == [1, 2]
     assert {p.sprite_index for p in poses} == {6}
     assert [(p.pixels.width, p.pixels.height) for p in poses] == [(6, 8), (6, 8)]
@@ -473,10 +475,10 @@ def _floor_world(
     )
 
 
-def test_moving_player_draws_the_run_pose_through_the_sprite_slot(
+def test_moving_player_draws_the_walk_pose_through_the_sprite_slot(
     tmp_path: Path,
 ) -> None:
-    """While moving, the player is the ``RUN`` pose painted through palette slot 0.
+    """While moving, the player is the ``WALK`` pose painted through palette slot 0.
 
     Index 2 is blue in the sprite slot (0) and red in the tile slot (1): the
     sprite must pick blue while the floor tiles around it stay red.
@@ -491,7 +493,7 @@ def test_moving_player_draws_the_run_pose_through_the_sprite_slot(
     (tmp_path / "MAIN.WLD").write_bytes(
         main_world_with_clips(
             # Keyframe sprite bytes are 1-based: 6 -> type_index 5.
-            (("RUN", ((6, 1, 0, 0, 0x01),)),),
+            (("WALK", ((6, 1, 0, 0, 0x01),)),),
             (
                 anim_payload(
                     frame_count=1, packed=False, width=4, height=4, type_index=5,
@@ -501,7 +503,7 @@ def test_moving_player_draws_the_run_pose_through_the_sprite_slot(
         )
     )
     level = load_level(tmp_path / "VILLAGE.WLD")
-    assert len(level.clips[PLAYER_MOVE_ANIM]) == 1
+    assert len(level.clips[PLAYER_WALK_ANIM]) == 1
 
     state = new_game_state(level, spawn_x=48.0, spawn_y=0.0)
     state.tick(Input(right=True))
@@ -512,19 +514,20 @@ def test_moving_player_draws_the_run_pose_through_the_sprite_slot(
 
     # Floor tiles through the tile slot (1): red.
     assert frame.pixel(24, 24) == RED565
-    pose = level.clips[PLAYER_MOVE_ANIM][0]
+    pose = level.clips[PLAYER_WALK_ANIM][0]
     sx, sy = pose_top_left(state.player, pose)
     sx, sy = sx - cam_x, sy - cam_y
     assert frame.pixel(sx, sy) == BLUE565  # sprite slot (0), not the tile slot
     assert COLOUR_PLAYER not in frame.pixels
 
 
-def test_moving_player_advances_a_pose_per_hold_and_idles_identically(
+def test_moving_player_advances_at_the_measured_rate_and_idles_identically(
     tmp_path: Path,
 ) -> None:
-    """Moving changes the pose every ``MOVE_ANIM_TICKS_PER_POSE``; standing does not.
+    """Moving changes the pose at the measured rate; standing does not.
 
-    ``RUN`` here has two poses painted in different colours (index 1 green,
+    The rate is 73/256 pose per tick (§2.6.2 a row 34), so the holds are
+    3, 4, 3, 4 ticks.  ``WALK`` here has two poses painted in different colours (index 1 green,
     index 2 blue) so the pixel at the sprite's corner names the pose that was
     drawn; the standing clip (``STA1``) paints index 3 magenta.
     """
@@ -540,7 +543,7 @@ def test_moving_player_advances_a_pose_per_hold_and_idles_identically(
             (
                 # Keyframe sprite bytes are 1-based: 6 -> type_index 5,
                 # 7 -> type_index 6.
-                ("RUN", ((6, 1, 0, 0, 0x01), (6, 2, 0, 0, 0x01))),
+                ("WALK", ((6, 1, 0, 0, 0x01), (6, 2, 0, 0, 0x01))),
                 (PLAYER_STAND_ANIM, ((7, 1, 0, 0, 0x01),)),
             ),
             (
@@ -558,24 +561,20 @@ def test_moving_player_advances_a_pose_per_hold_and_idles_identically(
         )
     )
     level = load_level(tmp_path / "VILLAGE.WLD")
-    assert len(level.clips[PLAYER_MOVE_ANIM]) == 2
-    hold = MOVE_ANIM_TICKS_PER_POSE
-    assert hold == 3  # pins the documented constant, not just its use
-    # 12 retail RUN poses at this hold = 36 ticks = 0.6 s per cycle at 60 Hz.
-    assert 12 * hold == 36
+    assert len(level.clips[PLAYER_WALK_ANIM]) == 2
 
     def corner_colour(state) -> int:
-        pose = level.clip_pose(PLAYER_MOVE_ANIM, state.player.anim_frame)
+        pose = level.clip_pose(PLAYER_WALK_ANIM, state.player.anim_frame)
         sx, sy = pose_top_left(state.player, pose)
         return render_tiles(level, state).pixel(sx, sy)
 
-    # Moving: the pose is held, then advances, then wraps.
+    # Moving: rate 73/256 -> holds of 3, 4, 3, 4 ticks, then wraps.
     state = new_game_state(level, spawn_x=48.0, spawn_y=0.0)
     colours = []
-    for _ in range(2 * hold + 1):
+    for _ in range(14):
         state.tick(Input(right=True))
         colours.append(corner_colour(state))
-    assert colours == [GREEN565] * hold + [BLUE565] * hold + [GREEN565]
+    assert colours == [GREEN565] * 3 + [BLUE565] * 4 + [GREEN565] * 3 + [BLUE565] * 4
 
     # Standing still: the standing sprite, and a frame that never changes.
     idle = new_game_state(level, spawn_x=48.0, spawn_y=0.0)
@@ -606,7 +605,7 @@ def test_moving_player_mirrors_the_pose_for_the_facing(tmp_path: Path) -> None:
     )
     (tmp_path / "MAIN.WLD").write_bytes(
         main_world_with_clips(
-            (("RUN", ((6, 1, 0, 0, 0x01),)),),
+            (("WALK", ((6, 1, 0, 0, 0x01),)),),
             (
                 anim_payload(
                     frame_count=1, packed=False, width=4, height=4, type_index=5,
@@ -621,7 +620,7 @@ def test_moving_player_mirrors_the_pose_for_the_facing(tmp_path: Path) -> None:
         state = new_game_state(level, spawn_x=48.0, spawn_y=0.0)
         state.tick(Input(**{direction: True}))
         cam_x, cam_y = camera(level, state.player, 320, 240)
-        pose = level.clips[PLAYER_MOVE_ANIM][0]
+        pose = level.clips[PLAYER_WALK_ANIM][0]
         sx, sy = pose_top_left(state.player, pose)
         sx, sy = sx - cam_x, sy - cam_y
         frame = render_tiles(level, state)
@@ -650,7 +649,7 @@ def _placement_level(tmp_path: Path, dx: int, dy: int):
     )
     (tmp_path / "MAIN.WLD").write_bytes(
         main_world_with_clips(
-            (("RUN", ((6, 1, dx, dy, 0x01),)),),
+            (("WALK", ((6, 1, dx, dy, 0x01),)),),
             (
                 anim_payload(
                     frame_count=1, packed=False, width=4, height=4, type_index=5,
@@ -674,7 +673,7 @@ def test_pose_is_placed_at_origin_plus_dx_dy(tmp_path: Path) -> None:
     state = _moving(level, "right")
     player = state.player
     assert player.facing >= 0
-    pose = level.clips[PLAYER_MOVE_ANIM][0]
+    pose = level.clips[PLAYER_WALK_ANIM][0]
     assert (pose.dx, pose.dy) == (dx, dy)
     assert pose_origin(player) == (
         int(player.centre_x),
@@ -697,7 +696,7 @@ def test_pose_mirrors_about_the_origin_column(tmp_path: Path) -> None:
     state = _moving(level, "left")
     player = state.player
     assert player.facing < 0
-    pose = level.clips[PLAYER_MOVE_ANIM][0]
+    pose = level.clips[PLAYER_WALK_ANIM][0]
     w = pose.pixels.width
     x, y = pose_top_left(player, pose)
     assert x == int(player.centre_x) + 1 - w - dx
@@ -716,7 +715,7 @@ def test_dy_is_added_on_top_of_the_physics_y_without_compensation(
     ground = _moving(level, "right", y=40.0)
     air = _moving(level, "right", y=40.0)
     air.player.y -= 20.0  # as a jump arc would
-    pose = level.clips[PLAYER_MOVE_ANIM][0]
+    pose = level.clips[PLAYER_WALK_ANIM][0]
     for state in (ground, air):
         _, row = pose_top_left(state.player, pose)
         assert row == pose_origin(state.player)[1] + dy

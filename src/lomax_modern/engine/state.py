@@ -21,32 +21,82 @@ from .entities import (
     Input,
     Player,
 )
-from .level import CELL_PX, PLAYER_MOVE_ANIM, PLAYER_STAND_ANIM, Level
+from .level import (
+    CELL_PX,
+    PLAYER_RUN_ANIM,
+    PLAYER_STAND_ANIM,
+    PLAYER_WALK_ANIM,
+    Level,
+)
 
-#: Ticks one whole-body moving pose is held for before the next pose.
-#:
-#: **Chosen by eye [H]**, not measured: the clip data carries no per-frame hold
-#: — `NMY`'s nine animation `u16` params and the keyframe itself (`step`, `dx`,
-#: `dy`, `flags`) have no duration field (`docs/file-formats.md` §2.6.1,
-#: Q36) — so the rate is a presentation constant.  ``RUN`` has 12 poses, so 3
-#: ticks per pose is one stride cycle every **36 ticks = 0.6 s at the 60 Hz
-#: logic rate** (≈1.7 cycles/s), which reads as a run at 320x240 and does not
-#: strobe.  The previous wiring used 1 pose per tick (12 fps of animation,
-#: ≈5 cycles/s) and stuttered by construction.
-MOVE_ANIM_TICKS_PER_POSE = 3
+# Ground clip choice and pose rate come from the original (docs/file-formats.md
+# §2.6.2 a rows 34-35, [V]).  Rates are in 1/256 pose per tick: ``WALK`` =
+# |vx| / 0x700, ``RUN`` = |vx| >> 11, with a strict ``>`` at 2.0 (``cmp esi,
+# 0x20000`` / ``jg`` at VA 0x411F79), so exactly 2.0 is ``WALK``.  The engine's
+# only ground speed (2.0) is therefore ``WALK`` at 73/256 pose per tick.
 
-#: Which clip tag the player draws in each of today's motion states.
-#:
-#: ``False`` = standing (``vx == 0``), ``True`` = moving (``vx != 0``).  This is
-#: the *whole* stand/run rule, in one table: the moving entry is ``RUN`` because
-#: PR #64 chose the full-body clip; Q38 asks whether the original's ordinary
-#: 2.0 px/tick walk draws ``WALK`` instead, and answering it is a one-line change
-#: here — no render-path edit.  The tags must be keys of the level's clip table
-#: (``Level.clips``), which is what makes clip choice data.
-MOTION_CLIP_TAGS: dict[bool, str] = {
-    False: PLAYER_STAND_ANIM,
-    True: PLAYER_MOVE_ANIM,
-}
+#: Rates are in 1/256 poses per tick (file-formats §2.6.2 a).
+POSE_PHASE = 256
+#: 2.0 px/tick in 16.16 fixed point; the ``cmp esi, 0x20000`` at 0x411F79.
+WALK_MAX_SPEED_PX16 = 0x20000
+
+
+@dataclass(frozen=True)
+class GroundClipRule:
+    """One row of the original's ground-moving clip selector (§2.6.2 a rows 34-35)."""
+
+    tag: str
+    max_speed_px16: int | None  # inclusive upper bound on |vx|; None = no upper bound
+    rate_divisor: int  # poses/tick in 1/256 units = |vx|(16.16) // rate_divisor
+
+
+GROUND_CLIP_RULES: tuple[GroundClipRule, ...] = (
+    GroundClipRule(PLAYER_WALK_ANIM, WALK_MAX_SPEED_PX16, 0x700),  # row 34, |vx|/0x700
+    GroundClipRule(PLAYER_RUN_ANIM, None, 0x800),  # row 35, |vx| >> 11
+)
+
+
+def speed_px16(vx: float) -> int:
+    """``|vx|`` in 16.16 fixed point.
+
+    Truncating to an integer is exact here: the engine's speeds are binary
+    fractions (2.0 -> 0x20000, 2.5 -> 0x28000), and the original stores ``vx`` in
+    16.16 too.
+    """
+    return int(abs(vx) * (1 << 16))
+
+
+def ground_clip_rule(vx: float) -> GroundClipRule | None:
+    """The rule for a grounded player at ``vx``; ``None`` when standing.
+
+    The first row whose bound is ``None`` or ``>= |vx|``: inclusive on the walk
+    row, so exactly 2.0 is ``WALK`` (the original's strict ``jg``).
+    """
+    if abs(vx) == 0:
+        return None
+    speed = speed_px16(vx)
+    for rule in GROUND_CLIP_RULES:
+        if rule.max_speed_px16 is None or rule.max_speed_px16 >= speed:
+            return rule
+    return None
+
+
+def pose_rate_px256(vx: float) -> int:
+    """Pose advance per tick in 1/256 poses: 0 standing, 73 at 2.0, 80 at 2.5."""
+    rule = ground_clip_rule(vx)
+    if rule is None:
+        return 0
+    return speed_px16(vx) // rule.rate_divisor
+
+
+def advance_pose(player: Player, rate_px256: int) -> None:
+    """Add ``rate_px256`` to the phase and carry whole poses into ``anim_frame``.
+
+    Integer only, so rate 73 holds 3, 4, 3, 4... ticks and never drifts.
+    """
+    player.anim_phase += rate_px256
+    steps, player.anim_phase = divmod(player.anim_phase, POSE_PHASE)
+    player.anim_frame += steps
 
 
 def select_clip(player: Player) -> tuple[str, int]:
@@ -58,20 +108,20 @@ def select_clip(player: Player) -> tuple[str, int]:
     branch per clip; a later slice changes *this* function (air states in AN4,
     duck in AN5, idle in AN6) instead of the renderer.
 
-    Today's rules, unchanged from the shipped render path:
+    Rules (``docs/file-formats.md`` §2.6.2 a rows 34-35; Q38 is answered [V]):
 
-    * ``vx != 0`` (moving) → :data:`PLAYER_MOVE_ANIM` (``RUN``), pose index =
-      :attr:`Player.anim_frame`, the stride counter the tick advances;
-    * otherwise (standing) → :data:`PLAYER_STAND_ANIM` (``STA1``), pose index 0,
-      the clip's first pose — the clip's first keyframe names its standing frame.
+    * standing (``|vx| == 0``) → :data:`PLAYER_STAND_ANIM` (``STA1``), pose 0;
+    * ``0 < |vx| <= 2.0`` → ``WALK``; ``|vx| > 2.0`` → ``RUN``; the pose index is
+      :attr:`Player.anim_frame`.
 
-    Airborne players are **not** special-cased yet: they resolve through the same
-    two tags (``vx != 0`` still draws ``RUN``), exactly as before this refactor.
-    The jump/fall/land clips arrive with AN4.
+    Facing is not part of the choice (the sign of ``vx`` only sets
+    ``player.facing``).  Airborne is not special-cased yet (AN4), so a moving
+    airborne player resolves to ``WALK`` too.
     """
-    if player.vx != 0.0:
-        return MOTION_CLIP_TAGS[True], player.anim_frame
-    return MOTION_CLIP_TAGS[False], 0
+    rule = ground_clip_rule(player.vx)
+    if rule is None:
+        return PLAYER_STAND_ANIM, 0
+    return rule.tag, player.anim_frame
 
 
 def _overlaps_cell(player: Player, cell_x: int, cell_y: int) -> bool:
@@ -153,20 +203,15 @@ def step_player(level: Level, player: Player, inp: Input) -> None:
     else:
         player.vx = 0.0
 
-    # Moving-animation bookkeeping: one stride pose every
-    # ``MOVE_ANIM_TICKS_PER_POSE`` ticks of horizontal movement (the clip data
-    # carries no per-frame hold, so the rate is a chosen constant — see that
-    # constant).  The facing is the sign of the current velocity and is kept
-    # when the player stops, so a standing player still faces where they were
-    # going; the pose index resets when they stop.
+    # Moving-animation bookkeeping: the pose advances at the original's rate
+    # (``pose_rate_px256``).  The facing is the sign of the current velocity and
+    # is kept when the player stops, so a standing player still faces where they
+    # were going; the pose resets when they stop.
     if player.vx != 0.0:
         player.facing = 1 if player.vx > 0 else -1
-        if player.anim_ticks >= MOVE_ANIM_TICKS_PER_POSE:
-            player.anim_ticks = 0
-            player.anim_frame += 1
-        player.anim_ticks += 1
+        advance_pose(player, pose_rate_px256(player.vx))
     else:
-        player.anim_ticks = 0
+        player.anim_phase = 0
         player.anim_frame = 0
 
     if inp.jump and player.on_ground:

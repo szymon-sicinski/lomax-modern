@@ -657,9 +657,12 @@ All 47 `Hero` tags are accounted for: 39 in the table's rows, 8 here.
 walk draws **`WALK`**, at 3.5 ticks per pose (rate `0x20000 / 0x700 = 73`); `RUN`
 needs a speed above 2.0, and the only one recorded in §2.9 is terrain 1's
 directional 2.5 (`0x426DEC`–`0x426E26`) — whether anything else exceeds 2.0 is
-not traced. The `engine/level.py` comment that said "below 2.0" (corrected by AN3) and PR
-#64's "moving = `RUN`" (the change AN3b owns) are therefore both the exception,
-not the original's rule.
+not traced. The `engine/level.py` comment that said "below 2.0" (corrected by AN3)
+and PR #64's "moving = `RUN`" are therefore both the exception, not the
+original's rule; **AN3b made the engine follow it** — every grounded-moving tick
+at the engine's only ground speed (2.0) draws `WALK`, so
+`slice --world VILLAGE --frames 120` prints `clips: STA1 61, WALK 59` with no
+`RUN`.
 
 #### b. Jumps, landing and falling
 
