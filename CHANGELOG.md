@@ -8,6 +8,13 @@ Versioning: [Semantic Versioning](https://semver.org/).
 
 ### Added
 
+- **Character-animation milestone shipped (plan 46, slices AN1-AN6).**
+  The engine now draws the original's own clips for the player: `STA1`/`STA2`
+  idle, `WALK`/`RUN`, `JMP1`/`JMP2`, `FLO1`/`FLO2`, `LND1` and `DUCK`.
+  Deferred: attack, hurt/death, climb, slope running, brake, edge and push.
+  Still open: Q40 and the `[H]` idle rules (the counter's increment site,
+  the reset on leaving idle, "bit 0 = `STA2`", and the random source not
+  being in a `Snapshot`). See `docs/roadmap/46-character-animation-plan.md`.
 - **The idle cycle (AN6).** Standing still no longer freezes on `STA1`: the
   player holds `STA1` pose 0 for 100 ticks at level start, then plays `STA1` or
   `STA2` once at the clip's own rate (28 / 38 ticks), then holds `STA1` again
