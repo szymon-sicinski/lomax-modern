@@ -21,12 +21,14 @@ per-frame flag word ``flags``.  A stride pose is the keyframes that share one
 ``step`` value — for ``Hero.WALK`` a **base** layer (sprite 33 → ``type_index``
 32, 36×46, the whole character) and a smaller **overlay** layer (sprite 34 →
 ``type_index`` 33, 18×23) — and :func:`resolve_poses` composites them at their
-recorded offsets, painting the base first and the overlay on top.  The game's
-vertical axis points up (the sprite decompressor at VA ``0x415E30`` negates the
-frame height), so a layer draws at screen position ``(dx, -dy)``, which is what
-puts the head above the body.  Evidence: ``docs/file-formats.md`` §2.6.1, and a
-``Hero.WALK`` render whose 20 resolvable keyframes all show one coherent
-walking character.
+recorded offsets, painting the base first and the overlay on top.  A layer's
+top-left is ``origin + (dx, dy)`` with screen y pointing down, and facing -x
+mirrors about the origin column (``dx' = 1 - w - dx``, VA ``0x40C696``;
+``docs/file-formats.md`` §2.6.2 c [V]).  Evidence: the blit's vertical clip at VA
+``0x40C6F0``–``0x40C71E`` (bottom row ``y + dy + height - 1``), the body layer's
+bottom row measuring exactly 0 in every pose of 16 clips, and the overlay
+overlap re-measured under this placement in
+``docs/research/08-player-animation-selector.md`` (``overlap``).
 
 Nothing here reads game bytes into the repository: every decode happens at run
 time against the caller's own ``.WLD``.
@@ -268,12 +270,12 @@ def resolve_poses(
 
     Keyframes are grouped by their second byte (``step``); each group is one
     pose and every keyframe in the group is one sprite layer drawn at its
-    recorded signed offsets.  The game stores its vertical axis pointing **up**
-    (the sprite decompressor at VA ``0x415E30`` negates the frame height before
-    storing it), so a layer's screen position is ``(dx, -dy)`` — which is what
-    makes the head sit *above* the body.  Layers are painted base-first: the
-    largest layer (by content area) is the whole character and any smaller
-    layer paints on top of it, so the smaller sprite's detail is never buried.
+    recorded signed offsets.  A layer's top-left is ``origin + (dx, dy)`` with
+    screen y pointing down; facing -x mirrors about the origin column
+    (``dx' = 1 - w - dx``, VA ``0x40C696``; ``docs/file-formats.md`` §2.6.2 c).
+    Layers are painted base-first: the largest layer (by content area) is the
+    whole character and any smaller layer paints on top of it, so the smaller
+    sprite's detail is never buried.
 
     Every pose is painted into the *same* canvas, sized to the clip's union
     content bounding box, so the whole clip can be blitted pose to pose with a
@@ -315,9 +317,9 @@ def resolve_poses(
                 continue
             x0, y0, x1, y1 = box
             ux0 = dx + x0 if ux0 is None else min(ux0, dx + x0)
-            uy0 = -dy + y0 if uy0 is None else min(uy0, -dy + y0)
+            uy0 = dy + y0 if uy0 is None else min(uy0, dy + y0)
             ux1 = dx + x1 if ux1 is None else max(ux1, dx + x1)
-            uy1 = -dy + y1 if uy1 is None else max(uy1, -dy + y1)
+            uy1 = dy + y1 if uy1 is None else max(uy1, dy + y1)
     if ux0 is None:
         return ()
     width = ux1 - ux0 + 1
@@ -342,7 +344,7 @@ def resolve_poses(
                     if index == 0:
                         continue
                     cx = dx - ux0 + x
-                    cy = -dy - uy0 + y
+                    cy = dy - uy0 + y
                     canvas[cy * width + cx] = index
         poses.append(PoseFrame(step, AnimPixels(width, height, tuple(canvas))))
     return tuple(poses)
@@ -363,8 +365,10 @@ def resolve_body_poses(
     measurement (:func:`_content_area`), not a hard-coded id.
 
     The companion layer is **not** painted here.  Measured over RUN's 12 steps
-    at the recorded ``(dx, -dy)``, its opaque pixels land on the body layer's
-    pixels **39–97 %** of the time — it is a genuine overlay on the character
+    at the recorded ``(dx, dy)`` (y down, ``docs/file-formats.md`` §2.6.2 c), its
+    opaque pixels land on the body layer's pixels **21–65 %** of the time (the
+    retracted placement, which negated ``dy``, scored 39–97 %, so it cannot distinguish
+    the two) — it is a genuine overlay on the character
     (a cape or a limb), not a detached fragment, which is what the 0-based read
     of the byte made it look like.  This function exists for the engine's
     "whole-body sprite per step" path; :func:`resolve_poses` paints the layers,
@@ -405,6 +409,37 @@ def resolve_body_poses(
         )
         poses.append(BodyPose(step, sprite, sub, dx, dy, pixels))
     return tuple(poses)
+
+
+@dataclass(frozen=True)
+class BodyAnchor:
+    """Summary of where a clip's whole-body poses sit vertically (``dy``, y down)."""
+
+    top_min: int  # min dy over the returned body poses
+    top_max: int  # max dy
+    bottom_min: int  # min (dy + h - 1)
+    bottom_max: int  # max (dy + h - 1)
+    offset_spread: int  # top_max - top_min
+    bottom_pinned_spread: int  # max(h) - min(h): the top spread when bottom-pinned
+    pose_count: int
+
+
+def body_anchor(poses: tuple[BodyPose, ...]) -> BodyAnchor | None:
+    """Summarise ``poses``' vertical placement; ``None`` for an empty tuple."""
+    if not poses:
+        return None
+    tops = [p.dy for p in poses]
+    bottoms = [p.dy + p.pixels.height - 1 for p in poses]
+    heights = [p.pixels.height for p in poses]
+    return BodyAnchor(
+        top_min=min(tops),
+        top_max=max(tops),
+        bottom_min=min(bottoms),
+        bottom_max=max(bottoms),
+        offset_spread=max(tops) - min(tops),
+        bottom_pinned_spread=max(heights) - min(heights),
+        pose_count=len(poses),
+    )
 
 
 def mirrored(pixels: AnimPixels) -> AnimPixels:

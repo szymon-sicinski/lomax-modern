@@ -238,11 +238,12 @@ def test_four_bit_fixture_decodes_deterministically_through_the_clip() -> None:
     assert frames[0].pixels.indices == (2, 1, 4, 3)
 
 
-def test_resolve_poses_composites_layers_at_dx_neg_dy() -> None:
-    """Two layers sharing a step composite at (dx, -dy), base then overlay."""
+def test_resolve_poses_composites_layers_at_dx_dy_y_down() -> None:
+    """Two layers sharing a step composite at (dx, dy), y down, base then overlay."""
     # Sprite byte 1 (overlay) at dx=0, dy=-1; byte 2 (base) at dx=-4, dy=0.
-    # Under (dx, -dy) the overlay sits at y=+1 (below) and the base at y=0
-    # (above); they do not overlap, so paint order does not change the result.
+    # Under (dx, dy) with y down the overlay sits at y=-1 (above) and the base
+    # at y=0 (below); they do not overlap, so paint order does not change the
+    # result (docs/file-formats.md 2.6.2 c).
     world = _world_with_clip(
         (
             (1, 1, 0, -1, 0x01),  # overlay layer -> type_index 0
@@ -263,12 +264,38 @@ def test_resolve_poses_composites_layers_at_dx_neg_dy() -> None:
     assert len(poses) == 1
     pose = poses[0]
     assert pose.pose == 1
-    # Union content bbox: base pixel at screen (-4, 0), overlay pixel at (0, 1).
+    # Union content bbox: base pixel at screen (-4, 0), overlay pixel at (0, -1).
     assert (pose.pixels.width, pose.pixels.height) == (5, 2)
-    # Base pixel (index 7) at screen (-4, 0) -> canvas (0, 0).
-    assert pose.pixels.at(0, 0) == 7
-    # Overlay pixel (index 5) at screen (0, 1) -> canvas (4, 1).
-    assert pose.pixels.at(4, 1) == 5
+    # Base pixel (index 7) at screen (-4, 0) -> canvas (0, 1).
+    assert pose.pixels.at(0, 1) == 7
+    # Overlay pixel (index 5) at screen (0, -1) -> canvas (4, 0).
+    assert pose.pixels.at(4, 0) == 5
+
+
+def test_body_anchor_summarises_the_offset_and_bottom_pinned_spreads() -> None:
+    """Spread arithmetic on synthetic poses; empty input has no anchor."""
+    assert anim_clip.body_anchor(()) is None
+
+    def pose(dy: int, h: int) -> anim_clip.BodyPose:
+        return anim_clip.BodyPose(
+            1, 1, 0, 0, dy, anim_clip.AnimPixels(2, h, (0,) * (2 * h))
+        )
+
+    anchor = anim_clip.body_anchor((pose(-42, 40), pose(-34, 32), pose(-38, 36)))
+    assert anchor == anim_clip.BodyAnchor(
+        top_min=-42,
+        top_max=-34,
+        bottom_min=-3,  # -34 + 32 - 1
+        bottom_max=-3,  # -42 + 40 - 1 == -3 too
+        offset_spread=8,
+        bottom_pinned_spread=8,  # max(h) - min(h) = 40 - 32
+        pose_count=3,
+    )
+    assert anchor.offset_spread == 8 and anchor.bottom_pinned_spread == 8
+    # Differing spreads: heights 30/39 (9) vs dy -42/-34 (8).
+    other = anim_clip.body_anchor((pose(-42, 30), pose(-34, 39)))
+    assert other.offset_spread == 8 and other.bottom_pinned_spread == 9
+    assert (other.bottom_min, other.bottom_max) == (-13, 4)
 
 
 def test_resolve_poses_paints_base_first_then_overlay() -> None:

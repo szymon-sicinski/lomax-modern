@@ -491,14 +491,16 @@ the wrap never fires on retail data and no wrap/clamp rule exists to recover.
 treats such a keyframe as an attachment point (§2.6.2 d).
 
 **Alignment — the placement is retracted and replaced (§2.6.2 c, Q39).** *The
-claim that follows — "`dy` is y-up because the decompressor negates the height
-(`neg ecx` at `0x415FF9`), so a layer is drawn at `(dx, -dy)`" — is
-**retracted**: that `neg` writes a top-down GDI DIB height, and the actor blit
-(`0x40C270`) places a layer's top-left at `origin + (dx, dy)` with y down. The
-composite measurements in the rest of this paragraph (connectivity, canvas
-size) were taken under the retracted placement and are kept only as a record
-of what `anim_clip.resolve_poses` currently does; re-measuring them under the
-verified placement belongs to the anchoring slice (AN3).* Original text:
+pre-AN3 text below is kept as the record of the retracted `(dx, -dy)` reading —
+the `neg ecx` at `0x415FF9` writes a top-down GDI DIB height, not a y-up axis,
+and the actor blit (`0x40C270`) places a layer's top-left at
+`origin + (dx, dy)` with y down. Its prose about where the engine drew a pose
+describes the engine before AN3; **its composite measurements were re-taken for
+AN3 under the verified placement** — 10 `WALK` poses on one 40×59 canvas, 5/10
+poses strictly one component at 4-connectivity (steps 1, 2, 5, 6, 7) and 10/10
+at 8-connectivity. AN3 now places each pose at origin + (`dx`, `dy`), y down and
+mirrors about the origin column, so the offset-placed `RUN` head moves 8 px.*
+Pre-AN3 text, measurements re-taken:
 `dx`/`dy` are signed offsets with
 the game's **y-up** axis — the sprite decompressor at VA `0x415E30` negates the
 frame height before storing it (`neg ecx` at `0x415FF9`), so a layer is drawn at
@@ -508,25 +510,26 @@ content bounding box, so every pose shares a canvas and there is no per-pose
 jitter); `anim_clip.resolve_poses` does this, painting the base first and the
 overlay on top. Measured at this head on the retail install with
 `anim_clip.resolve_poses(world, record_name="Hero", clip_tag="WALK")` over
-`MAIN.WLD` (10 poses on one 40×51 canvas): at **4-connectivity only 2/10 poses
-are strictly one component** (steps 6 and 7); the other eight each carry exactly
-one isolated 1-px pixel (step 9 carries two). At **8-connectivity 10/10 poses are
-one component**. The honest claim is "one figure per pose at 8-connectivity, with
-a stray 1-px pixel in eight poses at 4-connectivity" — not "8/10 poses", which
-also named the wrong steps. The exact anchor — which point
-on the collision box the offsets are relative to — is still not confirmed, so
-`engine.render_tiles` anchors the composite like the standing sprite: bottom at
-the collision-box bottom, horizontally centred, mirrored by the player's facing
-direction. Anchor and facing convention are graded `[H]`. *(§2.6.2 c: the
+`MAIN.WLD` (10 poses on one 40×59 canvas): at **4-connectivity 5/10 poses are
+strictly one component** (steps 1, 2,
+5, 6, 7); the other five carry one isolated 1-px pixel each (step 10 carries two).
+At **8-connectivity 10/10 poses are one component**. The honest claim is "one
+figure per pose at 8-connectivity, with a stray 1-px pixel in four poses and two
+in one at 4-connectivity" — not "8/10 poses", which also named the wrong steps.
+The exact anchor — which point on the collision box the offsets are relative
+to — is not confirmed here, so the pre-AN3 engine anchored the composite like
+the standing sprite: bottom at the collision-box bottom, horizontally centred,
+mirrored by the player's facing direction. Anchor and facing convention were
+graded `[H]`. *(§2.6.2 c: the
 original's origin is the actor's integer position `0x59F23C`/`0x59F240`, the
 standing body's bottom row sits exactly on it, and mirroring reflects about
 the origin column, `x ↦ −x`; only the engine-to-original position mapping is
 still open.)* Because
 `engine.render_tiles` draws each `RUN` pose's whole-body layer and **discards
-that pose's `dx`/`dy`**, the bottom-anchored blit moves the top of the sprite —
+that pose's `dx`/`dy`**, the bottom-anchored blit moved the top of the sprite —
 the head — from pose to pose: the twelve body layers are 34–43 px tall
-(measured), so one fixed bottom anchor puts their tops up to **9 px** apart. That
-is a known artefact of the chosen anchor, not a claim about the original's
+(measured), so one fixed bottom anchor put their tops up to **9 px** apart. That
+was an artefact of the chosen anchor, not a claim about the original's
 registration. The `ANIM` frame's
 `d`/`e` words (carried verbatim as `field_d`/`field_e`) look like per-frame
 registration offsets but their sign and role are unresolved (Q35); the actor
@@ -654,8 +657,9 @@ All 47 `Hero` tags are accounted for: 39 in the table's rows, 8 here.
 walk draws **`WALK`**, at 3.5 ticks per pose (rate `0x20000 / 0x700 = 73`); `RUN`
 needs a speed above 2.0, and the only one recorded in §2.9 is terrain 1's
 directional 2.5 (`0x426DEC`–`0x426E26`) — whether anything else exceeds 2.0 is
-not traced. The `engine/level.py` comment "below 2.0" and PR #64's
-"moving = `RUN`" are therefore both the exception, not the original's rule.
+not traced. The `engine/level.py` comment that said "below 2.0" (corrected by AN3) and PR
+#64's "moving = `RUN`" (the change AN3b owns) are therefore both the exception,
+not the original's rule.
 
 #### b. Jumps, landing and falling
 
@@ -728,6 +732,14 @@ is frame *S − 1*, confirming §2.6.1's 1-based step **[V]**), then:
   displaced by the jump. A faithful port applies `dy` as-is at the actor origin;
   what remains open is only how the engine's player position maps onto
   `0x59F23C`/`0x59F240` (Q39).
+* **The engine's chosen mapping [H] — a choice, not a finding.** AN3 maps the
+  player onto the original's actor origin as: origin column = the collision
+  box's horizontal centre (`Player.centre_x`), origin row = the box's last row
+  (`y + height − 1`, the feet row). A pose's top-left is
+  `(origin_x + dx, origin_y + dy)`, or `(origin_x + 1 − w − dx, origin_y + dy)`
+  for facing −x; `dy` is applied as-is on top of the physics y
+  (`engine.render.pose_origin` / `pose_top_left`). The original's own mapping
+  stays untraced (Q39).
 * **The negation at `0x415FF9` is not about `dx`/`dy` [V].** It stores
   `−height` into a header block at `0x471B30` just after a
   `GDI32!SetStretchBltMode` call (`0x415FCF`) — the top-down-DIB height
