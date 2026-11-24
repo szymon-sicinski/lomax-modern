@@ -8,7 +8,9 @@ card, which owns the save/load UX.
 
 from __future__ import annotations
 
+from collections.abc import Callable
 from dataclasses import dataclass, field
+from random import Random
 
 from .entities import (
     AIR_POSE2_MAX_VY_MOVING,
@@ -22,12 +24,20 @@ from .entities import (
     FLO1_RATE,
     FLO2_RATE,
     GRAVITY,
+    IDLE_MIN_THRESHOLD,
+    IDLE_REFREEZE_THRESHOLD,
+    IDLE_START_THRESHOLD,
+    IDLE_THRESHOLD_MASK,
     JUMP_LOCKOUT_MOVING,
     JUMP_LOCKOUT_RATE,
     JUMP_LOCKOUT_STRAIGHT,
     JUMP_SPEED,
     LANDING_TICKS,
     MAX_FALL,
+    STA1_POSES,
+    STA1_RATE,
+    STA2_POSES,
+    STA2_RATE,
     WALK_SPEED,
     Collectible,
     Entities,
@@ -40,6 +50,7 @@ from .level import (
     PLAYER_DUCK_ANIM,
     PLAYER_FASTFALL_ANIM,
     PLAYER_FASTFALL_MOVING_ANIM,
+    PLAYER_IDLE_ANIM,
     PLAYER_JUMP_ANIM,
     PLAYER_JUMP_MOVING_ANIM,
     PLAYER_LAND_ANIM,
@@ -54,6 +65,17 @@ from .level import (
 # |vx| / 0x700, ``RUN`` = |vx| >> 11, with a strict ``>`` at 2.0 (``cmp esi,
 # 0x20000`` / ``jg`` at VA 0x411F79), so exactly 2.0 is ``WALK``.  The engine's
 # only ground speed (2.0) is therefore ``WALK`` at 73/256 pose per tick.
+
+#: Bit 0 of the value is the idle cycle's decision bit.
+RandomBits = Callable[[], int]
+IDLE_DEFAULT_SEED = 0
+
+
+def default_random_bits(seed: int = IDLE_DEFAULT_SEED) -> RandomBits:
+    """A deterministic source for the idle cycle's bits (``random.Random(seed)``)."""
+    generator = Random(seed)
+    return lambda: generator.getrandbits(32)
+
 
 #: Rates are in 1/256 poses per tick (file-formats §2.6.2 a).
 POSE_PHASE = 256
@@ -197,7 +219,8 @@ def select_clip(player: Player) -> tuple[str, int]:
       24-26 in the original's priority chain, so a duck outranks ``LND1``;
     * grounded with the landing flag set by :func:`step_player` →
       :data:`PLAYER_LAND_ANIM` (``LND1``), pose 0 (the clip is one pose);
-    * standing (``|vx| == 0``) → :data:`PLAYER_STAND_ANIM` (``STA1``), pose 0;
+    * standing (``|vx| == 0``) → :data:`PLAYER_STAND_ANIM` (``STA1``), pose 0, or
+      the idle clip :func:`_update_idle` is playing once (rows 30-31);
     * ``0 < |vx| <= 2.0`` → ``WALK``; ``|vx| > 2.0`` → ``RUN``; the pose index is
       :attr:`Player.anim_frame`.
 
@@ -212,6 +235,8 @@ def select_clip(player: Player) -> tuple[str, int]:
         return PLAYER_LAND_ANIM, 0
     rule = ground_clip_rule(player.vx)
     if rule is None:
+        if player.idle_clip_tag:
+            return player.idle_clip_tag, player.idle_frame
         return PLAYER_STAND_ANIM, 0
     return rule.tag, player.anim_frame
 
@@ -359,8 +384,64 @@ def _update_duck(player: Player, inp: Input) -> None:
     player.duck_frame, player.duck_phase = divmod(position, POSE_PHASE)
 
 
-def step_player(level: Level, player: Player, inp: Input) -> None:
+def _update_idle(player: Player, rand: RandomBits) -> None:
+    """The idle cycle's one tick (§2.6.2 a rows 30-31, d "Idle").
+
+    The numbers are [V]/[M]; the counter's increment site, the reset on leaving
+    the idle branch, row 30's reset firing on (re-)entry of the frozen state and
+    "bit 0 set means ``STA2``" are this engine's [H] choices.
+    """
+    in_idle = (
+        player.on_ground
+        and player.vx == 0.0
+        and not player.duck_shown
+        and not player.lnd1_shown
+    )
+    if not in_idle:
+        # [H] leaving the idle branch resets the cycle: counter to 0, a playing
+        # clip abandoned; rows 30-31 do not pin this.  The threshold is kept.
+        player.idle_counter = 0
+        player.idle_clip_tag = ""
+        player.idle_frame = 0
+        player.idle_phase = 0
+        return
+    if player.idle_clip_tag:  # row 31: the played clip runs at its own rate
+        tag = player.idle_clip_tag
+        rate = STA2_RATE if tag == PLAYER_IDLE_ANIM else STA1_RATE
+        poses = STA2_POSES if tag == PLAYER_IDLE_ANIM else STA1_POSES
+        frame, phase = _advance(player.idle_phase, player.idle_frame, rate)
+        if frame >= poses:  # wrapped: it has played once
+            player.idle_clip_tag = ""
+            player.idle_frame = 0
+            player.idle_phase = 0
+            player.idle_counter = 0
+            player.idle_threshold = IDLE_REFREEZE_THRESHOLD  # 10,000 [V]
+            return
+        player.idle_frame, player.idle_phase = frame, phase
+        return
+    if player.idle_counter < player.idle_threshold:  # row 30
+        if player.idle_threshold == IDLE_REFREEZE_THRESHOLD:
+            # [H] row 30's "reset the counter, new threshold 30 + (rand & 63)"
+            # fires when the frozen state is (re-)entered, not on every tick
+            # (otherwise the counter could never reach the threshold).
+            player.idle_threshold = IDLE_MIN_THRESHOLD + (rand() & IDLE_THRESHOLD_MASK)
+        player.idle_counter += 1
+        return
+    # row 31: play exactly one clip, chosen by bit 0 of the source
+    # [H] mapping: bit 0 set -> STA2
+    player.idle_clip_tag = PLAYER_IDLE_ANIM if (rand() & 1) else PLAYER_STAND_ANIM
+    player.idle_frame = 0
+    player.idle_phase = 0
+
+
+def step_player(
+    level: Level, player: Player, inp: Input, *, rand: RandomBits | None = None
+) -> None:
     """Advance the player one tick: input, gravity, then axis-separated moves.
+
+    ``rand`` is the idle cycle's random source; ``None`` uses a fresh
+    ``default_random_bits()`` for this call, so a caller driving ``step_player``
+    directly still gets a reproducible fixed-seed stream.
 
     Movement is axis-separated (X then Y) so a landing and a wall-hit in the
     same tick resolve independently.  ``on_ground`` is recomputed each tick.
@@ -401,6 +482,7 @@ def step_player(level: Level, player: Player, inp: Input) -> None:
     _resolve_y(level, player)
     _update_air_and_landing(player, inp, was_grounded=was_grounded, launched=launched)
     _update_duck(player, inp)
+    _update_idle(player, rand if rand is not None else default_random_bits())
 
 
 @dataclass
@@ -416,10 +498,13 @@ class GameState:
     entities: Entities = field(default_factory=Entities)
     tick_count: int = 0
     complete: bool = False
+    #: The idle cycle's random source, bit 0 of ``0x43AAD0()`` in the original
+    #: (that it is a random-number routine is [H]).
+    rand: RandomBits = field(default_factory=default_random_bits)
 
     def tick(self, inp: Input) -> None:
         """Advance exactly one 60 Hz logic tick."""
-        step_player(self.level, self.player, inp)
+        step_player(self.level, self.player, inp, rand=self.rand)
         self._collect_and_exit()
         self.tick_count += 1
 
@@ -444,6 +529,7 @@ def new_game_state(
     spawn_y: float | None = None,
     collectibles: list[Collectible] | None = None,
     exits: list[Exit] | None = None,
+    seed: int = IDLE_DEFAULT_SEED,
 ) -> GameState:
     """Build a fresh state from the level's ``GNMY`` placements (Q32 **[V]**).
 
@@ -482,6 +568,7 @@ def new_game_state(
             collectibles=list(collectibles),
             exits=list(exits),
         ),
+        rand=default_random_bits(seed),
     )
 
 
@@ -501,7 +588,9 @@ class Snapshot:
     Captures the level identity (name + playfield plane) and the mutable
     simulation state.  :meth:`to_dict` / :meth:`from_dict` round-trip to plain
     JSON types so persistence can land in the input card without re-designing
-    the state model.
+    the state model.  The idle cycle's counter, threshold and played clip are
+    captured; the random *stream* is not (the original's RNG is not per-player
+    either) [H].
     """
 
     world: str
@@ -514,6 +603,11 @@ class Snapshot:
     vy: float
     on_ground: bool
     collected: tuple[int, ...]
+    idle_counter: int = 0
+    idle_threshold: int = IDLE_START_THRESHOLD
+    idle_clip_tag: str = ""
+    idle_frame: int = 0
+    idle_phase: int = 0
 
     def to_dict(self) -> dict:
         return {
@@ -527,6 +621,11 @@ class Snapshot:
             "vy": self.vy,
             "on_ground": self.on_ground,
             "collected": list(self.collected),
+            "idle_counter": self.idle_counter,
+            "idle_threshold": self.idle_threshold,
+            "idle_clip_tag": self.idle_clip_tag,
+            "idle_frame": self.idle_frame,
+            "idle_phase": self.idle_phase,
         }
 
     @classmethod
@@ -542,6 +641,12 @@ class Snapshot:
             vy=data["vy"],
             on_ground=data["on_ground"],
             collected=tuple(data["collected"]),
+            # Defaults so a snapshot written before AN6 still loads.
+            idle_counter=data.get("idle_counter", 0),
+            idle_threshold=data.get("idle_threshold", IDLE_START_THRESHOLD),
+            idle_clip_tag=data.get("idle_clip_tag", ""),
+            idle_frame=data.get("idle_frame", 0),
+            idle_phase=data.get("idle_phase", 0),
         )
 
 
@@ -558,6 +663,11 @@ def capture(state: GameState) -> Snapshot:
         vy=state.player.vy,
         on_ground=state.player.on_ground,
         collected=tuple(sorted(state.entities.collected)),
+        idle_counter=state.player.idle_counter,
+        idle_threshold=state.player.idle_threshold,
+        idle_clip_tag=state.player.idle_clip_tag,
+        idle_frame=state.player.idle_frame,
+        idle_phase=state.player.idle_phase,
     )
 
 
@@ -583,3 +693,8 @@ def restore(state: GameState, snapshot: Snapshot) -> None:
     state.player.vy = snapshot.vy
     state.player.on_ground = snapshot.on_ground
     state.entities.collected = set(snapshot.collected)
+    state.player.idle_counter = snapshot.idle_counter
+    state.player.idle_threshold = snapshot.idle_threshold
+    state.player.idle_clip_tag = snapshot.idle_clip_tag
+    state.player.idle_frame = snapshot.idle_frame
+    state.player.idle_phase = snapshot.idle_phase

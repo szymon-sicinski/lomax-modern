@@ -17,6 +17,7 @@ from ..anim_nmy import placement_role
 from ..art import DEFAULT_PALETTE_SLOT, SPRITE_PALETTE_SLOT
 from .entities import WALK_SPEED, Input
 from .level import (
+    PLAYER_IDLE_ANIM,
     PLAYER_RUN_ANIM,
     PLAYER_STAND_ANIM,
     PLAYER_WALK_ANIM,
@@ -216,7 +217,9 @@ def run_slice(
             else f"{PLAYER_RUN_ANIM} not resolved"
         )
         player_anim = (
-            f"player: idle = {PLAYER_STAND_ANIM} standing sprite; moving = "
+            f"player: idle = {PLAYER_STAND_ANIM} held on pose 0, then "
+            f"{PLAYER_STAND_ANIM} or {PLAYER_IDLE_ANIM} played once (100 idle ticks at level "
+            f"start, 30-93 after); moving = "
             f"{PLAYER_WALK_ANIM} {len(walk_poses)} whole-body poses at "
             f"{rate}/{POSE_PHASE} pose per tick at {WALK_SPEED:g} px/tick "
             f"(|vx|/0x700; {POSE_PHASE / rate:.1f} ticks per pose) [V]; "

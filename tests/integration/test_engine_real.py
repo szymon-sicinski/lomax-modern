@@ -22,7 +22,9 @@ from lomax_modern.engine import (
     render,
     render_tiles,
     run_slice,
+    select_clip,
 )
+from lomax_modern.engine.entities import STA1_POSES, STA2_POSES, Player
 from lomax_modern.engine.render import COLOUR_PLAYER
 
 GAME_DIR = os.environ.get("LOMAX_GAME_DIR")
@@ -189,3 +191,23 @@ def test_render_tiles_overlays_gnmy_markers() -> None:
     )
     assert in_view > 0
     assert painted == in_view
+
+
+def test_sta2_idle_clip_resolves_from_the_retail_clip_table() -> None:
+    """AN6: ``STA2`` has 10 poses, bottom-anchored, and is selectable as idle."""
+    path = Path(GAME_DIR or "") / "WORLDS" / "VILLAGE.WLD"
+    if not path.is_file():
+        pytest.skip("VILLAGE.WLD not present in this install")
+
+    level = load_level(path)
+    poses = level.clips.get("STA2", ())
+    offsets = [(p.dx, p.dy, p.pixels.height) for p in poses]
+    print(f"STA2: {len(poses)} poses; (dx, dy, height) per pose: {offsets}")
+    print(f"STA1: {len(level.clips['STA1'])} poses")
+    assert len(poses) == STA2_POSES
+    assert len(level.clips["STA1"]) == STA1_POSES
+    assert all(p.dy + p.pixels.height - 1 == 0 for p in poses)
+
+    player = Player(x=0.0, y=0.0, on_ground=True, idle_clip_tag="STA2", idle_frame=9)
+    assert select_clip(player) == ("STA2", 9)
+    assert level.clip_pose("STA2", 9) is not None

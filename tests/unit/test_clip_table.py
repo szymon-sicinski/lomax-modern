@@ -32,6 +32,7 @@ from lomax_modern.engine.level import (
     PLAYER_DUCK_ANIM,
     PLAYER_FASTFALL_ANIM,
     PLAYER_FASTFALL_MOVING_ANIM,
+    PLAYER_IDLE_ANIM,
     PLAYER_JUMP_ANIM,
     PLAYER_JUMP_MOVING_ANIM,
     PLAYER_LAND_ANIM,
@@ -140,6 +141,7 @@ def test_clip_loader_takes_any_tag_not_a_fixed_pair(tmp_path: Path) -> None:
     default = load_clip_table(tmp_path / "MAIN.WLD")
     assert PLAYER_CLIP_TAGS == (
         PLAYER_STAND_ANIM,
+        PLAYER_IDLE_ANIM,
         PLAYER_WALK_ANIM,
         PLAYER_RUN_ANIM,
         PLAYER_DUCK_ANIM,
@@ -315,7 +317,8 @@ def test_slice_report_names_the_clips_it_drew_and_counts_every_tick(
     ``clip_ticks`` still carries ``RUN`` at 0.  No ``LND1``: the spawn fall is not
     a straight-jump landing, so it does not arm the landing counter.
     """
-    air_tags = (
+    extra_tags = (
+        PLAYER_IDLE_ANIM,
         PLAYER_DUCK_ANIM,
         PLAYER_LAND_ANIM,
         PLAYER_JUMP_ANIM,
@@ -326,8 +329,8 @@ def test_slice_report_names_the_clips_it_drew_and_counts_every_tick(
     clips = (
         _hero_clips()
         + ((PLAYER_RUN_ANIM, ((6, 1, 0, 0, 0x01),)),)
-        # The player spawns in the air, so the air clips must resolve.
-        + tuple((tag, ((7, 1, 0, 0, 0x01),)) for tag in air_tags)
+        # Every other clip the table must carry so the counts cover PLAYER_CLIP_TAGS.
+        + tuple((tag, ((7, 1, 0, 0, 0x01),)) for tag in extra_tags)
     )
     (tmp_path / "MAIN.WLD").write_bytes(main_world_with_clips(clips, _hero_sprites()))
     (tmp_path / "VILLAGE.WLD").write_bytes(
@@ -351,6 +354,7 @@ def test_slice_report_names_the_clips_it_drew_and_counts_every_tick(
     assert set(counts) == {*PLAYER_CLIP_TAGS}
     assert counts == {
         PLAYER_STAND_ANIM: 4,
+        PLAYER_IDLE_ANIM: 0,
         PLAYER_WALK_ANIM: 2,
         PLAYER_RUN_ANIM: 0,
         PLAYER_DUCK_ANIM: 0,
