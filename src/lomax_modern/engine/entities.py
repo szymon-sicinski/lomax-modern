@@ -85,18 +85,29 @@ AIR_POSE2_MAX_VY_MOVING = -3.875
 #: a zero-initialised global (bit clear) is this engine's choice, in one place.
 JUMP_STRAIGHT_AT_LEVEL_START = False
 
+#: ``DUCK``'s own clip rate in 1/256 poses per tick: 65, one pose every ~3.94
+#: ticks (§2.6.2 a row 23, [V]).  *When* the clip is selected is [H]: this
+#: engine ducks while grounded and Down is held.
+DUCK_RATE = 65
+
+#: ``DUCK``'s pose count (§2.6.2 a row 23 / Appendix A row 7, [M]).  The clip is
+#: one-shot: it holds the last pose (``0x4161B0``) instead of wrapping.
+DUCK_POSES = 6
+
 
 @dataclass(frozen=True)
 class Input:
     """One tick of player intent.
 
     ``jump`` is edge-triggered by the caller: the simulation reacts only when
-    the player is grounded, so a held ``jump`` re-jumps on landing.
+    the player is grounded, so a held ``jump`` re-jumps on landing.  ``down`` is
+    level-triggered: ``True`` while the down key is held.
     """
 
     left: bool = False
     right: bool = False
     jump: bool = False
+    down: bool = False
 
 
 @dataclass
@@ -129,6 +140,12 @@ class Player:
     air_clip_tag: str = ""  # the air clip set last tick (actor+0x08's role in the air branch)
     air_frame: int = 0  # its pose index
     air_phase: int = 0  # its 1/256-pose position (rate 64/68 while it runs)
+    # The one-shot DUCK clip.  The advance routine 0x4161B0 holds the last pose
+    # because bit 0 of actor+0x58 is set for a one-shot clip, so the position
+    # must never wrap to pose 0.
+    duck_frame: int = 0  # the clip's current pose index
+    duck_phase: int = 0  # its 1/256-pose position (advanced at DUCK_RATE)
+    duck_shown: bool = False  # set by step_player when this tick selected DUCK
 
     @property
     def centre_x(self) -> float:

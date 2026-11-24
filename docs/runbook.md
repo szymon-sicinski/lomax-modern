@@ -183,10 +183,14 @@ The default mapping (arrow keys and WASD):
 | Move left | ← or `A` |
 | Move right | → or `D` |
 | Jump | Space, ↑ or `W` |
+| Duck (crouch) | ↓ or `S` |
 
 - **Left/right are level-triggered** — hold to move, and holding both sides at
   once is neutral. **Jump is edge-triggered** — a fresh press jumps once; a
-  held jump key does not re-jump on landing.
+  held jump key does not re-jump on landing. **Down is level-triggered** too:
+  a grounded player holding it draws `DUCK` (a one-shot 6-pose clip that holds
+  its last pose, §2.6.2 a row 23) and releasing it stands back up; in the air
+  the down key has no effect.
 - **Esc** (or closing the window) quits.
 - `--seconds N` (default 60) bounds the run so the headless
   `SDL_VIDEODRIVER=dummy` check exits cleanly; without the bound a real session

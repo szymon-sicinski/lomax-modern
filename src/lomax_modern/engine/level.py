@@ -71,15 +71,21 @@ PLAYER_JUMP_MOVING_ANIM = "JMP2"
 PLAYER_FASTFALL_ANIM = "FLO1"
 PLAYER_FASTFALL_MOVING_ANIM = "FLO2"
 
+#: The duck clip (§2.6.2 a row 23): drawn on the ground with state bit ``0x4``,
+#: one-shot, 6 poses, rate 65 [V].  The setter conditions are [H] — this engine
+#: ducks while grounded and Down is held.
+PLAYER_DUCK_ANIM = "DUCK"
+
 #: The clip tags the player's table carries, in table order (the report prints
-#: clips in this order): the ground clips, the landing clip and the four air
-#: clips (``docs/file-formats.md`` §2.6.2 a).  The table is **keyed by tag** (see
-#: :func:`load_clip_table`), so a later slice adds a clip by naming it here —
-#: ``DUCK`` (AN5) and ``STA2`` (AN6) need no new loader.
+#: clips in this order): the ground clips (including ``DUCK``), the landing clip
+#: and the four air clips (``docs/file-formats.md`` §2.6.2 a).  The table is
+#: **keyed by tag** (see :func:`load_clip_table`), so a later slice adds a clip
+#: by naming it here — ``STA2`` (AN6) needs no new loader.
 PLAYER_CLIP_TAGS = (
     PLAYER_STAND_ANIM,
     PLAYER_WALK_ANIM,
     PLAYER_RUN_ANIM,
+    PLAYER_DUCK_ANIM,
     PLAYER_LAND_ANIM,
     PLAYER_JUMP_ANIM,
     PLAYER_JUMP_MOVING_ANIM,

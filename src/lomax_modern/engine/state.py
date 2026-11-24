@@ -16,6 +16,8 @@ from .entities import (
     AIR_POSE4_MIN_VY,
     AIR_POSE5_MIN_VY,
     AIR_POSE6_MIN_VY,
+    DUCK_POSES,
+    DUCK_RATE,
     FASTFALL_MIN_VY,
     FLO1_RATE,
     FLO2_RATE,
@@ -35,6 +37,7 @@ from .entities import (
 )
 from .level import (
     CELL_PX,
+    PLAYER_DUCK_ANIM,
     PLAYER_FASTFALL_ANIM,
     PLAYER_FASTFALL_MOVING_ANIM,
     PLAYER_JUMP_ANIM,
@@ -181,13 +184,17 @@ def select_clip(player: Player) -> tuple[str, int]:
     **Pure**: a function of the player's own state — no I/O, no module-level
     mutable state, no level.  The pair is the key into the level's clip table
     (``Level.clip_pose``), so the render path names no sprite id and needs no
-    branch per clip; a later slice changes *this* function (duck in AN5, idle
-    in AN6) instead of the renderer.
+    branch per clip; a later slice changes *this* function (idle in AN6)
+    instead of the renderer.
 
     Rules (``docs/file-formats.md`` §2.6.2 a; Q38 is answered [V]):
 
     * airborne (``not on_ground``) → :func:`select_air_clip`: ``JMP1``/``JMP2``
       by jump kind, ``FLO1``/``FLO2`` in a fast fall; never a ground clip;
+    * grounded with the duck flag set by :func:`step_player` →
+      :data:`PLAYER_DUCK_ANIM` (``DUCK``) at :attr:`Player.duck_frame` (row 23,
+      one-shot, holds its last pose; the setter is [H]).  Row 23 precedes rows
+      24-26 in the original's priority chain, so a duck outranks ``LND1``;
     * grounded with the landing flag set by :func:`step_player` →
       :data:`PLAYER_LAND_ANIM` (``LND1``), pose 0 (the clip is one pose);
     * standing (``|vx| == 0``) → :data:`PLAYER_STAND_ANIM` (``STA1``), pose 0;
@@ -199,6 +206,8 @@ def select_clip(player: Player) -> tuple[str, int]:
     """
     if not player.on_ground:
         return select_air_clip(player)
+    if player.duck_shown:
+        return PLAYER_DUCK_ANIM, player.duck_frame
     if player.lnd1_shown:
         return PLAYER_LAND_ANIM, 0
     rule = ground_clip_rule(player.vx)
@@ -326,13 +335,41 @@ def _update_air_and_landing(
         )
 
 
+def _update_duck(player: Player, inp: Input) -> None:
+    """The one-shot DUCK clip's one tick of bookkeeping.
+
+    State bit 0x4 in the original (docs/file-formats.md §2.6.2 a row 23): this
+    engine sets it while the player is grounded and Down is held [H] — where the
+    original sets it (0x410A89) the exact conditions are untraced.  Setting the
+    clip restarts it unless it is already playing (0x416110), and the advance
+    routine (0x4161B0) holds the last pose because bit 0 of actor+0x58 is set
+    for a one-shot clip.
+    """
+    was_shown = player.duck_shown
+    player.duck_shown = bool(player.on_ground and inp.down)
+    if not player.duck_shown:
+        return
+    if not was_shown:
+        # 0x416140 (via 0x416110): a freshly set clip starts at pose 0.
+        player.duck_frame = 0
+        player.duck_phase = 0
+    position = player.duck_frame * POSE_PHASE + player.duck_phase + DUCK_RATE
+    # Hold the last pose: the position never reaches the pose count.
+    position = min(position, DUCK_POSES * POSE_PHASE - 1)
+    player.duck_frame, player.duck_phase = divmod(position, POSE_PHASE)
+
+
 def step_player(level: Level, player: Player, inp: Input) -> None:
     """Advance the player one tick: input, gravity, then axis-separated moves.
 
     Movement is axis-separated (X then Y) so a landing and a wall-hit in the
     same tick resolve independently.  ``on_ground`` is recomputed each tick.
     """
-    if inp.left and not inp.right:
+    if inp.down and player.on_ground:
+        # [H] Holding Down on the ground suppresses horizontal input, so the
+        # crouch always starts from rest; airborne input is unaffected.
+        player.vx = 0.0
+    elif inp.left and not inp.right:
         player.vx = -WALK_SPEED
     elif inp.right and not inp.left:
         player.vx = WALK_SPEED
@@ -363,6 +400,7 @@ def step_player(level: Level, player: Player, inp: Input) -> None:
     player.on_ground = False
     _resolve_y(level, player)
     _update_air_and_landing(player, inp, was_grounded=was_grounded, launched=launched)
+    _update_duck(player, inp)
 
 
 @dataclass
