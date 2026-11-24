@@ -56,11 +56,36 @@ PLAYER_WALK_ANIM = "WALK"
 #: loaded into the table and counted but not drawn.
 PLAYER_RUN_ANIM = "RUN"
 
-#: The clip tags the player's table carries: the standing clip, the walking clip
-#: and the run clip, in that order.  The table is **keyed by tag** (see
-#: :func:`load_clip_table`), so a later slice adds a clip by naming it here — the
-#: air states (AN4), ``DUCK`` (AN5) and ``STA2`` (AN6) need no new loader.
-PLAYER_CLIP_TAGS = (PLAYER_STAND_ANIM, PLAYER_WALK_ANIM, PLAYER_RUN_ANIM)
+#: The landing clip (§2.6.2 a row 26): **one pose**, drawn on the ground while
+#: the landing counter ``0x59F1CC`` is non-zero — 10 ticks after a straight-jump
+#: touchdown, cut to a single tick by a held left/right (``0x411D3E``).
+PLAYER_LAND_ANIM = "LND1"
+
+#: The straight kind's jump clip (row 14, state bit ``0x2`` set) and the moving
+#: kind's (row 20, bit clear); the airborne player never draws a ground clip.
+PLAYER_JUMP_ANIM = "JMP1"
+PLAYER_JUMP_MOVING_ANIM = "JMP2"
+
+#: The fast-fall clips (rows 18/21), on the same straight/moving split: selected
+#: in the air at ``vy`` >= 2.5 px/tick, not a slow float.
+PLAYER_FASTFALL_ANIM = "FLO1"
+PLAYER_FASTFALL_MOVING_ANIM = "FLO2"
+
+#: The clip tags the player's table carries, in table order (the report prints
+#: clips in this order): the ground clips, the landing clip and the four air
+#: clips (``docs/file-formats.md`` §2.6.2 a).  The table is **keyed by tag** (see
+#: :func:`load_clip_table`), so a later slice adds a clip by naming it here —
+#: ``DUCK`` (AN5) and ``STA2`` (AN6) need no new loader.
+PLAYER_CLIP_TAGS = (
+    PLAYER_STAND_ANIM,
+    PLAYER_WALK_ANIM,
+    PLAYER_RUN_ANIM,
+    PLAYER_LAND_ANIM,
+    PLAYER_JUMP_ANIM,
+    PLAYER_JUMP_MOVING_ANIM,
+    PLAYER_FASTFALL_ANIM,
+    PLAYER_FASTFALL_MOVING_ANIM,
+)
 
 
 def load_clip_table(

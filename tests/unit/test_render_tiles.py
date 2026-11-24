@@ -360,6 +360,7 @@ def test_render_tiles_blits_the_player_sprite_not_the_marker(tmp_path: Path) -> 
     assert level.player_sprite is not None
 
     state = new_game_state(level, spawn_x=0.0, spawn_y=0.0)
+    state.player.on_ground = True  # standing: the selector names STA1, not an air clip
     frame = render_tiles(level, state)
 
     # The marker is gone: the sprite (palette index 2 -> blue, via the sprite
@@ -505,7 +506,7 @@ def test_moving_player_draws_the_walk_pose_through_the_sprite_slot(
     level = load_level(tmp_path / "VILLAGE.WLD")
     assert len(level.clips[PLAYER_WALK_ANIM]) == 1
 
-    state = new_game_state(level, spawn_x=48.0, spawn_y=0.0)
+    state = new_game_state(level, spawn_x=48.0, spawn_y=2.0)
     state.tick(Input(right=True))
     assert state.player.vx != 0.0
     cam_x, cam_y = camera(level, state.player, 320, 240)
@@ -569,7 +570,7 @@ def test_moving_player_advances_at_the_measured_rate_and_idles_identically(
         return render_tiles(level, state).pixel(sx, sy)
 
     # Moving: rate 73/256 -> holds of 3, 4, 3, 4 ticks, then wraps.
-    state = new_game_state(level, spawn_x=48.0, spawn_y=0.0)
+    state = new_game_state(level, spawn_x=48.0, spawn_y=2.0)
     colours = []
     for _ in range(14):
         state.tick(Input(right=True))
@@ -577,7 +578,7 @@ def test_moving_player_advances_at_the_measured_rate_and_idles_identically(
     assert colours == [GREEN565] * 3 + [BLUE565] * 4 + [GREEN565] * 3 + [BLUE565] * 4
 
     # Standing still: the standing sprite, and a frame that never changes.
-    idle = new_game_state(level, spawn_x=48.0, spawn_y=0.0)
+    idle = new_game_state(level, spawn_x=48.0, spawn_y=2.0)
     for _ in range(8):
         idle.tick(Input())
     hashes = set()
@@ -617,7 +618,7 @@ def test_moving_player_mirrors_the_pose_for_the_facing(tmp_path: Path) -> None:
     level = load_level(tmp_path / "VILLAGE.WLD")
 
     def probe(direction: str) -> tuple[int, int, int, int]:
-        state = new_game_state(level, spawn_x=48.0, spawn_y=0.0)
+        state = new_game_state(level, spawn_x=48.0, spawn_y=2.0)
         state.tick(Input(**{direction: True}))
         cam_x, cam_y = camera(level, state.player, 320, 240)
         pose = level.clips[PLAYER_WALK_ANIM][0]
@@ -661,7 +662,7 @@ def _placement_level(tmp_path: Path, dx: int, dy: int):
     return load_level(tmp_path / "VILLAGE.WLD")
 
 
-def _moving(level, direction: str, y: float = 0.0):
+def _moving(level, direction: str, y: float = 2.0):
     state = new_game_state(level, spawn_x=48.0, spawn_y=y)
     state.tick(Input(**{direction: True}))
     return state
@@ -712,15 +713,15 @@ def test_dy_is_added_on_top_of_the_physics_y_without_compensation(
     """A 20 px physics displacement moves the drawn row by exactly 20 px."""
     dy = -10
     level = _placement_level(tmp_path, 0, dy)
-    ground = _moving(level, "right", y=40.0)
-    air = _moving(level, "right", y=40.0)
-    air.player.y -= 20.0  # as a jump arc would
+    ground = _moving(level, "right")  # on the floor: the first tick is a ground tick
+    shifted = _moving(level, "right")
+    shifted.player.y += 20.0  # a physics displacement; the clip choice is unchanged
     pose = level.clips[PLAYER_WALK_ANIM][0]
-    for state in (ground, air):
+    for state in (ground, shifted):
         _, row = pose_top_left(state.player, pose)
         assert row == pose_origin(state.player)[1] + dy
     g_row = pose_top_left(ground.player, pose)[1]
-    a_row = pose_top_left(air.player, pose)[1]
-    assert g_row - a_row == 20
-    x = pose_top_left(air.player, pose)[0]
-    assert render_tiles(level, air).pixel(x, a_row) == GREEN565
+    s_row = pose_top_left(shifted.player, pose)[1]
+    assert s_row - g_row == 20
+    x = pose_top_left(shifted.player, pose)[0]
+    assert render_tiles(level, shifted).pixel(x, s_row) == GREEN565

@@ -7,9 +7,10 @@ index-0 transparency into the 320x240 viewport, overlays the playfield's
 ``GNMY`` placements as markers styled by the placement's ``NMY`` name
 (``Start``/``Exit``/``Moneybag`` distinct, every other name one grey "other
 type" bucket — Q32 **[V]**), and finally the player — a pose from the level's
-clip table, chosen by the pure selector (``STA1`` standing, ``RUN`` moving
-today), falling back to the marker when the ``MAIN.WLD`` bank is absent — so the
-camera-follow and scrolling are visible.
+clip table, chosen by the pure selector for every case (``STA1`` standing,
+``WALK``/``RUN`` by ``|vx|`` on the ground, ``LND1`` after a straight landing,
+``JMP1``/``JMP2``/``FLO1``/``FLO2`` in the air), falling back to the marker when
+the ``MAIN.WLD`` bank is absent — so the camera-follow and scrolling are visible.
 :func:`render` remains the
 *geometric* debug path: every non-zero collision cell is drawn in one colour
 and the player/entities as markers, with the unresolved bits (Q31) flagged in
@@ -281,8 +282,9 @@ def render_tiles(
     visible.  The player is drawn from the level's **clip table**
     (:meth:`lomax_modern.engine.level.Level.clip_pose`): the pure
     :func:`lomax_modern.engine.state.select_clip` names a ``(tag, pose index)``
-    pair and the table resolves it to a whole-body pose (``STA1``'s standing frame
-    while still, ``RUN``'s stride while ``vx != 0`` today), blitted through the
+    pair and the table resolves it to a whole-body pose (standing ``STA1``,
+    ``WALK``/``RUN`` by ``|vx|`` on the ground, ``LND1`` after a straight
+    landing, ``JMP1``/``JMP2``/``FLO1``/``FLO2`` in the air), blitted through the
     ``HEAD`` palette with index-0 transparency.  A world without the global bank
     (a synthetic world) falls back to the marker.
     """
