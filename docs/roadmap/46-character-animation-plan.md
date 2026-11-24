@@ -1,5 +1,29 @@
 # 46. Character animation — plan + budget
 
+> **Status: shipped.** On `main` = `ed69950` slices AN1–AN6 (including
+> AN3b) are merged and AC1–AC9 are verified. The player is a small state
+> machine that draws the original's own clips, each pose placed by its
+> `dx`/`dy` (§2.6.2 c): `STA1`/`STA2` (the data-driven idle cycle), `WALK`/`RUN`
+> chosen by `|vx|`, `JMP1`/`JMP2`, `FLO1`/`FLO2`, `LND1`, and `DUCK` while Down
+> is held.
+>
+> - **Still deferred** (§2.3, §6): the attack clips (`THR1`–`THR3`, `SPIN`);
+>   hurt/death (`OUCH`, `OHNO`, `TUMB`, `DIZZ`, `PLOP`, `PLO2`, `DROW`, `BOOM`);
+>   climb/helicopter/jet-pad/build/dig/doors (`CLIM`, `CLI2`–`CLI4`, `JPAD`,
+>   `HELI`, `HEL0`–`HEL8`, `BUI1`, `BUI2`, `DIG1`, `WAHL`, `IN`, `OUT`); slope
+>   running (`RU45`); braking (`BRAK`); edge-teeter (`EDGE`); pushing (`PUSH`).
+> - **Still open**: Q40 in
+>   [`../research/05-open-questions.md`](../research/05-open-questions.md) (the
+>   level-start jump kind, and whether a wall contact zeroes the original's
+>   `vx`), and the `[H]` idle rules the engine implements by choice, not
+>   evidence: where the idle counter increments, that leaving the idle branch
+>   resets it, that "bit 0 set means `STA2`", and that the idle cycle's random
+>   source is not part of a `Snapshot` (a restored snapshot keeps the counter,
+>   threshold and played clip, not the generator's future bits).
+>
+> The body of this document below is the plan as it was written, kept as the
+> record; this Status block records how that plan turned out.
+
 The playable level shipped (**C-playable**, PR #61) and PR #64 gave the moving
 player `Hero.RUN`'s whole-body sprite. The maintainer's next milestone is
 **more animations of the player character**, and he delegated the scoping. This
