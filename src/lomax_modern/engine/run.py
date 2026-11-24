@@ -15,10 +15,16 @@ from typing import Callable
 
 from ..anim_nmy import placement_role
 from ..art import DEFAULT_PALETTE_SLOT, SPRITE_PALETTE_SLOT
-from .entities import Input
-from .level import PLAYER_MOVE_ANIM, PLAYER_STAND_ANIM, Level, load_level
+from .entities import WALK_SPEED, Input
+from .level import (
+    PLAYER_RUN_ANIM,
+    PLAYER_STAND_ANIM,
+    PLAYER_WALK_ANIM,
+    Level,
+    load_level,
+)
 from .render import Frame, render_tiles
-from .state import MOVE_ANIM_TICKS_PER_POSE, GameState, new_game_state, select_clip
+from .state import POSE_PHASE, GameState, new_game_state, pose_rate_px256, select_clip
 
 #: A script turns the current tick and state into one tick of input.
 InputScript = Callable[[int, GameState], Input]
@@ -131,11 +137,9 @@ class SliceReport:
         ]
         if self.player_anim:
             lines.append(self.player_anim)
-        if self.clip_ticks:
-            lines.append(
-                "clips: "
-                + ", ".join(f"{tag} {count}" for tag, count in self.clip_ticks)
-            )
+        drawn = [f"{tag} {count}" for tag, count in self.clip_ticks if count]
+        if drawn:
+            lines.append("clips: " + ", ".join(drawn))
         return "\n".join(lines)
 
 
@@ -201,22 +205,28 @@ def run_slice(
     final_frame = captured if captured is not None else render_tiles(level, state)
     next_level = worlds[1] if state.complete and len(worlds) > 1 else None
     gnmy_roles = collections.Counter(placement_role(e.name) for e in level.gnmy)
-    move_poses = level.clips.get(PLAYER_MOVE_ANIM, ())
-    if move_poses:
+    walk_poses = level.clips.get(PLAYER_WALK_ANIM, ())
+    if walk_poses:
+        rate = pose_rate_px256(WALK_SPEED)
+        run_note = (
+            f"{PLAYER_RUN_ANIM} ({len(level.clips[PLAYER_RUN_ANIM])} poses, "
+            f"|vx|>>11) is the clip above 2.0, loaded but not drawn at "
+            f"{WALK_SPEED:g}"
+            if PLAYER_RUN_ANIM in level.clips
+            else f"{PLAYER_RUN_ANIM} not resolved"
+        )
         player_anim = (
             f"player: idle = {PLAYER_STAND_ANIM} standing sprite; moving = "
-            f"{PLAYER_MOVE_ANIM} {len(move_poses)} whole-body poses, one pose "
-            f"per {MOVE_ANIM_TICKS_PER_POSE} tick(s) ("
-            f"{60 / MOVE_ANIM_TICKS_PER_POSE:.0f} poses/s at 60 Hz, one cycle per "
-            f"{len(move_poses) * MOVE_ANIM_TICKS_PER_POSE} ticks "
-            f"= {len(move_poses) * MOVE_ANIM_TICKS_PER_POSE / 60:.2f} s), "
-            f"hold chosen by eye [H]; facing = single sprite mirrored; ANIM "
+            f"{PLAYER_WALK_ANIM} {len(walk_poses)} whole-body poses at "
+            f"{rate}/{POSE_PHASE} pose per tick at {WALK_SPEED:g} px/tick "
+            f"(|vx|/0x700; {POSE_PHASE / rate:.1f} ticks per pose) [V]; "
+            f"{run_note}; facing = single sprite mirrored; ANIM "
             f"sprites through HEAD palette slot {SPRITE_PALETTE_SLOT}, tiles "
             f"through slot {DEFAULT_PALETTE_SLOT}"
         )
     else:
         player_anim = (
-            f"player: no {PLAYER_MOVE_ANIM} clip resolved (no sibling MAIN.WLD) "
+            f"player: no {PLAYER_WALK_ANIM} clip resolved (no sibling MAIN.WLD) "
             "-- the standing sprite is reused while moving"
         )
     report = SliceReport(

@@ -74,12 +74,12 @@ class Player:
     height: int = 14
     #: Facing direction: +1 right, -1 left.  Drives the sprite's horizontal flip.
     facing: int = 1
-    #: Index of the current moving-clip pose (cycles over the ``RUN`` clip's
-    #: poses in ``Level.clips``, resolved by ``Level.clip_pose``).
+    #: Index of the current moving-clip pose; the selector
+    #: (``state.select_clip``) picks the clip, ``Level.clip_pose`` wraps the index.
     anim_frame: int = 0
-    #: Ticks the current pose has been held; advances ``anim_frame`` every
-    #: ``state.MOVE_ANIM_TICKS_PER_POSE`` ticks.
-    anim_ticks: int = 0
+    #: Sub-pose accumulator in 1/256-pose units (0..255 is the remainder); the
+    #: pose advances whenever it reaches 256 (``state.advance_pose``).
+    anim_phase: int = 0
 
     @property
     def centre_x(self) -> float:

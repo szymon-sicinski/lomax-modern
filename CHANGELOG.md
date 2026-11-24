@@ -305,6 +305,19 @@ Versioning: [Semantic Versioning](https://semver.org/).
 
 ### Changed
 
+- **The ground-moving player draws `WALK`, not `RUN`** — the original's rule
+  (`docs/file-formats.md` §2.6.2 a rows 34–35, VA `0x411F79`): grounded and
+  `0 < |vx| ≤ 2.0` → `WALK`, `|vx| > 2.0` → `RUN`, tested with a strict `>`, so
+  exactly 2.0 is `WALK`. `engine.state`'s fixed 3-tick hold
+  (`MOVE_ANIM_TICKS_PER_POSE`, "chosen by eye") is replaced by each clip's own
+  measured rate, in **1/256 pose per tick** — `WALK` `|vx|/0x700` = 73 at 2.0
+  (3.5 ticks/pose), `RUN` `|vx|>>11` = 80 at 2.5 — accumulated as an integer, so
+  the rate cannot drift; `Player.anim_ticks` becomes `anim_phase`. `RUN` stays in
+  the clip table (it needs a speed above 2.0, which the engine does not have) and
+  `slice`'s `clips:` line now names only the clips actually drawn, so
+  `slice --world VILLAGE --frames 120` prints `clips: STA1 61, WALK 59` (was
+  `STA1 61, RUN 59`). Supersedes the "still draws `RUN` until AN3b" note below;
+  air states remain AN4's.
 - **Player poses are placed at origin + (dx, dy), y down, mirrored about the
   origin column** (`docs/file-formats.md` §2.6.2 c). `render_tiles` no longer
   bottom-pins and centres the pose and discards `dx`/`dy`; the origin is the

@@ -43,24 +43,24 @@ PLAYER_NMY_NAME = "Hero"
 #: keyframe is the player's standing pose (``STA1`` = "stand").
 PLAYER_STAND_ANIM = "STA1"
 
-#: The animation tag whose steps drive the player's **moving** animation.  It is
-#: the clip with a whole-body sprite per step (``RUN``: sprite byte 23 →
-#: ``type_index`` 22, 48-62 x 34-43 over its 12 frames — a complete character).
-#: The original draws
-#: ``WALK`` for ``0 < |vx| <= 2.0`` and ``RUN`` only above 2.0 (``cmp |vx|,
-#: 0x20000`` / ``jg`` at VA ``0x411F79``), so at this engine's only ground speed
-#: (2.0) it draws ``WALK``; this engine still draws ``RUN`` until a later slice
-#: (AN3b) flips it (``docs/file-formats.md`` §2.6.2 a).
-#: ``anim_clip.resolve_body_poses`` turns the clip into renderable whole-body
-#: frames.  See ``docs/file-formats.md`` §2.6.1.
-PLAYER_MOVE_ANIM = "RUN"
+#: The clip drawn for a grounded player with ``0 < |vx| <= 2.0``.  The original
+#: selects ``WALK`` below the speed gate (``cmp |vx|, 0x20000`` / ``jg`` at VA
+#: ``0x411F79``; ``docs/file-formats.md`` §2.6.2 a row 34), and 2.0 px/tick is this
+#: engine's only ground speed, so this is the everyday moving clip.  Its per-step
+#: layer is a whole character (10 poses; ``anim_clip.resolve_body_poses`` turns
+#: it into renderable whole-body frames, ``docs/file-formats.md`` §2.6.1).
+PLAYER_WALK_ANIM = "WALK"
 
-#: The clip tags the player's table carries today: the standing clip and the
-#: moving clip.  The table is **keyed by tag** (see :func:`load_clip_table`), so a
-#: later slice adds a clip by naming it here — the air states (AN4), ``DUCK``
-#: (AN5) and ``STA2`` (AN6) need no new loader, and neither does flipping the
-#: moving clip to ``WALK`` (Q38).
-PLAYER_CLIP_TAGS = (PLAYER_STAND_ANIM, PLAYER_MOVE_ANIM)
+#: The clip drawn only above 2.0 px/tick (§2.6.2 a row 35, the same ``jg``).  It
+#: has 12 whole-body poses.  Nothing in the engine moves that fast yet, so it is
+#: loaded into the table and counted but not drawn.
+PLAYER_RUN_ANIM = "RUN"
+
+#: The clip tags the player's table carries: the standing clip, the walking clip
+#: and the run clip, in that order.  The table is **keyed by tag** (see
+#: :func:`load_clip_table`), so a later slice adds a clip by naming it here — the
+#: air states (AN4), ``DUCK`` (AN5) and ``STA2`` (AN6) need no new loader.
+PLAYER_CLIP_TAGS = (PLAYER_STAND_ANIM, PLAYER_WALK_ANIM, PLAYER_RUN_ANIM)
 
 
 def load_clip_table(
