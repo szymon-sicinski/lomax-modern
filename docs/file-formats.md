@@ -384,12 +384,17 @@ install:
 
 ```
 u8 sprite   # ANIM sprite slot, 1-based: type_index = sprite - 1   [V]
-u8 step     # stride pose index; step-1 selects the chunk's own frame;
-            # step 0 draws nothing (resolver returns NULL)          [V]
-i16 dx      # signed horizontal draw offset               [V structure]
-i16 dy      # signed vertical draw offset, y-up           [V]
-u16 flags   # per-frame flag word; bit 0x80's role is unresolved     [H]
+u8 step     # 1-based frame of THIS keyframe's own sprite (step-1); not a
+            # pose index; step 0 = not blitted, an attachment point  [V, §2.6.2]
+i16 dx      # layer left edge relative to the actor origin x        [V, §2.6.2]
+i16 dy      # layer top edge relative to the actor origin y, y DOWN [V, §2.6.2]
+u16 flags   # 0x80 = last keyframe of a pose; 0x18 = per-layer mirror
+            # (XOR with the actor's); 0x07 = layer / callback slot   [V, §2.6.2]
 ```
+
+*Updated by §2.6.2 (AN1, 2026-11-23).* The previous block called `step` a
+"stride pose index", `dy` "y-up" and the `0x80` bit "unresolved"; those three
+readings are **retracted** — the blit at `0x40C270` settles each (§2.6.2 c/d).
 
 **Chunk ↔ clip mapping `[V]`.** A keyframe's first byte is **1-based**: it is
 the slot the `ANIM` reader stored the chunk in, `type_index + 1`. The reader
@@ -412,13 +417,15 @@ world's bank —
 keyframes) — and are kept as explicit gaps. Reading the byte 0-based shifts
 **every** clip onto its *neighbouring* chunk, which is why `WALK` looked like a
 18×23/16×17 pair and the maintainer's six state labels were all wrong: the
-0-based read gave `RUN` the 54×57 art that is really `SPIN`'s. `169` is the
-hero's shared contact pose (used by `WALK`/`RUN`/`BRAK`/`SPIN`/… and
-`Krug.CLAY`); its pixels are not in any `.WLD` (they are likely embedded in
-`LOMAX.EXE`), so `WALK`'s two contact keyframes stay unresolved (Q34).
+0-based read gave `RUN` the 54×57 art that is really `SPIN`'s. `169` occurs in
+`WALK`/`RUN`/`BRAK`/`SPIN`/… and `Krug.CLAY`. **Retracted** (§2.6.2 d): the
+earlier reading "the hero's shared contact pose, its pixels likely embedded in
+`LOMAX.EXE`". Every one of the 12 non-zero unresolved bytes sits only on a
+`step 0` keyframe, which the blit never draws — it calls an actor callback at
+that point — so `169` is an attachment-point marker, not a missing sprite.
 
 **Pose structure `[V]` (step grouping and paint order); the `0x80` bit's
-meaning `[H]`.** `Hero.WALK` is **10 stride poses × 2 sprite layers**, not 22
+meaning — settled in §2.6.2 d.** `Hero.WALK` is **10 stride poses × 2 sprite layers**, not 22
 independent frames. Grouping the 22 keyframes by their second byte (`step`)
 gives exactly two keyframes per `step` 1..10 — a **base** layer (sprite byte
 33 → `type_index` 32, 36–42 × 44–48, the whole character) and a smaller
@@ -428,17 +435,21 @@ frames and 33's first 10 frames are used, so `step - 1` selects the matching
 frame of each layer: the two keyframes sharing a `step` are one composite pose,
 not two separate frames. The compositor paints the **base first, then the
 overlay** on top. `flags 0x80` sits on the **base** keyframe in 9/10 steps
-(step 6's base keyframe 12 is `0x00`), so the bit's exact role — a pose-run
-terminator, a flip flag, or a priority hint — is still **[H]**, not settled;
-the paint order is derived from layer *size*, not from the flag.
+(step 6's base keyframe 12 is `0x00`). *Settled by §2.6.2 d `[V]`:* `0x80`
+ends a pose — a pose is the run of keyframes up to and including the next
+`0x80` (step 6's pose ends on the `step 0` marker after the base, flagged
+`0x82`) — and the paint order base-first/overlay-on-top is now shown by the
+renderer's list order, not inferred from layer size. Grouping by `step` happens
+to agree with the `0x80` grouping in `WALK`; it does not in general (`STA1`:
+30 poses over 7 distinct steps).
 
-**Timing `[H]`.** No keyframe field and none of the animation's 9 `u16` params
-carry a per-frame hold: `dx`/`dy` are small signed offsets, `flags` is a flag
-word and `step` a monotonic stride counter. The engine advances one pose every
-**three** 60 Hz ticks (`engine.state.MOVE_ANIM_TICKS_PER_POSE = 3`, 20 poses/s),
-so a 12-pose `RUN` cycle takes 36 ticks = **0.6 s**. That rate is **chosen by
-eye**, not measured; the previous wiring advanced one pose per tick (12 fps of
-animation, ~5 cycles/s) and stuttered by construction. Q36.
+**Timing.** *Retracted (§2.6.2 d):* "none of the animation's 9 `u16` params
+carry a per-frame hold". The first of them is the clip's **rate** in `/256`
+poses per tick (64 = 4 ticks per pose), and the selector overrides it for
+`WALK` (`|vx| / 0x700`, 3.5 ticks per pose at 2.0 px/tick) and `RUN`
+(`|vx| >> 11`). The engine still advances one pose every **three** 60 Hz ticks
+(`engine.state.MOVE_ANIM_TICKS_PER_POSE = 3`), a rate chosen by eye `[H]`; the
+previous wiring advanced one pose per tick and stuttered by construction. Q36.
 
 **The moving player draws `RUN`, one whole-body sprite per step `[V]` structure,
 `[H]` layer choice.** `Hero.RUN` is 26 keyframes over **12 steps**: per step a
@@ -447,7 +458,11 @@ the 12 frames: one image of head, torso, arms and legs) plus a smaller companion
 (sprite byte **24** → `type_index` 23, 26×13–34×14). Measured on the retail install at the recorded
 `(dx, -dy)`, the companion's opaque pixels land **on** the body layer's pixels
 **39–97 %** of the time (WALK's pair: 65–100 %) — it is a genuine overlay on the
-character, not a detached fragment. The 0-based read made it look detached
+character, not a detached fragment. *Those two ranges were taken under the
+`(dx, −dy)` placement that §2.6.2 c retracts; under the verified placement
+(top = `+dy`) the same measure is `RUN` 21–65 %, `WALK` 52–66 %
+(`an1_audit.py overlap`, [`research/08`](research/08-player-animation-selector.md)):
+the overlay still overlaps the body but partly extends beyond it.* The 0-based read made it look detached
 (0–8 %) because it paired each clip's overlay with its *neighbour's* body;
 `docs/file-formats.md` §2.6.1's `RUN`/`SPIN` swap is the same mistake. The
 engine's moving player still blits the whole-body layer alone
@@ -455,25 +470,36 @@ engine's moving player still blits the whole-body layer alone
 hard-coded sprite id) because that renders a complete figure on its own; what
 the overlay depicts is open (**Q37**). The `anim-clip` strips composite both
 layers (`anim_clip.resolve_poses`), and they too render one coherent character
-per pose. `WALK` is the slow-walk clip (`|vx| ≤ 2.0` at VA `0x411F79`), not the
-moving clip (unsettled, see Q38). The `dx`/`dy` sign convention below is also
-unsettled (Q39); both are queued for the planned §2.6.2 (clip → selector → VA)
-in `docs/roadmap/46-character-animation-plan.md` (slice AN1).
+per pose. **Which clip the original draws while moving is settled `[V]`
+(§2.6.2 a, Q38):** `cmp esi, 0x20000` / `jg` at VA `0x411F79` with `esi = |vx|`
+draws `WALK` for `0 < |vx| ≤ 2.0` and `RUN` only above 2.0 — so at the
+terrain-0 walking speed of exactly 2.0 px/tick the original draws **`WALK`**,
+and the engine's `RUN` for every `vx ≠ 0` is a divergence to correct, not the
+original's rule. The `dx`/`dy` placement below is likewise settled in §2.6.2 c
+(Q39).
 
-**Frame selector when a clip has more steps than its chunk has frames `[H]`.**
-`step` indexes the chunk 1-based (`step - 1`), which is exact for the two clips
-this card renders: `WALK` (10 steps over `type_index` 32's 10 frames) and `RUN`
-(12 steps over `type_index` 22's 12 frames). It is **not** exact everywhere:
-**45 of 691** retail clips declare a step beyond at least one of their layers'
-frame counts (`Hero.STA2`: 10 steps over `type_index` 27's 7 frames). The
-selector therefore wraps modulo the frame count
-(`anim_clip.frame_for_step`, Q36) instead of clamping, so such a clip keeps
-moving rather than freezing on its last frame. Which rule the original uses is
-not yet traced, so the wrap is a chosen convention **[H]**; `step == 0` is the
-one case the resolver settles: it returns NULL (VA `0x4163D3`), so nothing is
-drawn.
+**Frame selector when a clip has more steps than its chunk has frames —
+retracted (§2.6.2 d).** This paragraph claimed that **45 of 691** retail clips
+declare a step beyond one of their layers' frame counts (`Hero.STA2`: 10 steps
+over `type_index` 27's 7 frames), and the engine wraps modulo the frame count
+(`anim_clip.frame_for_step`) as a chosen convention `[H]`. The count came from
+treating `step` as a pose index shared by all layers. In the original each
+keyframe's `step` selects a frame of **its own** sprite, and **0 of 4,788**
+drawn keyframes in the nine worlds exceed their own sprite's frame count, so
+the wrap never fires on retail data and no wrap/clamp rule exists to recover.
+`step == 0` is not drawn: the resolver returns NULL (VA `0x4163D3`) and the blit
+treats such a keyframe as an attachment point (§2.6.2 d).
 
-**Alignment `[V]` structure, `[H]` anchor.** `dx`/`dy` are signed offsets with
+**Alignment — the placement is retracted and replaced (§2.6.2 c, Q39).** *The
+claim that follows — "`dy` is y-up because the decompressor negates the height
+(`neg ecx` at `0x415FF9`), so a layer is drawn at `(dx, -dy)`" — is
+**retracted**: that `neg` writes a top-down GDI DIB height, and the actor blit
+(`0x40C270`) places a layer's top-left at `origin + (dx, dy)` with y down. The
+composite measurements in the rest of this paragraph (connectivity, canvas
+size) were taken under the retracted placement and are kept only as a record
+of what `anim_clip.resolve_poses` currently does; re-measuring them under the
+verified placement belongs to the anchoring slice (AN3).* Original text:
+`dx`/`dy` are signed offsets with
 the game's **y-up** axis — the sprite decompressor at VA `0x415E30` negates the
 frame height before storing it (`neg ecx` at `0x415FF9`), so a layer is drawn at
 screen position `(dx, -dy)`, which is what puts the head *above* the body. Each
@@ -491,7 +517,11 @@ also named the wrong steps. The exact anchor — which point
 on the collision box the offsets are relative to — is still not confirmed, so
 `engine.render_tiles` anchors the composite like the standing sprite: bottom at
 the collision-box bottom, horizontally centred, mirrored by the player's facing
-direction. Anchor and facing convention are graded `[H]`. Because
+direction. Anchor and facing convention are graded `[H]`. *(§2.6.2 c: the
+original's origin is the actor's integer position `0x59F23C`/`0x59F240`, the
+standing body's bottom row sits exactly on it, and mirroring reflects about
+the origin column, `x ↦ −x`; only the engine-to-original position mapping is
+still open.)* Because
 `engine.render_tiles` draws each `RUN` pose's whole-body layer and **discards
 that pose's `dx`/`dy`**, the bottom-anchored blit moves the top of the sprite —
 the head — from pose to pose: the twelve body layers are 34–43 px tall
@@ -499,7 +529,8 @@ the head — from pose to pose: the twelve body layers are 34–43 px tall
 is a known artefact of the chosen anchor, not a claim about the original's
 registration. The `ANIM` frame's
 `d`/`e` words (carried verbatim as `field_d`/`field_e`) look like per-frame
-registration offsets but their sign and role are unresolved (Q35).
+registration offsets but their sign and role are unresolved (Q35); the actor
+blit does not read them (§2.6.2 c).
 
 **Sprite palette slot `[H]` (user-confirmed against retail).** Sprites resolve
 their indices through `HEAD` palette **slot 0**, not the tile slot (1): slot 0
@@ -523,6 +554,252 @@ player's colour *swap* (pink/blue/green/red), not the default selection.
 the clip's **10 composited poses** as PNGs plus a strip and a GIF, each a whole
 walking character. The two contact keyframes (sprite 169) are reported as
 unresolved and dropped, not half-drawn.
+
+### 2.6.2 Clip → selector → VA: how the original picks, times and places a pose (2026-11-23, AN1)
+
+Read-only `objdump -d -M intel` pass over `LOMAX.EXE` (no execution), plus
+measurements over the retail `NMY` data with the audit script in
+[`research/08-player-animation-selector.md`](research/08-player-animation-selector.md),
+which also gives the command behind every number below. Grades: **[V]** the
+instruction at the cited VA was read and carries the claim; **[M]** measured
+over retail data with that script; **[H]** a hypothesis — usually the *meaning*
+of a state bit whose test is located but whose setter is not traced. This
+section **supersedes** the parts of §2.6.1 marked *retracted* there.
+
+**The actor animation state [V].** The player is the actor struct at
+`0x59F200` (its position/velocity fields are §2.9's `0x59F23C`…`0x59F250`). Four
+routines run every clip, for the player and for every other actor:
+
+| Routine | VA | What it does |
+|---|---|---|
+| set clip | `0x416140` | finds the tag in the actor's record's clip list; stores the clip at `actor+0x08`, its keyframe count at `+0x66`, its **pose count** at `+0x64`, its **rate** at `+0x68`; zeroes the position `+0x6A`, the resolved pose `+0x6C` and the keyframe index `+0x6E`; clears the hold-last bit 0 of `actor+0x58` (`0x416180`) |
+| set clip if different | `0x416110` | returns 0 without touching the state if `actor+0x08` already holds that tag, else calls `0x416140` and returns 1 — so re-selecting the playing clip every tick does **not** restart it |
+| advance | `0x4161B0` | `+0x6A += +0x68` (a 16-bit **8.8** position: the high byte `+0x6B` is the pose index); on reaching the pose count it **holds the last pose** if `actor+0x58` bit 0 is set, else **wraps** (subtract the count; add it when the byte has gone negative — a clip played backwards); returns 1 when it wrapped/ended |
+| pose → keyframe | `0x416210` | walks the keyframe list counting keyframes whose flag word has bit `0x80`, so pose *n* starts after the *n*-th `0x80`; stores the index at `+0x6E` |
+
+**The clip header [V].** The `NMY` reader (`0x415199`, the clip loop at
+`0x41524C`–`0x4152D6`) copies the clip's nine `u16` fields after the keyframe
+count to `clip+0x0C`…`clip+0x1E`; the first of them (`clip+0x0C`) is the rate
+the set-clip routine loads. The pose count (`clip+0x0A`) is computed, not read:
+`0x4160E0` counts the keyframes whose flag word has bit `0x80` (`0x415322`).
+
+**The per-tick order [V].** The game loop calls the player routine
+(`0x40FB70`) once per logic tick from the catch-up loop at `0x404C5B`–`0x404C9F`
+(at most 5 ticks per rendered frame, `0x404C1F`); the tick is §2.9's 60 Hz
+timer. Inside `0x40FB70` the advance runs first (`0x40FC91`; its result — "the
+clip wrapped" — is the flag the selector reads) and the clip selector runs
+afterwards (`0x411480`–`0x412004`).
+
+#### a. The player's clip selector — every `Hero` clip (Q38)
+
+`|vx|` below is `esi`, the absolute value of the velocity `0x59F24C`
+(`0x411454`–`0x411467`) **[V]**; `vy` is `0x59F250`; *state* is the bit field
+`0x49C4C4`. The selector is a priority chain: the first matching row wins.
+Rows 1–8 are tested before the airborne/grounded split. "set" = `0x416110`
+(no restart if already playing), "**force**" = `0x416140` (always restarts).
+Rates are `/256` poses per tick: 64 = one pose every 4 ticks.
+
+| # | Clip | Selected when | VA (selector) | Grade | Rate (default, `[M]`) / override |
+|---:|---|---|---|---|---|
+| 1 | `JPAD` | global `0x52C568` ≠ 0 **and** state `0x400` (with `0x52C568` ≠ 0 and `0x400` clear nothing is selected) | `0x411497` | [V] test; meaning of both [H] | 186 |
+| 2 | `WAHL` | state `0x80` | `0x4114B2` | [V] test; meaning [H] | 47 |
+| 3 | `HEL8` / `HEL5` / `HEL0` | state `0x8000` with `0x10000`: `HEL8` if state `0x1` else `HEL5`; without `0x10000`: `HEL0` (one-shot) | `0x4114E2` / `0x4114F9` / `0x411529` | [V] test; "helicopter" [H] | 64 |
+| 4 | `THR2` / `THR3` / `THR1` | state `0x100`: `THR2` if state `0x4`, `THR3` if `0x1000`, else `THR1`; one-shot | `0x4115C1` / `0x4115D2` / `0x4115D9` | [V] test; "throw" [H] | 91 / 64 / 96 |
+| 5 | `BUI1` | state `0x80000`; one-shot, clears the bit when it ends | `0x41162D` | [V] | 64 |
+| 6 | `DROW` | state `0x200` | `0x41165B` | [V] test; "drown" [H] | 78 |
+| 7 | `SPIN` | `0x59F164` ≠ 0 or `0x498F70` ≠ 0 | `0x411FD0` | [V] | **override 128** (`0x411FDF`) |
+| 8 | *(air or ground split)* | state bit `0x1` set → air branch (rows 9–21); clear → ground branch (rows 22–37) | `0x4116E8` | [V] test; "`0x1` = airborne" [V] by its setters: the jump launch `0x410626`, the walk-off-a-ledge path `0x410F3A`; cleared on touchdown `0x410E19` | — |
+| 9 | `OHNO` (or keep `PLOP`) | air, `0x59C708` ≠ 0; if `PLOP` is already playing it is kept | `0x411727` | [V] test; meaning [H] | 76 |
+| 10 | `OUCH` | air, `0x59E938` > 0; one-shot | `0x411747` | [V] test; "hurt" [H] | 34 |
+| 11 | `HELI` | air, state `0x20000` | `0x411777` | [V] | 68 |
+| 12 | `DROW` | air, state `0x800000` | `0x41179A` | [V] | 78 |
+| 13 | `CLIM` / `CLI2` / `CLI3` / `CLI4` | air, state `0x1000` (sub-states `0x2000`/`0x4000`) | `0x411811`–`0x411927` | [V] test; "climb" [H] | `CLIM` override ±128 (`0x411820`, `0x4118C3`) |
+| 14 | **`JMP1`** | air, state bit **`0x2`** (straight jump), jump lockout `0x59E764` ≠ 0 | `0x411955` | **[V]** | 64 — time-driven while the lockout runs; **rate 0** once it reaches 0 (`0x411975`) |
+| 15 | `JPAD` | air, state `0x2`, state `0x400` and `vy` < 0 | `0x411996` | [V] | 186 |
+| 16 | `DROW` | air, state `0x2`, state `0x400000` | `0x4119B9` | [V] | 78 |
+| 17 | `HELI` | air, state `0x2`, a held-input / counter / `vy` > 0 condition (`0x4119D0`–`0x411A06`) | `0x411A08` | [V] test; meaning [H] | 68 |
+| 18 | **`FLO1`** | air, state `0x2`, **`vy` ≥ 2.5** px/tick (`cmp vy, 0x28000; jl` at `0x411A33`) | `0x411A3A` | **[V]** | 64 |
+| 19 | **`JMP1`** | air, state `0x2`, otherwise — pose taken **from `vy`** (§c) | `0x411A51` | **[V]** | pose forced, then `0x416210` (`0x411AC1`) |
+| 20 | **`JMP2`** | air, state bit `0x2` **clear** (moving jump): the same chain as 14–19 with `JMP2` / `FLO2` (`0x411AD8`, `0x411B19`, `0x411B3C`, `0x411B8B`, `0x411BBD`, `0x411BD4`) | `0x411AD8` / `0x411BD4` | **[V]** | as 14 / 19 |
+| 21 | **`FLO2`** | air, `0x2` clear, `vy` ≥ 2.5 | `0x411BBD` | **[V]** | 68 |
+| 22 | `TUMB` | ground, state `0x8` | `0x411C5A` | [V] test; meaning [H] | 64 |
+| 23 | `DUCK` | ground, state `0x4`; one-shot (holds its last pose) | `0x411C7A` | [V] test; state `0x4` is set at `0x410A89` together with a facing update from the left/right input bits | 65 |
+| 24 | `DIG1` | ground, state `0x1000000`; clears the bit when it ends | `0x411CD1` | [V] | 73 |
+| 25 | `PUSH` | ground, `0x59F1FC` ≠ 0 (an object pointer) and not state `0x200000` | `0x411CFD` | [V] test; "pushing" [H] | 64 |
+| 26 | **`LND1`** | ground, landing counter `0x59F1CC` ≠ 0 (decremented here, `0x411D37`); cancelled by a left/right input (`test 0x464435, 0xA0` at `0x411D50`) | `0x411D3E` | **[V]** | 64 |
+| 27 | `EDGE` | ground, `\|vx\|` = 0, the ledge probe `0x413940` true, not yet teetered (`0x46ABB4`) | `0x411DAB` | [V] test; "ledge" [H] | 68 |
+| 28 | `DIZZ` | ground, `\|vx\|` = 0, `0x4770B0` ≠ 0 (decremented per loop) | `0x411DFA` | [V] | 76 |
+| 29 | `WAHL` | ground, `\|vx\|` = 0, `0x52C56C` ≤ 0 | `0x411E46` | [V] test; meaning [H] | 47 |
+| 30 | **`STA1`** (frozen) | ground, `\|vx\|` = 0, idle counter `0x46ABBC` < threshold `0x52C584`: **force** `STA1` with **rate 0** (pose 0 held), counter reset, new threshold `30 + (rand & 63)` ticks (`0x411EE7`–`0x411F11`) | `0x411EE7` | **[V]** | **override 0** |
+| 31 | **`STA2`** or **`STA1`** (played) | ground, idle counter **=** threshold: **force** `STA2` or `STA1` at the clip's own rate, chosen by bit 0 of `0x43AAD0()` (`0x411E7C`–`0x411E9C`); when it wraps the threshold becomes 10,000 so row 30 re-freezes `STA1` next tick | `0x411E85` / `0x411E9C` | **[V]** (that `0x43AAD0` is a random-number routine is [H]) | 68 / 64 |
+| 32 | `RU45` | ground, `\|vx\|` ≠ 0, `0x52C574` = 2 | `0x411F25` | [V] test; "slope" [H] | **override `\|vx\|` / 0x900** (`0x411F37`) |
+| 33 | `BRAK` | ground, `\|vx\|` ≠ 0, the brake flag: the input opposite the facing (`0x8000` while not mirrored, `0x2000` while mirrored) with `vx` ≠ 0 (`0x41038A`, `0x41043B`) | `0x411F54` | [V] | 93 |
+| 34 | **`WALK`** | ground, `\|vx\|` ≠ 0, **`\|vx\|` ≤ 2.0** — `cmp esi, 0x20000` / **`jg`** to `RUN` | **`0x411F79`** | **[V]** | **override `\|vx\|` / 0x700** (`0x411F93`) — 73 at 2.0 px/tick |
+| 35 | **`RUN`** | ground, `\|vx\|` **> 2.0** | `0x411FA8` | **[V]** | **override `\|vx\|` >> 11** (`0x411FBA`–`0x411FC5`) — 80 at 2.5 px/tick |
+| 36 | `IN` / `OUT` | not in this selector: set (`0x416110`) on the player by the door/transfer code (`0x41DA89`/`0x41DB57`, also `0x432DE9`/`0x432EB7`, `0x433486`/`0x433554`) | — | [V] call site; "door" [H] | 64 |
+| 37 | `HEL1` / `HEL4` | not in this selector: forced on the player, one-shot (`0x42F13C` / `0x42F208`) | — | [V] call site | 64 |
+
+**Not drawn on the player [V call site, H owner].** `PLOP` (`0x422054`,
+`0x42FFD0`), `HEL2`/`HEL6` (`0x42ED51`, `0x42ECD5`), `PLO2` (`0x428703`),
+`BUI2` (`0x4285AD`) and `BOOM` (`0x41B084`, `0x41FC98`, …) are set on another
+actor (`esi`/`edi`/`eax`, not `0x59F200`) — a separate splash/rotor/debris actor
+that uses the `Hero` record is the likely reading [H]. `HEL3` (`0x42F18C`) and
+`HEL7` (`0x42EE48`) are pushed as immediates whose consumer was not traced [H].
+All 47 `Hero` tags are accounted for: 39 in the table's rows, 8 here.
+
+**Q38 settled [V].** The comparison is `cmp esi, 0x20000` followed by **`jg`**
+(signed `>`) at `0x411F79`, and `esi` is `|vx|` — not the max-speed global
+`0x49C4B4`. So `WALK` is drawn for `0 < |vx| ≤ 2.0` and `RUN` only for
+`|vx| > 2.0`. At the terrain-0 maximum of **exactly 2.0** (§2.9) the ordinary
+walk draws **`WALK`**, at 3.5 ticks per pose (rate `0x20000 / 0x700 = 73`); `RUN`
+needs a speed above 2.0, and the only one recorded in §2.9 is terrain 1's
+directional 2.5 (`0x426DEC`–`0x426E26`) — whether anything else exceeds 2.0 is
+not traced. The `engine/level.py` comment "below 2.0" and PR #64's
+"moving = `RUN`" are therefore both the exception, not the original's rule.
+
+#### b. Jumps, landing and falling
+
+* **Which jump is which [V].** The jump launch (`0x4106DE`–`0x41070B`) tests
+  `vx`: moving → lockout `0x59E764` = **5** and state bit `0x2` **cleared**
+  (`0x4106F5`); standing → lockout **10** and bit `0x2` **set** (`0x410708`).
+  The selector draws **`JMP1` for bit `0x2`** and **`JMP2` without it** (rows
+  14–21). So **`JMP1` is the straight-up jump and `JMP2` the moving jump** — the
+  reverse of the plan's `[H]` "moving-vs-straight ⇒ `JMP1`/`JMP2` in that
+  order". The other −4.0 launch sites (`0x41083C`, `0x4108B7`, `0x410929`,
+  `0x4109D1`) clear bit `0x2` (`JMP2`); `0x412E72` sets it (`JMP1`).
+* **Falling without a jump [V path, H coverage].** Walking off a ledge sets
+  the airborne bit at `0x410F3A` without touching bit `0x2`, and touchdown
+  (`0x410E19`) does not clear it either — so such a fall draws the clip of the
+  *last* jump kind. Every writer of bit `0x2` was not enumerated.
+* **`FLO1` / `FLO2` are the fast-fall clips, not a slow float [V].** They are
+  selected when `vy` ≥ 2.5 px/tick downward (rows 18/21), on the same bit `0x2`
+  split. The 0.125 held-down fall of §2.9 is a different mechanic; this
+  corrects the plan's "float / slow fall" naming guess. The threshold lies below
+  the +4.0 touchdown speed of a symmetric −4.0 jump under §2.9's gravity, so an
+  ordinary jump is expected to end in `FLO*` for its last few ticks
+  [derived from §2.9's constants, not run].
+* **The landing [V].** Touchdown (`0x410E96`–`0x410EBF`) sets the landing counter
+  `0x59F1CC` to **10** only when bit `0x2` is set (a straight jump) and the
+  current clip is not `SPIN` and state `0x100` is clear; otherwise 0. The
+  ground branch then draws `LND1` (one pose) while the counter is non-zero
+  (row 26), so **`LND1` is shown for 10 ticks after a straight jump, never after
+  a moving jump**, and a left/right input cuts it short.
+
+#### c. Placement: the sign and origin of `dx`/`dy` (Q39)
+
+The actor blit is `0x40C270`; its per-keyframe loop is `0x40C600`–`0x40CE6A`.
+For each keyframe of the current pose it reads the frame at
+`table[bank | sprite] + 0x10 + 0x38·step` (`0x40C63C`–`0x40C671`; the `ANIM`
+reader lays frame *i* at `+0x48 + 0x38·i`, `0x414AE1`–`0x414B64`, so `step` *S*
+is frame *S − 1*, confirming §2.6.1's 1-based step **[V]**), then:
+
+* **Origin [V].** The actor's integer position: `actor+0x3C` (x) and
+  `actor+0x40` (y) — for the player `0x59F23C` / `0x59F240`.
+* **Sign [V].** The layer's **top-left** is at `origin + (dx, dy)` with screen
+  **y pointing down** — **top = `+dy`**, not `(dx, −dy)`. The vertical clip at
+  `0x40C6F0`–`0x40C71E` computes the layer's bottom row as
+  `y + dy + height − 1` and its top row as `y + dy` (`add ebx, edi` /
+  `lea eax, [ebx+ebp−1]`), and adds the clipped rows back onto `dy`
+  (`0x40C7A5`). The player sprites are always read from the `MAIN` bank (bank
+  flag `0x100` forced for `0x59F200`, `0x40C332`–`0x40C339`).
+* **Mirroring [V].** Actor flag `0x08` (`actor+0x58`) mirrors horizontally:
+  `dx' = 1 − width − dx` (`0x40C696`), i.e. columns `[dx, dx+w−1]` become
+  `[−(dx+w−1), −dx]` — a reflection **about the origin column**, not about the
+  sprite's centre. Flag `0x10` mirrors vertically the same way (`0x40C6B1`).
+  The player's `0x08` is **cleared when `vx` > 0 and set when `vx` < 0**
+  (`0x4104ED`–`0x41050A`; unchanged at `vx` = 0, and not updated while `SPIN`,
+  `HELI` or `PUSH` plays or under state `0x400000`, `0x4104C8`–`0x4104EB`), so
+  **the art as stored faces +x** [V]; input bit `0x2000` faces +x and `0x8000`
+  faces −x (`0x410A8C`–`0x410ABA`). A keyframe's own flag bits `0x18` are XOR-ed with the actor's to
+  pick the mirrored surface (`0x40C6E1`), so a single layer can be pre-mirrored.
+* **What the measured numbers mean [M].** Under this placement the body layer's
+  bottom row `dy + h − 1` is **0 — exactly the origin row — in every pose** of
+  16 clips, among them the standing and walking ones: `WALK`, `STA1`, `STA2`,
+  `DUCK`, `BRAK`, `PUSH`, `LND1`, `EDGE`, `WAHL`, `DIZZ`, `DIG1`, `IN`, `OUT`
+  (and `THR2`, `HEL5`, `HEL8`). So the origin y is the row the feet stand on, and the
+  "`dy + h` = +1" regularity of plan §2.4 is the same fact counted from 1.
+  `RUN`'s bottom row spans −7 … 0 (feet lifted up to 7 px in two poses), its
+  top row −42 … −34: **the offset-placed head moves 8 px over the cycle**,
+  against 9 px bottom-pinned — the run cycle genuinely bobs. `JMP1` −18 … 0,
+  `JMP2` −16 … 0, `FLO1` +6, `FLO2` +5.
+* **The jump arc is not a double count in the original [V].** The blit adds
+  `dy` to the physics position with no compensation, so the original itself
+  draws a `JMP1` pose up to 18 px above the actor origin while the actor is also
+  displaced by the jump. A faithful port applies `dy` as-is at the actor origin;
+  what remains open is only how the engine's player position maps onto
+  `0x59F23C`/`0x59F240` (Q39).
+* **The negation at `0x415FF9` is not about `dx`/`dy` [V].** It stores
+  `−height` into a header block at `0x471B30` just after a
+  `GDI32!SetStretchBltMode` call (`0x415FCF`) — the top-down-DIB height
+  convention of the GDI sprite path. It was the evidence for §2.6.1's
+  "`(dx, −dy)`, y-up" reading, which is **retracted**.
+* **The `ANIM` frame's `d`/`e` words are not read by this blit [V].** The loop
+  reads the frame's width (`+0x0C`), height (`+0x0E`) and its two surface
+  pointers (`+0x14`, `+0x18`) and nothing at `+0x10`/`+0x12` (Q35 narrowed).
+
+#### d. Pose timing and the layers of a pose (Q36)
+
+* **A pose is a run of keyframes ended by flag `0x80` [V].** The draw loop takes
+  keyframes from `actor+0x6E` and stops after the first one with bit `0x80`
+  (`test al, 0x80` / `je 0x40C600` at `0x40CE68`); the pose count is the number
+  of `0x80` keyframes (`0x4160E0`). So `0x80` is the **end-of-pose marker** —
+  not a flip flag or a priority hint. It is not on `WALK`'s base keyframe in
+  pose 5 (§2.6.1's "step 6") because that pose ends with a step-0 marker
+  keyframe that carries `0x82` instead [M].
+* **Each keyframe selects its own frame [V], so steps never overrun [M].**
+  `step` is the 1-based frame index within *that keyframe's* sprite, with no
+  bounds check or wrap in the blit (`0x40C663`–`0x40C671`). It is **not** a
+  pose index shared by the layers: `STA1` has 30 poses over 7 distinct steps,
+  `STA2` 76 poses over 10. Across all nine worlds **0 of 4,788** drawn keyframes
+  have a step beyond their own sprite's frame count (0 of 691 clips) — the
+  "45 of 691 overrun" of §2.6.1 came from treating `step` as a shared pose
+  index and is retracted; no wrap/clamp rule is needed.
+* **Paint order within a pose [V].** Each drawn keyframe is **prepended** to a
+  depth bucket (`0x40C86E`–`0x40C87A`), and the renderer walks each bucket from
+  its head, blitting in list order (`0x404DC4`–`0x404E09`). The keyframes are
+  stored overlay first, body last (the `0x80` keyframe), so the **body is
+  painted first and the overlay on top** — §2.6.1's order, now by mechanism.
+* **Step-0 keyframes are attachment points, not sprites [V].** A keyframe with
+  sprite ≠ 0 and `step` = 0 is not blitted: the loop calls the actor's callback
+  slot `actor+0x1C + 4·(flags & 7)` with `origin + (dx, dy)`, mirrored with the
+  facing (`0x40CD39`–`0x40CE52`). The sprite byte is only tested for non-zero.
+  **The 12 non-zero sprite bytes that resolve in no `.WLD` bank (`106, 169,
+  222, 236, 240, 242, 244, 247, 248, 249, 254, 255`) occur only on step-0
+  keyframes** [M]: 94 keyframes have a non-zero sprite and step 0 (93 with
+  those bytes, 1 with byte 100, which resolves), and no keyframe with step > 0
+  carries one of those 12 bytes. So `169` is a contact-point marker for a callback, not a missing
+  sprite, and nothing is "embedded in `LOMAX.EXE`" — §2.6.1's guess is
+  retracted. Sprite byte 0 draws nothing (`0x40C609`).
+* **Low flag bits [V].** `flags & 7` is a layer slot: a drawn keyframe is
+  skipped when bit `(flags & 7)` of the actor's mask `actor+0x70` is set
+  (`0x40C72A`–`0x40C740`); on a step-0 keyframe the same three bits pick the
+  callback. In `WALK`, `RUN`, `STA1`, `JMP1`, `JMP2` and `LND1` the overlay
+  carries slot 1 and the body slot 0; `FLO1`/`FLO2` add a third layer on slot 2
+  [M].
+* **The hold is per clip, not a fixed count [V].** The advance adds the rate
+  (`/256` poses per tick) once per tick; the rate is the clip's first `u16`
+  field unless the selector overrides it. Over the 47 `Hero` clips it is **64
+  (4 ticks/pose) in 24**, and between 33 (`BUI2`) and 186 (`JPAD`) in the other
+  23 [M]. Overrides [V]: `WALK` `|vx|/0x700` (3.5 ticks/pose at 2.0), `RUN`
+  `|vx| >> 11` (3.2 at 2.5), `RU45` `|vx|/0x900`, `SPIN` 128, frozen `STA1` 0,
+  `CLIM` ±128, `JMP1`/`JMP2` 0 once the lockout ends.
+* **Air poses follow `vy`, not time [V].** After the lockout the selector writes
+  the pose byte `+0x6B` directly (`0x411A68`–`0x411AB5`, `0x411BEB`–`0x411C38`):
+  `vy` > 1.0 → pose 6; > −0.5 → 5; > −2.0 → 4; otherwise 3, and pose 2 when
+  `vy` ≤ −3.5 (`JMP1`) / ≤ −3.875 (`JMP2`). During the lockout the clip runs at
+  rate 64 from pose 0, which reaches poses 0–2 over a straight jump's 10 ticks
+  and 0–1 over a moving jump's 5 [derived].
+* **Idle [V].** Standing still holds `STA1` pose 0 (rate 0) for a random
+  30–93 ticks (threshold 100 at level start, `0x40F986`), then plays `STA2` or
+  `STA1` once at its own rate (50/50), then freezes again (rows 30–31). `STA2`
+  is therefore the idle fidget, and it needs no idle *delay* to be invented —
+  it is part of the data-driven idle cycle.
+
+**What stays open.** The *meaning* of several state bits (rows graded [H]); the
+owner of the clips drawn on other actors; whether anything other than terrain
+1 lifts `|vx|` above 2.0; and how the engine's player position maps onto the
+original's origin (`0x59F23C`/`0x59F240`) — the placement rule itself is
+settled.
 
 ### 2.7 Palette rules that bite any art pipeline
 
@@ -615,7 +892,7 @@ pass, 2026-11-19). The player's position and velocity are **16.16 fixed point**
 velocity `vx`/`vy` at `0x59F24C`/`0x59F250` (each store then re-reads the high
 word back as the integer coordinate — the fixed-point signature). The tick is
 the 60 Hz `WINMM.timeSetEvent` loop
-([`07-wp1-patching-surface.md`](../research/07-wp1-patching-surface.md) §4),
+([`07-wp1-patching-surface.md`](research/07-wp1-patching-surface.md) §4),
 so "per tick" is "per 1/60 s". The four rates, which the engine carries as
 `engine/entities.py` constants:
 
