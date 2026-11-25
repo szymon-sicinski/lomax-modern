@@ -114,7 +114,7 @@ def gnmy_marker(name: str | None) -> MarkerStyle:
     every other name — including a missing one — falls into the grey ``other``
     bucket instead of inventing a meaning.
     """
-    return GNMY_MARKER_STYLES[placement_role(name)]
+    return GNMY_MARKER_STYLES.get(placement_role(name), GNMY_MARKER_STYLES["other"])
 
 
 @dataclass

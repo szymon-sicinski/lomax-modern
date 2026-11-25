@@ -150,11 +150,13 @@ def test_unknown_name_falls_into_one_other_bucket() -> None:
     assert other.role == "other"
     assert other.colour == COLOUR_GNMY_OTHER
     assert gnmy_marker("Finish") == other
+    # Mapped roles that have no marker of their own still draw as "other".
     assert gnmy_marker("Parallax") == other
+    assert gnmy_marker("Henchlemming") == other
     assert gnmy_marker(None) == other
     assert other not in (gnmy_marker("Start"), gnmy_marker("Exit"), gnmy_marker("Moneybag"))
-    # Only the three evidenced prefixes map; nothing per-name is invented.
-    assert {placement_role("Spikes"), placement_role("Henchlemming")} == {"other"}
+    assert placement_role("Spikes") == "other"
+    assert placement_role("Henchlemming") == "enemy"
 
 
 # ---------------------------------------------------------------------------
@@ -249,7 +251,7 @@ def test_load_level_resolves_each_placement_name_from_the_nmy_table(
     )
     level = _load(tmp_path, world)
     assert [e.name for e in level.gnmy] == ["Start", "Moneybag", "Henchlemming"]
-    assert [placement_role(e.name) for e in level.gnmy] == ["start", "moneybag", "other"]
+    assert [placement_role(e.name) for e in level.gnmy] == ["start", "moneybag", "enemy"]
 
 
 def test_render_tiles_overlays_named_gnmy_markers_on_tile_art(tmp_path: Path) -> None:
@@ -324,3 +326,5 @@ def test_slice_report_names_the_gnmy_roles(tmp_path: Path) -> None:
     assert "start 1" in text and "exit 1" in text
     assert "moneybag 1" in text and "other 1" in text
     assert "Start/Exit/Moneybag [V]" in text
+    assert "objects: 4 placements, 4 names, 1 unresolved" in text
+    assert "Spikes (1) -> other (unmapped) -> [H] unmapped" in text
