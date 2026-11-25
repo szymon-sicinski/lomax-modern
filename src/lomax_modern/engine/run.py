@@ -15,7 +15,7 @@ from typing import Callable
 
 from ..anim_nmy import object_roles_report, placement_role
 from ..art import DEFAULT_PALETTE_SLOT, SPRITE_PALETTE_SLOT
-from .entities import WALK_SPEED, Input
+from .entities import START_FEET_OFFSET_Y, WALK_SPEED, Input
 from .level import (
     PLAYER_IDLE_ANIM,
     PLAYER_RUN_ANIM,
@@ -111,6 +111,16 @@ class SliceReport:
                 exit_line += f" (+{len(self.exits) - 1} more Exit placement(s))"
         else:
             exit_line = "exit: none (no Exit placement)"
+        if self.spawn_name is not None:
+            fx, fy = int(self.spawn[0]), int(self.spawn[1]) - START_FEET_OFFSET_Y
+            start_line = (
+                f"start: feet ({fx}, {fy}) = Start ({fx}, {fy + START_FEET_OFFSET_Y}) "
+                f"- {START_FEET_OFFSET_Y} [V]; facing +x [V]; jump kind straight "
+                "(state bit 0x2) [V]; box 12x14 centred on the feet [H]; entry hold "
+                "240 ticks + vy +4.0 drop not modelled [H]"
+            )
+        else:
+            start_line = "start: no Start placement; fallback cell, jump kind straight [H]"
         lines = [
             f"world: {self.world} ({self.planes} planes, playfield plane {self.playfield})",
             f"playfield: {self.playfield_size[0]}x{self.playfield_size[1]} cells "
@@ -121,6 +131,7 @@ class SliceReport:
                 f"{value:#04x}:{count}" for value, count in self.collision_histogram.items()
             ),
             spawn_line,
+            start_line,
             f"collect: {self.collected_total} Moneybag(s)",
             f"result: {'reached exit' if self.complete else 'did not reach exit'} "
             f"after {self.ticks} ticks",
@@ -193,7 +204,11 @@ def run_slice(
 
     level = load_level(resolved, playfield=playfield, backdrop_planes=backdrop_planes)
     state = new_game_state(level)
-    spawn_pos = (state.player.x, state.player.y)
+    spawn_pos = (
+        (float(level.spawn[0]), float(level.spawn[1]))
+        if level.spawn is not None
+        else (state.player.x, state.player.y)
+    )
     spawn_name = "Start" if level.spawn is not None else None
 
     ticks = 0
