@@ -618,9 +618,9 @@ Rates are `/256` poses per tick: 64 = one pose every 4 ticks.
 | # | Clip | Selected when | VA (selector) | Grade | Rate (default, `[M]`) / override |
 |---:|---|---|---|---|---|
 | 1 | `JPAD` | global `0x52C568` ≠ 0 **and** state `0x400` (with `0x52C568` ≠ 0 and `0x400` clear nothing is selected) | `0x411497` | [V] test; meaning of both [H] | 186 |
-| 2 | `WAHL` | state `0x80` | `0x4114B2` | [V] test; meaning [H] | 47 |
+| 2 | `WAHL` | state `0x80` | `0x4114B2` | [V] (the weapon wheel is open, §2.14.f) | 47 |
 | 3 | `HEL8` / `HEL5` / `HEL0` | state `0x8000` with `0x10000`: `HEL8` if state `0x1` else `HEL5`; without `0x10000`: `HEL0` (one-shot) | `0x4114E2` / `0x4114F9` / `0x411529` | [V] test; "helicopter" [H] | 64 |
-| 4 | `THR2` / `THR3` / `THR1` | state `0x100`: `THR2` if state `0x4`, `THR3` if `0x1000`, else `THR1`; one-shot | `0x4115C1` / `0x4115D2` / `0x4115D9` | [V] test; "throw" [H] | 91 / 64 / 96 |
+| 4 | `THR2` / `THR3` / `THR1` | state `0x100`: `THR2` if state `0x4`, `THR3` if `0x1000`, else `THR1`; one-shot | `0x4115C1` / `0x4115D2` / `0x4115D9` | [V] (the helmet throw, §2.14.d) | 91 / 64 / 96 |
 | 5 | `BUI1` | state `0x80000`; one-shot, clears the bit when it ends | `0x41162D` | [V] | 64 |
 | 6 | `DROW` | state `0x200` | `0x41165B` | [V] test; "drown" [H] | 78 |
 | 7 | `SPIN` | `0x59F164` ≠ 0 or `0x498F70` ≠ 0 | `0x411FD0` | [V] | **override 128** (`0x411FDF`) |
@@ -1945,9 +1945,9 @@ python3 -I cstr.py "$EXE" 466920 4669d0 466974 466904 4669b4 4669c0 466984   # D
   (`0x41368F`). `0x413E40` — the entity is **hit**: true if `+0x58` has
   `0x20000` (set by a projectile through `0x414130`, `0x41423F`), or it has
   `0x10000` and the hero's current clip is `SPIN` or `TUMB`
-  (`0x413E97`–`0x413EA3`) and the boxes overlap. Hero attacks and throws are
-  deferred by plan 47 §2.3, so in this milestone nothing can hit an object
-  [derived].
+  (`0x413E97`–`0x413EA3`) and the boxes overlap. Plan 47 revision 3 (D7)
+  brings `SPIN`, the helmet throw and `TUMB` into scope; they are specified in
+  §2.14.
 - **Helpers [V].** `0x4162D0(name)` finds a record by name in the `MAIN.WLD`
   bank (`or 0x100`, `0x4162E9`) — `Krug`, `Trapdoor`, `Display`, `Icons`,
   `Inserts`, `Classic` are `MAIN` records; `0x4160E0(clip)` counts a clip's
@@ -1975,8 +1975,8 @@ python3 -I cstr.py "$EXE" 466920 4669d0 466974 466904 4669b4 4669c0 466984   # D
 | `Rope` (5) | 67 → `0x429F60` | **climbable rope** | `ROPE`; draw `0x42A280` paints keyframe 0 p1 times stepping y by 32, then keyframe 1 (`0x42A292`–`0x42A2D9`) | length = p1 · 32 px (`0x429F9A`–`0x429FA1`). Grab `0x413D60`: hero airborne, \|hero x − rope x\| ≤ 2 and rope y + 20 ≤ hero y ≤ rope y + length + 20 → hero x := rope x, vx = vy = 0, state \|= `0x1010` (`0x413DAC`–`0x413E05`). Then (update `0x42A000`) input `0x1000` (Up) climbs and `0x4000` (Down) descends 1 px/tick within that span, leaving the bottom releases (`0x42A0D3`–`0x42A161`); the jump input releases with vx ±2.0 (`0x42A06E`–`0x42A0C9`), being hurt releases (`0x42A019`–`0x42A04F`); 10-tick re-grab delay (`+0x80` := 10). L1 p1 = 5, 3, 4, 5, 3 → 160, 96, 128, 160, 96 px [derived]; placement flags `0x100`/`0x200` reach `+0x58`, meaning [H] | yes | [V] |
 | `Generator` (4) | 86 → `0x42D0D0` | **invisible spawn trigger** | none (no clips) | `+0x58` \|= `0x4` (`0x42D0E0`); target = the placement's resolved extra word (`0x42D0DA`–`0x42D0E3`), none → removed (`0x42D0F7`); height = p1, or 64 when p1 = 0 (`0x42D10A`–`0x42D11E`); repeat = placement flag bit 0 (`0x42D128`–`0x42D145`). When the hero (same plane) has the generator's x inside its box's x-span and its box's y-span overlaps [y − height, y] (`0x42D18F`–`0x42D1DA`), it spawns the target and then each placement the target's own extra word names, skipping those already spawned (`0x42D228`–`0x42D25E`); a one-shot generator then removes itself (`0x42D287`–`0x42D292`). L1: all four flags `0x8000`, p1 0 → 64 px, one-shot [M/derived]; chains: (424, 560) → `Pots` (521, 560); (1231, 336) → `Henchlemming` (1018, 320); (1129, 544) → `Pots` (1238, 464); (1934, 272) → `Pots` (2032, 240) [M, `gen_chain.py`] | **hidden by design** | [V] |
 | `Jumppad` (3) | 68 → `0x433ED0` | **springboard platform** | `PAD` pose 0, held: the animation advances only while `+0x80` = 1 (`0x433F48`–`0x433F59`) | the hero stands on it (`0x413510` with a per-pose surface-height function `0x433F20`, table `0x466870`; `0x433F5B`–`0x433F69`) → sound `0x3F` once, the pad animates; when its pose (`+0x6A >> 8`) equals the launch pose — poses − 2, or 4 when poses > 5 (`0x433EFC`–`0x433F18`; `PAD` has 9 poses [M] → 4) — the hero gets state \|= `0x403`, **vy := −6.0** (`0xFFFA0000`) and the hold counter `0x59E94C` := `0xA000`, sound `0x35` (`0x433FA0`–`0x433FDE`); at the wrap it re-forces `PAD` and stops (`0x433FF2`–`0x434001`). The normal jump is −4.0 (§2.9) | yes | [V] |
-| `Pots` (3) | 85 → `0x42BEE0` | **breakable container** (not a platform: no call to `0x413510` in `0x42BEE0`–`0x42D0CF` [V by scan]; no `0x20`: harmless) | record replaced by `MAIN`'s `Krug` (`0x42BFBC`–`0x42BFC9`), clip `CLAY` (`0x42BFD5`) | content = p1 (`0x42BEED`–`0x42BEF1`); `+0x58` \|= `0x10000` (`0x42BFDA`). With placement flag `0x2000` it attaches `ROCK` (`0x42BFFE`–`0x42C004`) and starts 40 px low, launched at vy −4.0 (`0x42C00C`–`0x42C03C`) and pulled back to its placement y (`0x42C184`–`0x42C18D`) — "it pops out of the ground" is [H]. **Hit** (`0x413E40`, `0x42C067`): sound `0x11`, a `LID` child flies off at vy −6.0, vx ±2.0 (`0x42C0C9`–`0x42C132`), and the pot releases its content (`0x42C2E0`): p1 −200 empty (`0x42C367`–`0x42C372`); p1 < 0 → −p1 coins (`0x42C37C`–`0x42C3BC`); 0 → an `Items` `HELM` (`0x42C42C`–`0x42C48B`); 1 → an `Items` `UP` (`0x42C490`–`0x42C4EB`); 2–7 → an `Icons` clip for weapon p1 − 2 (`0x42C4ED`–`0x42C55E`; "ammo" [H]); then content := −200 (`0x42C56B`). Hit again with an odd x it drops one coin (`0x42C590`–`0x42C5C3`). L1: (521, 560) p1 0 → helmet; (1238, 464) p1 −5 → 5 coins; (2032, 240) p1 0 → helmet; all three flags `0x2000` → spawned only by their `Generator` [M] | yes, once its `Generator` fires | [V] |
-| `Moneybag` (2) | 57 → `0x428190` | **hanging coin bag** | `HANG` (`0x428191`), own draw `0x428400` passing a rotation argument `+0x80`/10 (`0x428400`–`0x42841C`); `+0x80` swings between ±400 (`0x428226`–`0x428280`; "swinging" is the reading [H]) | `+0x58` \|= `0x10000` (`0x4281B1`), no `0x20`: **not stompable, not harmful**. **Hit** (`0x413E40`, `0x428287`) → clip `JUMP`, falls with \|vx\| = 1.0 + (x & 31)/64 px/tick, signed like the hero's vx at the hit (`+0x54`, stored by `0x413E40` at `0x413F43`), y + 32, default draw, `0x10000` cleared (`0x428297`–`0x4282FC`); gravity 0.1875/tick capped at 5.0 (`0x428391`–`0x4283A3`), bounces off walls (`0x42837A`–`0x42838E`); on the ground sound `0x4A`, vy := −4.0 (`0x4283DB`–`0x4283EA`), and when its pose position reaches 2.0 (`+0x6A` = `0x200`) it releases **3 coins** (`0x428323`–`0x428373`; velocities from `0x4645E8`). Whether a bag bursts once or on every bounce is Q56 [H] | yes | [V]; burst count [H] |
+| `Pots` (3) | 85 → `0x42BEE0` | **breakable container** (not a platform: no call to `0x413510` in `0x42BEE0`–`0x42D0CF` [V by scan]; no `0x20`: harmless) | record replaced by `MAIN`'s `Krug` (`0x42BFBC`–`0x42BFC9`), clip `CLAY` (`0x42BFD5`) | content = p1 (`0x42BEED`–`0x42BEF1`); `+0x58` \|= `0x10000` (`0x42BFDA`). With placement flag `0x2000` it attaches `ROCK` (`0x42BFFE`–`0x42C004`) and starts 40 px low, launched at vy −4.0 (`0x42C00C`–`0x42C03C`) and pulled back to its placement y (`0x42C184`–`0x42C18D`) — "it pops out of the ground" is [H]. **Hit** (`0x413E40`, `0x42C067`): sound `0x11`, a `LID` child flies off at vy −6.0, vx ±2.0 (`0x42C0C9`–`0x42C132`), and the pot releases its content (`0x42C2E0`): p1 −200 empty (`0x42C367`–`0x42C372`); p1 < 0 → −p1 coins (`0x42C37C`–`0x42C3BC`); 0 → an `Items` `HELM` (`0x42C42C`–`0x42C48B`); 1 → an `Items` `UP` (`0x42C490`–`0x42C4EB`); 2–7 → an `Icons` clip for weapon p1 − 2 (`0x42C4ED`–`0x42C55E`; "ammo" [H]); then content := −200 (`0x42C56B`). Hit again it drops one coin when its x is odd and shatters into `BOOM` debris (`0x42C590`–`0x42C5DB`, §2.14.h). L1: (521, 560) p1 0 → helmet; (1238, 464) p1 −5 → 5 coins; (2032, 240) p1 0 → helmet; all three flags `0x2000` → spawned only by their `Generator` [M] | yes, once its `Generator` fires | [V] |
+| `Moneybag` (2) | 57 → `0x428190` | **hanging coin bag** | `HANG` (`0x428191`), own draw `0x428400` passing a rotation argument `+0x80`/10 (`0x428400`–`0x42841C`); `+0x80` swings between ±400 (`0x428226`–`0x428280`; "swinging" is the reading [H]) | `+0x58` \|= `0x10000` (`0x4281B1`), no `0x20`: **not stompable, not harmful**. **Hit** (`0x413E40`, `0x428287`) → clip `JUMP`, falls with \|vx\| = 1.0 + (x & 31)/64 px/tick, signed like the hero's vx at the hit (`+0x54`, stored by `0x413E40` at `0x413F43`), y + 32, default draw, `0x10000` cleared (`0x428297`–`0x4282FC`); gravity 0.1875/tick capped at 5.0 (`0x428391`–`0x4283A3`), bounces off walls (`0x42837A`–`0x42838E`); on the ground sound `0x4A`, vy := −4.0 (`0x4283DB`–`0x4283EA`), and when its pose position reaches 2.0 (`+0x6A` = `0x200`) it releases **3 coins** (`0x428323`–`0x428373`; velocities from `0x4645E8`). It bursts on every landing until the despawn window releases it (Q56, §2.14.h) | yes | [V] |
 | `Exit` (1) | 2 → `0x427670` | level end (§2.10.b) | `EXIT` | §2.10.b: the last 50 px of the plane at its height | yes | [V] |
 | `Lorock` (1) | 69 → `0x4339B0` | **talking NPC** (the wizard) | `HAT` (`0x433A1F`) with four `STAR` satellites (`0x433A0D`–`0x433A17`) in its own draw `0x433DC0`; the hat bobs at ±0.25 px/tick, flipping every 32 ticks (`0x433AFE`–`0x433B2F`) | touch (`0x414390`, `0x433AA5`) → `APPE` (`0x433ACA`), then `STAY`/`TALK`/`EXHA`/`BLAH` at random every 60–183 ticks (`0x433CB9`–`0x433D3A`), with a speech-bubble child (draw `0x433DF0`, created at `0x433B9E`); message index = p1 (`0x433A49`; L1 p1 = 0). When the hero is more than 100 px away horizontally or 80 px vertically → `DISA`, sound `0x1B`, removed when `DISA` ends (`0x433D47`–`0x433D85`, `0x433C84`–`0x433C95`). **No write** to lives, coins, power-up or hero state in `0x4339B0`–`0x433ECF` [V by scan] | yes | [V] |
 | `Music` (1) | 37 → `0x423A60` | **music cue** | none | at spawn: p1 > 0 → `0x40E0B0(p1)` (`0x423A65`–`0x423A6E`; "plays track p1" [H]); flag bit 0 with K ≥ 1 → `0x59F170` := 1, else 0 (`0x423A76`–`0x423A92`) — the `Exit` copies it to `0x59E75C` (`0x42774E`); then removes itself (`0x423AA1`). L1: p1 1, flags `0x4001` (spawned at load) | **hidden by design** | [V] |
@@ -1997,7 +1997,8 @@ python3 -I cstr.py "$EXE" 466920 4669d0 466974 466904 4669b4 4669c0 466984   # D
   `Rope`s are climbable over 96–160 px; `Pots` are not platforms and only hold
   pickups. Whether the `Start` → `Exit` route needs a `Jumppad` or a `Rope` is
   for the solver (FL16). **Collecting a `Moneybag` (AC12) needs a hit** —
-  `SPIN`/`TUMB` or a projectile (§2.12.a) — which plan 47 §2.3 defers: Q54.
+  `SPIN`/`TUMB` or a projectile (§2.12.a) — brought into scope by plan 47
+  revision 3 (D7, D8; §2.14).
 
 #### §2.12.c Coins, lives and the other counters
 
@@ -2008,8 +2009,8 @@ python3 -I cstr.py "$EXE" 466920 4669d0 466974 466904 4669b4 4669c0 466984   # D
   becomes 0, `0x59E770` := 1 and a screen-space `Items` `UP` starts at (190, 40)
   moving right (vx 0.5, `0x42C81D`–`0x42C8C1`); when its x passes 295 the lives
   go up by 1, at most 30 (`0x42CAA9`–`0x42CAD6`).
-- **What a `Moneybag` is worth:** 3 coins per burst (row 7) [V]; the number of
-  bursts per bag is Q56 [H]. Other coin sources in L1: the `Pots` at (1238, 464),
+- **What a `Moneybag` is worth:** 3 coins per burst (row 7) [V]; 3 more
+  every landing (§2.14.h, Q56). Other coin sources in L1: the `Pots` at (1238, 464),
   5 coins; any defeated enemy with an odd x, 1 (§2.12.a). Sinks: the `Thief`, 1
   per 16 ticks while it holds the hero.
 - **Lives** (`0x52C56C`, §2.10.d): + 1 for an `Items` `UP` touched
@@ -2021,8 +2022,8 @@ python3 -I cstr.py "$EXE" 466920 4669d0 466974 466904 4669b4 4669c0 466984   # D
 - **Freed lemmings** `0x52C5A8` (§2.12.a): + 1 per defeated enemy, 50 → the
   bonus flag and back to 0 [V].
 - **Weapon selection** `0x52C58C` cycles 0–5 on the input bits `0x8000`/`0x2000`
-  (`0x430DAF`–`0x430DF9`, in code at `0x430D98` whose owner is not identified
-  [H]); its six counts are the u16 words listed by `0x466830` (all 0 at reset).
+  (`0x430DAF`–`0x430DF9`, in the weapon wheel `0x430BA0`/`0x430C90` opened by
+  the `0x0100` input, §2.14.f); its six counts are the u16 words listed by `0x466830` (all 0 at reset).
 - **Initial values (new game, reset `0x40EDC0`) [V]:** lives 3 (`0x40EE06`),
   coins 0 (`0x40EE11`), freed lemmings 0 (`0x40EE0C`), weapon selection 1
   (`0x40EDE3`), the six weapon counts 0 (`0x40EDC7`–`0x40EE00`), helmet and
@@ -2097,8 +2098,9 @@ python3 -I cstr.py "$EXE" 466920 4669d0 466974 466904 4669b4 4669c0 466984   # D
 
 #### §2.12.e What stays open
 
-Q54 (the `Moneybag`/`Pots` need a hit that plan 47 defers), Q55 (`0x46441C`),
-Q56 (bursts per `Moneybag`); [H]: entity `+0x70`, `+0x74`, `0x80000`, placement
+Q54 (the `Moneybag`/`Pots` need a hit; plan 47 rev 3 brought the attacks in,
+§2.14), Q55 (`0x46441C`); Q56 (bursts per `Moneybag`) is answered in §2.14.h;
+[H]: entity `+0x70`, `+0x74`, `0x80000`, placement
 flags `0x100`/`0x200`, the `Thief`'s pursuit, what `0x42B2D0(4)` shows.
 Builders: FL6 takes the role column, FL10 the idle clips and the hidden list,
 FL11 the coin/lives rules, FL13 the HUD table.
@@ -2330,9 +2332,10 @@ in the air.
   the contact loop skipped for 180 ticks = 3.0 s [derived]), vy −5.0. Both:
   knockback vx := −2.5 (`0xFFFD8000`) when entity x > hero x, else +2.5
   (`0x28000`), unless state `0x200` (`0x412F1E`–`0x412F3C`). The `Henchlemming`
-  itself is unchanged by the contact (no write in its code). **In L1 within
-  this milestone the helmet comes only from `Pots`, which need a hit (Q54), so
-  a contact is a death** [derived].
+  itself is unchanged by the contact (no write in its code). **In L1 the
+  helmet comes only from two `Pots`, which open on a `SPIN`/`TUMB`/projectile
+  hit (§2.14.i); until the first is opened a contact is a death** [derived].
+  With the helmet in flight a contact costs the helmet, not a life (§2.14.e).
 - **Hero clips for it (D6) [V rows of §2.6.2 a, M data]:** death → airborne,
   row 9 `OHNO` while `0x59C708` ≠ 0 (`OHNO` 6 poses, rate 76); helmet hurt →
   row 10 `OUCH` while `0x59E938` > 0 (`OUCH` 3 poses, rate 34); at timer 250
@@ -2340,14 +2343,14 @@ in the air.
 - **What kills it [V]:** only `0x413E40` true (`0x42DDE7`): flag `0x20000` (a
   projectile, `0x414130`) or `0x10000` with the hero's clip `SPIN` or `TUMB`,
   same plane, `0x52C568` = 0, boxes overlap (`0x413E74`–`0x413F57`). `SPIN` is
-  selected while `0x59F164` ≠ 0, set at `0x41074D` when an input bit
-  (`0x4777CC` & `0x464438`) is held while airborne and `0x59E94C` < `0x9000` —
-  an attack input, deferred by plan 47 §2.3. **`TUMB`** is state `0x8`, set at
+  selected while `0x59F164` ≠ 0, set at `0x41074D` when the jump input is
+  newly pressed (`0x464438` & `0x4777CC`) while airborne and `0x59E94C` <
+  `0x9000` (§2.14.c). **`TUMB`** is state `0x8`, set at
   `0x4107A3` when the Down input (`0x464435` & `0x40` = `0x4000`) is pressed
   **on the ground on a steep slope** (`0x52C574` = 2, the hero's floor kind,
   §2.9.b), with `0x46AB4C` := 180, `0x4770B0` := 3 and sound `0x33`
   (`0x410757`–`0x4107A6`); cleared at `0x4107C9`. That is a movement-only way
-  to kill — whether it is in scope is Q57; TUMB's motion is not read [H].
+  to kill — TUMB is graded cheap in §2.14.g; it has no motion of its own.
 - **Defeat (`0x42DDF4`–`0x42DE10`) [V]:** `0x42CD00(self)` (§2.12.a: a `Classic`
   lemming `CLA1` is spawned, vy −4.0, vx = hero vx / 2, `+0x88` := 40 + random
   & 63, sounds `0x43` and `0x39`; freed counter + 1, flash 60; a coin when x is
@@ -2432,15 +2435,490 @@ is FL14's measurement [H].
 - **FL15 (contact):** (1) the hero's contact test with the clip boxes; (2)
   stomp = the bounce of §2.13.g, enemy unharmed; (3) side contact =
   `0x412E30`: death (no helmet in L1) with `OHNO`, life − 1 at 50 ticks, or
-  with a helmet `OUCH` + 180-tick window; knockback ±2.5; (4) **no kill**: the
-  only movement-only kill is `TUMB` (Q57); until the maintainer decides, the
-  enemy is unkillable `[H]` and `slice` says so; (5) R9: the enemy update is
+  with a helmet `OUCH` + 180-tick window; knockback ±2.5; (4) the kill is FL15d's
+  (§2.14.k): a `SPIN`, `TUMB` or helmet hit; (5) R9: the enemy update is
   deterministic and needs no random state.
 
 #### §2.13.l What stays open
 
-Q57 (`TUMB` kill in scope?). `[H]`: `0x59F1DC`'s meaning, sound meanings,
+Q57 answered by the maintainer (D7); `TUMB` graded cheap in §2.14.g. `[H]`: `0x59F1DC`'s meaning, sound meanings,
 `TUMB`'s motion, `0x52C568`, the `0x42FFB0` death clip. Q50 is answered.
+
+### 2.14 The hero's attacks (2026-11-25, FL4c)
+
+Recovered by a read-only objdump pass over `LOMAX.EXE` for the first-level
+plan ([`../roadmap/47-first-level-plan.md`](../roadmap/47-first-level-plan.md)
+revision 3: D7, AC20, row FL4c; Q58). Plan 47 asks for "a new subsection after
+FL4b's"; this is §2.14. Grades and the reproduce convention are those of
+§2.10; L1 = `MEDIEVAL` section 0 sub-level 0, plane 0. Entity fields as §2.13
+(`+0x3C`/`+0x40` integer x/y, `+0x44`/`+0x48` 16.16 x/y, `+0x4C` vx, `+0x50`
+vy (y grows downward), `+0x58` flags, `+0x60` depth index, `+0x62` despawn
+class, `+0x68` rate, `+0x6A` 8.8 pose position). Hero globals: entity
+`0x59F200`, clip pointer `0x59F208` (clip tag at clip `+0x4`, clip box = four
+signed words at clip `+0x10`–`+0x16`: left, top, right, bottom), x `0x59F23C`,
+y `0x59F240`, vx `0x59F24C`, vy `0x59F250`, plane `0x59F25E`, flags `0x59F258`
+(bit `0x8` = mirrored = facing left), state bits `0x49C4C4`.
+
+A correction to the card's brief: `0x414130` is **not** the `Pots` hit entry.
+It is the projectile's *marker* (it sets `0x20000` on what it touches,
+§2.14.e); `Pots` are hit through `0x413E40` at `0x42C067`/`0x42C591`
+(§2.12.b) [V].
+
+**Reproduce.** Scratch files outside the repository, not committed:
+
+```
+objdump -d -M intel --no-show-raw-insn "$EXE" > /home/nwah/Development/RetroLab/.scratch/fl4c/lomax.asm
+python3 -I r.py 4106c3 4107eb     # jump launch tail, SPIN trigger 0x41074D, TUMB trigger 0x4107A3
+python3 -I r.py 4107eb 410a47     # the throw (0x4107ED) and the weapon modes (0x41084F–0x410A47)
+python3 -I r.py 410520 4105b7     # weapon-1 glide/jump, spare-helmet key (0x410572)
+python3 -I r.py 410ed8 410efa; python3 -I r.py 411fd0 412037   # SPIN on touchdown, SPIN row + ground timer
+python3 -I r.py 413e40 413fdf; python3 -I r.py 414130 414279   # hit test, projectile marker
+python3 -I r.py 42f440 42fb2a     # helmet projectile: spawn, update, draw
+python3 -I r.py 42e690 42e9e6     # spare-helmet drop, helmet loss
+python3 -I r.py 40cd39 40ce57     # event keyframes in the actor blit
+python3 -I r.py 428190 4283fb; python3 -I r.py 42bee0 42c13b; python3 -I r.py 42c2e0 42c5ea; python3 -I r.py 42cd00 42ce25
+python3 -I r.py 430ba0 430c84; python3 -I r.py 430d98 430e0f   # weapon wheel
+python3 -I r.py 412e30 412f45; python3 -I r.py 40f737 40f75d   # hurt with the helmet in flight; restore at (re)entry
+python3 -I bytes.py "$EXE" 464580 1 u32                         # -> 0 (control scheme)
+python3 -I bytes.py "$EXE" 464588 16 hex                        # -> 0x40 0x20 0x80 0x10 | 0x80 0x40 0x10 0x20 | 0x20 0x10 0x40 0x80 | 0x0 0x0 0xffffffff 0x0
+python3 -I bytes.py "$EXE" 4669e0 1 cstr                        # -> Helmet
+python3 -I bytes.py "$EXE" 4645e8 12 s32                        # coin velocity table (6 pairs, 16.16)
+python3 -I owners.py "$EXE" --callers lomax.asm 413e40 414130 42cd00 430320 42c240 4286d0
+env PYTHONPATH=src python3 clips.py "$LOMAX_GAME_DIR" MAIN Hero Helmet Items Classic    # rate, poses, box, event keyframes
+env PYTHONPATH=src python3 clips.py "$LOMAX_GAME_DIR" MEDIEVAL Henchlemming Moneybag
+env PYTHONPATH=src python3 henchlemming.py "$LOMAX_GAME_DIR"    # plan 47 §6 script M
+env PYTHONPATH=src python3 l1_attack.py "$LOMAX_GAME_DIR"       # Pots/Moneybag/Generator placements, steep cells
+python3 -I arith.py                                             # every [derived] number below
+```
+
+The scripts are scratch files outside the repository (`r.py` prints an
+address range of the listing, `bytes.py` reads values by VA, `owners.py` maps
+call sites to the handler whose address range holds them, `clips.py` lists a
+record's clips with keyframes, poses (flag `0x80`), rate, box and event
+keyframes, `l1_attack.py`/`arith.py` as named) and are not committed.
+
+#### §2.14.a Code map, and what is shared (R10/R11)
+
+- **No weapon framework [V].** The attacks are hero-side: three hero state
+  bits/globals (`0x59F164`/`0x498F70` SPIN, state `0x100` throw, state `0x8`
+  TUMB), the hero's clips, and one projectile entity. A hit is resolved **in
+  the target's own update** by the parameterised test `0x413E40` (hero clip
+  `SPIN`/`TUMB` + box overlap, or the projectile mark `0x20000`); the
+  projectile marks targets with `0x414130`.
+- **Hero weapon code region, from `0x42E690` up to the next handler at
+  `0x431110` [V]** (it lies after the
+  `Zomb` handler `0x42E440` in address order, so "owner by address range"
+  would wrongly say `Zomb`; it is installed from the hero init: `0x59F234`
+  := `0x42EC70` and `0x59F238` := `0x42F5F0` at `0x40F966`/`0x40F970`):
+  spare-helmet drop `0x42E690` (+ update `0x42E760`, draw `0x42E7E0`), helmet
+  loss `0x42E850` (+ update `0x42E980`), the weapon-2 bomb `0x42E9F0`
+  (+ `0x42EB20`, `0x42EAE0`), the helicopter hook `0x42EC70`, the throw
+  callback `0x42F5F0`, the helmet projectile `0x42F440` (spawn) /
+  `0x42F660` (update) / `0x42FA50` (draw), the weapon wheel `0x430BA0`
+  (+ update `0x430C90`, draw `0x430FA0`).
+- **Shared routines and their other users [V, owners by address range]:**
+  - `0x413E40` (hit test): 21 call sites in 17 handlers — `Live` (5),
+    `Slim` (22), `Pile` (23), `Cowb` (25, ×2), `Drac` (26, ×2), `Pira` (29,
+    ×2), `Were` (30, ×2), `Dood` (34), `Thie` (44), `Shar` (48), `Mone` (57),
+    `Pots` (85, ×2: `0x42C067`, `0x42C591`), `Henc` (84, `0x42DDE7`), `Barr`
+    (75), `Muta` (74), `Zomb` (70).
+  - `0x414130` (projectile marker): 3 sites — `Ball` (63, `0x4298BB`), the
+    weapon-2 bomb's explosion (`0x42EB09`) and the helmet projectile
+    (`0x42F6AE`).
+  - `0x42CD00`/`0x430320` (defeat): the 8 enemies of §2.13.a.
+  - `0x42C240` (coin): `Thie` `0x424AC1`, `Mone` `0x428349`, `Pots`
+    `0x42C391`/`0x42C5A5`, the defeat `0x42CDED`.
+  - `0x4286D0` (the 7-tick `PLO2` effect): the stomp `0x412E26` and the
+    helmet's hit `0x42F704`.
+  - `0x430690` (break into `BOOM` debris): 9 call sites, among them the
+    `Pots` re-hit `0x42C5DB`.
+- **Verdict [V]: separable.** Porting SPIN, the helmet throw and TUMB needs
+  the hero bits, the clips, the projectile, `0x413E40`/`0x414130` and the
+  three L1 targets (`Henchlemming`, `Moneybag`, `Pots`); no other enemy's code
+  is reached. In L1 the `Thief` (44) also has `0x10000` and would react to a
+  hit (knock-away, §2.12.b) — out of scope per plan 47 §2.3: an attack that
+  hits it does nothing in this milestone. The weapon modes other than the
+  plain throw (bomb, helicopter, glide, `BUI1`, `DREI` throw) are unreachable
+  in L1 (their counts are 0 and nothing in L1 raises them, §2.14.f) — so no
+  maintainer decision is needed (no R10 block).
+
+#### §2.14.b Inputs [V bits, M default keys]
+
+- Two words (built in `0x416660`–`0x4168DF`): `0x464434` = **held** bits,
+  `0x464438` = **newly pressed** bits (`held & ~previous`,
+  `0x4168C9`–`0x4168D9`). (§2.13.g formerly called the SPIN input "held"; it
+  is an edge — corrected there.)
+- The four action masks come from a control-scheme row: `0x464588 +
+  16·[0x464580]` → jump `0x4777CC`, throw `0x52C6C8`, weapon `0x52C57C`,
+  spare `0x46AB54` (`0x40FB0F`–`0x40FB3B`). `0x464580` = 0 in the file [M];
+  row 0 = jump `0x0040`, throw `0x0020`, weapon `0x0080`, spare `0x0010` [M];
+  rows 1–2 permute the same four bits; how a player picks a row is [H].
+  With §2.11's default key table [M]: jump = DirectInput code 17, throw = 18,
+  weapon = 16, spare = 31; Down = `0x4000` (code 208), Up = `0x1000` (200),
+  the wheel = `0x0100` (57).
+
+#### §2.14.c SPIN [V unless marked]
+
+| Item | Rule | VA | Grade |
+|---|---|---|---|
+| Input / trigger | The jump mask newly pressed (`0x464438` & `0x4777CC`) **while airborne** (state `0x1`) and the jump-hold counter `0x59E94C` < `0x9000` → `0x59F164` := 1. The press that launches a jump cannot also spin: the launch clears its edge bit and sets `0x59F164` := 0; while the jump is still held there is no new edge, and a release sets `0x59E94C` := −1. So **SPIN = press jump again in the air**: after releasing it during a jump, when falling off a ledge, after a stomp bounce (`0x59E94C` := 0), or during the hop of a standing throw (§2.14.d) | `0x410726`–`0x41074D`; `0x4106C3`–`0x4106CB`, `0x410710`; `0x4105AD`; `0x412DA5` | [V] paths; "double-jump spin" is the reading [H] |
+| State / clip | The selector draws `SPIN` while `0x59F164` ≠ 0 or `0x498F70` ≠ 0 (row 7 of §2.6.2 a), set-if-different, **rate forced to 128**; `SPIN` has 8 poses → one loop per 16 ticks. A sound `0x2B` is requested through `0x40D570(0, 0x2B, 0x1E)` while the pose position is > `0x200` | `0x4116CE`–`0x4116E2`, `0x411FD0`; `0x411FDF`; `0x411FEB`–`0x411FFC` | [V]; poses [M]; loop [derived]; sound meaning [H] |
+| Air phase | Lasts from the trigger to touchdown. No velocity change: of the 11 uses of the `SPIN` tag in the executable, none alters the hero's motion except that SPIN disables the weapon-1 glide/high jump; facing is not updated; at the plane edge | `0x410B8E`, `0x41055D`, `0x410654`; `0x4104D8`; `0x4113DB`, `0x41141D` | [V] by scan |
+| Ground phase (after touchdown) | Touchdown sets `0x498F70` := 15 and `0x59F164` := 0 and arms no `LND1`. Each tick the selector decrements `0x498F70` and, while the clip has not wrapped, holds it at 1; the advance's "wrapped" result is the stack flag set at `0x40FC91`. So SPIN stays **15–17 ticks after touchdown, until the first wrap of the 16-tick loop at or after tick 15** | `0x410ED8`–`0x410EEB`; `0x410EA3`; `0x412004`–`0x41202D`; `0x40FC91` | [V]; [derived, `arith.py`]: 16 / 15 / 17 for loop phase 0 / 1 / 15 |
+| Duration total | Air time after the re-press + 15–17 ticks | — | [derived] |
+| Cooldown | None as a timer: a new spin needs a new airborne re-press; spinning again while spinning only re-sets `0x59F164` | — | [V] |
+| Cancelled by | A hurt (zeroes both), death and level entry, a rope grab, a new jump launch | `0x412E86`, `0x412E8C`; `0x410255`/`0x41025A`, `0x40F9B4`/`0x40F9BA`; `0x413E18`/`0x413E27`; `0x410710` | [V] |
+| Hit box | The hero's current clip box, i.e. `SPIN`'s box (−7, −50, 7, −8) around the hero's feet origin; it is **not mirrored** by facing (the hero box is used as is, the target box mirrored when the target's `0x8` is set) | `0x413E86`–`0x413FCB` | [V]; box [M] |
+| What it hits | Every entity whose update calls `0x413E40` and has `0x10000`: in L1 the `Henchlemming`, `Moneybag`, `Pots` (and the `Thief`, out of scope); same plane (`+0x5E` = `0x59F25E`), `0x52C568` = 0, boxes overlap. The test stores the hero's vx in the target's `+0x54` and the hitter `0x59F200` in `+0x14` | `0x413E86`–`0x413FCB`; `0x413F43`, `0x413F4C` | [V] |
+| Timing | Targets update before the hero (§2.13.f), so a target sees the clip selected on the previous tick | — | [derived] |
+| Protection | While the hero's clip is `SPIN` or `TUMB` the contact loop skips that entity — no hurt and no stomp. So a spinning hero touching a `Henchlemming` kills it and is not hurt | `0x40FF28`–`0x40FF3C` → `0x4100A2` | [V] |
+
+#### §2.14.d The helmet throw — hero side [V unless marked]
+
+- **Input:** throw mask newly pressed (`0x464438` & `0x52C6C8`), the helmet
+  worn (`0x52C570` ≠ 0) and no state `0x188100` (not already throwing,
+  helicopter, `BUI1`, …) → state \|= `0x100` (`0x4107ED`–`0x410817`). **No
+  weapon count and no weapon selection is read** — the plain throw needs only
+  the helmet.
+- **The throw hop:** if neither airborne (`0x1`) nor ducking (`0x4`), the same
+  press launches a jump: airborne, vy := −4.0, jump-hold counter 0, lockout 0,
+  bit `0x2` cleared (`0x41081D`–`0x410849`; this is §2.6.2 b's "other −4.0
+  launch site `0x41083C`").
+- **Clip:** state `0x100` → `THR2` if ducking (`0x4`), `THR3` if climbing
+  (`0x1000`), else `THR1` (`0x4115B8`–`0x4115E3`), one-shot (hero `+0x58` \|=
+  1, `0x4115EB`); when the clip has wrapped the selector clears `0x100`,
+  `0x800`, `0x40000` (`0x41158D`–`0x4115AE`). [M]: `THR1` 7 poses rate 96,
+  `THR2` 7 poses rate 91, `THR3` 5 poses rate 64 → `THR1` ends at tick 19,
+  `THR2` 20, `THR3` 20 [derived].
+- **Release point = an event keyframe [V mechanism, M data].** The actor
+  blit `0x40C270` treats a keyframe with a sprite and step 0 as an event: it
+  calls the entity's callback slot `+0x1C + 4·(flags & 7)` with the
+  keyframe's offset applied to the actor's position (mirrored by facing,
+  rotated/scaled when the blit is) (`0x40CD39`–`0x40CE52`). The hero's slot 7
+  (`+0x38`) is `0x42F5F0`. Event keyframes with slot 7 [M]: `THR1` keyframe 5
+  (pose 4) offset (22, −41); `THR2` keyframe 5 (pose 4) (25, −24); `THR3`
+  keyframe 3 (pose 2) (14, −26). So the helmet leaves at pose 4 — **tick 11 of
+  `THR1`**, tick 12 of `THR2`, tick 8 of `THR3` [derived, rate]. The callback
+  fires on the first draw of that keyframe; it is one-shot because the spawn
+  clears the helmet flag and the callback returns when it is 0
+  (`0x42F5F0`–`0x42F5F7`) [V]. A port should spawn on the tick the pose
+  becomes 4 [H: draw-time vs tick-time].
+- **What the callback spawns (`0x42F5F0`):** state `0x800` (weapon 2) → the
+  bomb (`0x42F5FE`–`0x42F626`, out of scope); otherwise the helmet projectile
+  `0x42F440` from `MAIN`'s `Helmet` record (string `0x4669E0`; `0x412800`
+  resolves names in `MAIN`, `0x412992` → `0x4162D0`) (`0x42F62F`–`0x42F652`).
+- **One helmet at a time [V]:** the throw needs `0x52C570` ≠ 0 and the spawn
+  sets it to 0, so no second throw until the helmet is caught.
+
+#### §2.14.e The helmet projectile (`MAIN` `Helmet`, `0x42F440`/`0x42F660`/`0x42FA50`)
+
+Spawn `0x42F440(entity, x, y)` [V]:
+
+- `0x52C570` := 0 (helmet off), `0x59E944` := 1 (**helmet in flight**),
+  `0x52C6F8` := the projectile (`0x42F44C`–`0x42F464`).
+- Clip `EINS`; with state `0x40000` (weapon 5) `DREI` and flag `0x2000000`
+  instead (`0x42F447`–`0x42F492`). Update `0x42F660`, draw `0x42FA50`, rate
+  128, `+0x62` = `+0x60` = 3 (never despawned by the window, §2.13.f)
+  (`0x42F495`–`0x42F4B2`). A looping sound `0x13` is started if none is
+  playing (channel kept in `0x4645D0`, `0x42F4B6`–`0x42F4CC`).
+- Phase `+0x80` := 0 (outbound), `+0x84` := 18, trail index `+0x88` := 0;
+  x = the event x; **y = the event y + 16** (+ 5 when ducking)
+  (`0x42F4D1`–`0x42F515`); a 16-entry position trail `+0x8C` is filled with
+  the start point (`0x42F518`–`0x42F53B`).
+- vx := −5.0 when the hero faces left (and the projectile gets `0x8`), else
+  +5.0, **plus 3/4 of the hero's vx** (`0x42F53D`–`0x42F590`); vy := +3.0,
+  rise rate `+0x11C` := 0.1875 (`0x3000`) and rise limit `+0x118` := −2.5
+  (`0x42F569`–`0x42F57A`). Unless the helicopter flag `0x52C52C` is set:
+  **Up held** (`0x1000`) → limit −3.25, rate 0.21875, vy 1.5; **Down held**
+  (`0x4000`) → rate 0.125, vy 3.0 (`0x42F592`–`0x42F5D5`). Sound `0x30`
+  (`0x42F5DC`).
+
+Update `0x42F660` per tick [V]:
+
+- **Hit (first):** while the clip is `EINS` or `DREI`, phase ≠ −1 and no
+  death in progress (`0x59C708` = 0): `0x414130(self)` (`0x42F683`–
+  `0x42F6AE`). If it marked anything and the clip is `EINS`: clip → `ZWEI`,
+  vy := −3.0, vx := 0, phase := 1 (return), `+0x84` := 0, rate 128, and the
+  `PLO2` effect `0x4286D0` at (x, y − 20) (`0x42F6BA`–`0x42F709`). So the
+  plain helmet **hits once** — every overlapping target on that tick — and
+  then only returns (`ZWEI` is not tested again); `DREI` (weapon 5) pierces.
+- `0x414130` (`0x414130`–`0x414279`) walks both slot banks (`0x52C5A0`
+  entries 0–32, `0x59E768` from 33); for each entity with `0x10000` on the
+  projectile's plane whose clip box overlaps the projectile's clip box
+  (neither box mirrored) it sets `0x20000`, `+0x54` := the projectile's vx and
+  `+0x14` := the projectile (`0x414238`–`0x414252`); returns 1 if it marked
+  any. The target's next `0x413E40` returns 1 and clears `0x20000`
+  (`0x413E56`–`0x413E6A`).
+- Advance the clip (`0x42F70D`).
+- **Phase 0, outbound (18 ticks):** vy −= `+0x11C` (`0x42F72D`–`0x42F73D`);
+  **hover:** the floor probe `0x413B90(plane, x, y − 48, 8)`
+  (`0x42F738`–`0x42F75E`); if it finds a floor and this is not an Up throw:
+  d = y − floor + 24, k = `0x200`/`0x400`/`0x800` (1/128, 1/64, 1/32 px/tick
+  per px) by slope kind 0/1/2 (`0x42F663`–`0x42F673`, `0x42F794`); on a
+  steep floor |vx| decays by 0.125 a tick toward 3.0 (`0x42F79B`–`0x42F7B8`);
+  if 0 < d < 40 and vy > −3.0: vy −= d·k; if −40 < d < 0 and vy < 3.0: vy −=
+  d·k/2 (`0x42F7BB`–`0x42F806`) — it is pushed toward 24 px above the floor.
+  `+0x84` − 1; at 0 → phase 1, `+0x84` := 12 (`0x42F809`–`0x42F829`).
+- **Phase 1, return:** x steers toward the hero: target = (hero x − x)/8
+  px/tick, at least 4.0 in magnitude; vx moves toward it by 0.34375 a tick,
+  clamped to ±5.5 (`0x42F82E`–`0x42F898`). Vertically it first keeps rising
+  (vy −= 0.1875) until vy < `+0x118` (`0x42F89B`–`0x42F8B2`), then steers vy
+  by 0.1875 a tick toward (hero y + hero box top + 8 − y)/16, at least 1.5
+  in magnitude; during a death the target is 500 px higher (it flies off)
+  (`0x42F8BE`–`0x42F925`).
+- **Integrate** x16 += vx, y16 += vy; store the trail (pose `0xFFFF` once
+  caught) (`0x42F928`–`0x42F9A1`).
+- **No wall, ceiling or floor collision** — the only level probe is the hover
+  probe at `0x42F75E` [V by scan of `0x42F440`–`0x42FA4C`]; the helmet flies
+  through terrain, and phase 1 has no probe at all. **No range limit or
+  timeout:** it returns until caught.
+- **Catch (any phase):** no death in progress, |x − hero x| ≤ 4 and hero y +
+  hero box top − 4 ≤ y ≤ hero y + hero box top + 20, phase ≠ −1 → stop the
+  loop sound, sound `0x37`, `0x42FB30` (an effect at the hero's head [H]),
+  **`0x52C570` := 1, `0x59E944` := 0**, phase := −1 (`0x42F9A7`–
+  `0x42FA3B`).
+- **Draw `0x42FA50`:** the projectile (unless caught) plus three trail images
+  4, 8 and 12 ticks old with a fourth `0x40C270` argument 120, 100, 80
+  ((4n + 12)·5 for n = 3, 2, 1; "fading" [H]); when all three trail entries
+  are caught-marked it removes itself (`0x412B80`, `0x42FA5D`–`0x42FB20`) —
+  about 12 ticks after the catch [derived].
+- **Hit box:** the projectile's clip box, `Helmet` `EINS` (−10, −18, 10, −1)
+  [M].
+- **Numbers [derived, `arith.py`]:** phase-0 vx = 5.0 standing, 6.5 at hero
+  vx 2.0, 6.875 at 2.5 → **90 / 117 / 124 px in the 18 outbound ticks**; the
+  outbound drop without hover is +21.9 px (Up throw −10.4, Down throw +32.6).
+  A full flight with the hero standing still on flat floor: caught after 68
+  ticks, farthest 145 px ahead of the hero (including the 22 px release
+  offset and the overshoot while turning).
+- **Interaction with hurt:** with the helmet in flight a hurt is **not** a
+  death (§2.13.g's test is `0x52C570` = 0 **and** `0x59E944` = 0): `0x412E30`
+  → `0x42E850`, which releases the projectile and spawns a decorative `Items`
+  `HELM` at its position flying off at vy −5.0 (−6.0 with `0x46441C`), then
+  `0x52C570` := 0, `0x59E944` := 0 (`0x412EDB`–`0x412EFB`, `0x42E8E7`–
+  `0x42E97B`) — the helmet is lost.
+- **Level (re)entry:** if a helmet was in flight it is given back (`0x52C570`
+  := 1 when `0x59E944` ≠ 0, `0x40F741`–`0x40F753`; `0x59E944` is cleared at
+  `0x40FA07`).
+
+#### §2.14.f Helmet, spare, weapon counts and the HUD [V unless marked]
+
+- **`0x52C570` = helmet worn.** Writers: reset 0 (`0x40EE16`), pickup 1
+  (`0x42C8FF`), spare pickup 1 (`0x42E7AF`), catch 1 (`0x42FA27`), (re)entry
+  restore 1 (`0x40F753`), throw 0 (`0x42F44C`), hurt 0 (`0x412EF1`), death
+  0 (`0x410146`, `0x4102DE`; with a helmet the death path first calls
+  `0x42E850`, `0x410249`), attract-demo setup 0 (`0x41C970`), `0x4245BB`
+  (in the `Cont` (42) handler's address range; its role is [H]), and three
+  in `Airs`/`Forc` (`0x41BED4`, `0x41C12D`, `0x41C41E`; not in L1).
+- **`0x59E944` = helmet in flight** (set by the throw, cleared by catch, hurt,
+  entry).
+- **`0x59F1E4` = spare helmet.** An `Items` `HELM` touched while the helmet is
+  worn **or in flight** becomes the spare (`0x42C8ED`–`0x42C90B`). The spare
+  key (mask `0x46AB54`, **held**) with a spare calls `0x42E690`: the spare is
+  cleared and an `Items` `HELM` with a `STAR` overlay falls from the top of
+  the view (camera + (160, 40), vy +1.0) (`0x410570`–`0x41058B`,
+  `0x42E690`–`0x42E753`); touching it gives the helmet, or the spare again
+  if one is worn (`0x42E781`–`0x42E7C5`). Losing the helmet to a hurt with a
+  spare and no death in progress drops the spare the same way (`0x42E8A6`–
+  `0x42E8B8`). HUD: the spare is drawn in the box (§2.12.d draw 5).
+- **Worn helmet on the hero sprite:** `0x52C570` ≠ 0 clears bit `0x2` of hero
+  `+0x70`, else sets it (`0x41050F`–`0x410523`); `+0x70` is a draw-layer
+  mask whose meaning is [H] ("helmet layer shown" is the reading).
+- **Weapon counts / selection.** The six counts are the u16 words of
+  `0x466830` (§2.12.c). The weapon mask (default `0x0080`) newly pressed,
+  helmet worn, uses the selected weapon if its count ≠ 0: selection 5 →
+  count `0x52C544` − 1, state `0x40100` (a `DREI` throw); 4 → `0x4777D4` − 1,
+  state `0x80000` (`BUI1`); 2 → `0x59F320` − 1, state `0x900` (the bomb
+  throw); 0 → `0x49C4C0`, state `0x8000` (helicopter, `HEL*`)
+  (`0x41084F`–`0x410A47`); 1 (`0x59F1E0`) is the held glide/high jump
+  (`0x41052A`–`0x410569`, `0x410633`–`0x41065B`, `0x410B60`–`0x410BB1`).
+  Selection is made in a **weapon wheel**: the `0x0100` input newly pressed
+  on the ground with no `0x000F` bit held (`0x40FC9D`–`0x40FCD6`) creates
+  `0x430BA0` (an `Icons` entity, hero state \|= `0x80` → clip `WAHL`, inputs
+  cleared while open, `0x40FCDB`–`0x40FCEC`); left/right step `0x52C58C`
+  through 0–5 with sound `0x41` (`0x430DAF`–`0x430E07`). This replaces
+  §2.12.c's former "owner not identified".
+- **In L1 [derived]:** all six counts are 0 at reset and L1 has no source of
+  them (the three `Pots` hold `HELM`, 5 coins, `HELM`; `Pots` content 2–7 is
+  the weapon pickup) → **no weapon mode is usable in L1**; the HUD shows
+  `Icons` `FUNF` (selection 1) with count "0" drawn with the `0xA0`
+  argument all level long. **A helmet throw changes no count**: the HUD's
+  weapon count does not move on a throw (plan 47 AC11b expects it to fall —
+  it does not; the only helmet-related HUD element is the spare in the box).
+
+#### §2.14.g TUMB, and the verdict [V unless marked]
+
+- **Input:** Down held (`0x464435` & `0x40` = `0x4000`) **on the ground**
+  (state `0x1` clear) with the hero's floor kind `0x52C574` = 2 (a steep,
+  `0xF0` cell, §2.9) → state \|= `0x8`, `0x46AB4C` := 180, `0x4770B0` := 3,
+  sound `0x33` via `0x40D570(0, 0x33, 0x1E)` only when not already tumbling
+  (`0x410757`–`0x4107A6`).
+- **Duration:** re-armed every tick while that holds; otherwise cleared when
+  the `TUMB` clip wraps or the hero is airborne (`0x4107AD`–`0x4107C9`).
+  `TUMB` 9 poses rate 64 [M] → 36 ticks per loop [derived]. Afterwards
+  `0x4770B0` = 3 gives `DIZZ` while standing still (§2.6.2 a row 28) until
+  `0x46AB4C` counts 180 down (`0x4107D0`–`0x4107E1`).
+- **Motion:** state `0x8` is read only by the trigger and the clip selector
+  (`0x410778`, `0x411C56`) [V by scan] — TUMB has **no motion of its own**;
+  any slide is the steep-slope ground behaviour, which is untraced (§2.9,
+  "Still [H]" 1).
+- **Hit box:** `TUMB`'s box (−12, −41, 12, −9) [M]; same test and the same
+  contact protection as SPIN (§2.14.c).
+- **L1 [M, `l1_attack.py`]:** 18 `0xF0` cells in three 6-cell runs: x
+  1648–1743 y 272–367; x 2128–2223 y 272–367; x 2688–2783 y 288–383. The
+  `Henchlemming`s at (2115, 265) and (1597, 246) start 36 and 93 px
+  (|dx| + |dy| to the nearest steep cell centre) from one; the others 252–1217.
+- **Verdict: cheap [V for the rule].** The kill side is one state bit, one
+  clip and the shared hit test, all already needed for SPIN; nothing new in
+  the projectile or the targets. What is *not* cheap — the steep-slope ground
+  motion while tumbling — is FL7's open item, not TUMB's: FL15d can port the
+  TUMB hit and leave the slide to whatever FL7 does on `0xF0` cells, labelled
+  [H].
+
+#### §2.14.h What a hit does [V unless marked]
+
+- **`Henchlemming`** (`0x42DDE7`): defeat `0x42CD00` then `0x430320`, y − 10
+  (§2.13.g). `0x42CD00`: a `MAIN` `Classic` lemming (string `0x466984`) in
+  `CLA1`, update `0x42CE30`, y − 2, vy −4.0, **vx = hero vx / 2** (the hero's
+  `0x59F24C` even for a helmet kill), mirrored when vx < 0, `+0x88` := 40 +
+  random & 63, sounds `0x43` and `0x39` (`0x42CD4E`–`0x42CDDC`); **`+0x4` :=
+  0** (`0x42CD18`: never respawns); **freed-lemming counter `0x52C5A8` + 1**
+  (even if the `Classic` could not be created), at 50 → bonus flag `0x59C718`
+  := 1 and counter 0, HUD flash `0x52C700` := 60 (`0x42CD1B`–`0x42CD3C`);
+  **one coin when the enemy's x is odd** (`0x42CDE4`–`0x42CE1E`: coin vy
+  −6.0, vx = 2/3 of the lemming's vx ± 0.5). **Score: none** — the game has
+  no score counter; `0x42CD00` writes only `0x52C5A8`, `0x59C718`, `0x52C700`
+  and the new entities [V by scan]. L1: 8 enemies → at most 8 freed lemmings,
+  coins for the five odd-x placements of §2.13.i [derived].
+- **`Moneybag`** (`0x428287`): on the hit `+0x8C` := 1, clip `JUMP` at rate
+  128, |vx| = 1.0 + (x & 31)/64 signed like the hitter's vx in `+0x54` (0 →
+  right), y + 32, `0x10000` cleared, default draw, depth 0, **despawn class
+  `+0x62` := 2** and **`+0x4` := 0** (never respawns)
+  (`0x428297`–`0x4282FC`). Falling: wall bounce (`0x412F50`), gravity
+  0.1875 capped 5.0, landing probe `0x414450` (`0x42837A`–`0x4283D9`); on
+  landing sound `0x4A`, vy := −4.0, `+0x90` := 1 (`0x4283DB`–`0x4283EA`).
+  While `+0x90` = 1 it animates (no motion); **when the pose position is
+  exactly `0x200` it releases 3 coins** (velocity pairs from `0x4645E8` at a
+  random start 0–3, y − 19) (`0x428323`–`0x428373`); when the clip wraps
+  `+0x90` := 0 and it hops (vy −4.0 kept) (`0x42830C`–`0x428319`).
+  **Q56 answered: a burst on every landing**, not once — the update never
+  removes the bag (no `0x412B80`/`0x412C50` in `0x428210`–`0x4283FB` [V by
+  scan]); it stops only when the despawn window releases it (class 2: outside
+  camera ± (340, 140), §2.13.f) [V], and it cannot come back. On flat ground
+  one cycle is 42 airborne + 12 animation ticks = **3 coins every 54 ticks**
+  [derived, `arith.py`]. L1 bags: (2104, 304) |vx| 1.375; (2175, 365) |vx|
+  1.484375 [M + derived]. Burst at the 4th animation tick [derived].
+- **`Pots`** (`0x42C067`): sound `0x11` only when the hitter is not the hero
+  (a projectile) (`0x42C07A`–`0x42C087`); a `Generator`-spawned pot gets
+  `+0x4` := 0 (`0x42C08F`–`0x42C099`); despawn class 2, clip `CLAY`, update
+  `0x42C2E0`, 40-tick delay (`0x42C0A0`–`0x42C0BF`); a `LID` child flies off
+  at vy −6.0, vx ±2.0 by the hero's vx sign (`0x42C0C9`–`0x42C132`). Content
+  `+0xA8` (= placement p1, `0x42BEED`–`0x42BEF1`) on landing
+  (`0x42C34D`–`0x42C56B`): p1 < 0 → −p1 coins from the `0x4645E8` table
+  (the (1238, 464) pot: p1 −5 → **5 coins**, `0x42C37C`–`0x42C3BC`); 0 → an
+  `Items` `HELM`; 1 → `UP`; 2–7 → a weapon icon; then content := −200
+  (empty) (`0x42C56B`). The item: delay 40, vy −5.5, vx ±1.25 by hero vx
+  sign (`0x42C3C3`–`0x42C470`). After the 40-tick delay **the next hit
+  shatters the opened pot**: one coin if its x is odd (vy −6.0, vx 2/3 of the
+  hitter's vx), sound `0x1C`, then `0x430690(self, 0x1400)` turns it into
+  `BOOM` debris (clears `0x10000` and `0x80000`, depth 2, update `0x430840`,
+  draw `0x4308F0`) (`0x42C575`–`0x42C5DB`, `0x4306E1`–`0x430833`); the
+  debris's removal is [H]. The `Pots` init's "skip a helmet
+  pot when the hero already has a helmet" rule (`0x42BEFA`–`0x42BFB8`)
+  applies only to placements with flag bit `0x0001`; L1's three have
+  `0x2000` [M] → not applied.
+- **`Thief`** (out of scope): knocked away (§2.12.b row `Thief`).
+
+#### §2.14.i The helmet-less L1 start [V + M]
+
+- The hero **starts L1 without the helmet**: reset `0x40EDC0` zeroes
+  `0x52C570`, `0x59F1E4` (`0x40EE16`–`0x40EE1B`) and the six counts; the only
+  level-entry write (`0x40F753`) restores a helmet that was in flight; no
+  `Start`/placement init sets it [V by the writer list of §2.14.f].
+- **L1 has no `HELM` placement** (no `Items`/`Helmet`-like name in any
+  `MEDIEVAL` plane) [M]. Its helmets come from **two `Pots` with p1 = 0**:
+  (521, 560), spawned by the `Generator` at (424, 560), and (2032, 240), by
+  the `Generator` at (1934, 272); the third, (1238, 464) by (1129, 544), holds
+  5 coins [M, `l1_attack.py`, §2.12.b].
+- **Consequence [derived]:** the throw needs the helmet, the first helmet is
+  inside a pot, and a pot opens only on a hit → **the first attack of L1 must
+  be a SPIN** (or TUMB) that opens the pot at (521, 560); from then on the
+  helmet throw is available until the helmet is lost (a hurt while worn or
+  in flight, or a death). The first `Henchlemming` (701, 542) lies after that
+  pot. The throw needs no weapon count.
+
+#### §2.14.j Constants for FL15b–FL15e (D5)
+
+| Name | Value | VA | Grade |
+|---|---|---|---|
+| `SPIN_TRIGGER` | jump newly pressed, airborne, `0x59E94C` < `0x9000` | `0x41074D` | [V] |
+| `SPIN_RATE` | 128 | `0x411FDF` | [V] |
+| `SPIN_GROUND_TICKS` | 15, then to the wrap | `0x410EE1`, `0x412024`–`0x41202D` | [V] |
+| `SPIN` loop | 16 ticks | — | [derived] |
+| `THROW_HOP_VY` | −4.0 | `0x41083C` | [V] |
+| `THROW_RELEASE_POSE` | 4 (`THR1`, `THR2`), 2 (`THR3`) | — | [M] |
+| release offsets | (22, −41) / (25, −24) / (14, −26) | — | [M] |
+| `HELMET_SPAWN_DY` | +16, +5 ducking | `0x42F4F2`–`0x42F4FD` | [V] |
+| `HELMET_VX` | ±5.0 + 3/4 hero vx | `0x42F54C`/`0x42F55A`, `0x42F560`–`0x42F590` | [V] |
+| `HELMET_VY0` | +3.0 / 1.5 Up | `0x42F569`, `0x42F5B9` | [V] |
+| rise rate | 0.1875 / 0.21875 Up / 0.125 Down | `0x42F570`, `0x42F5AF`, `0x42F5CB` | [V] |
+| rise limit | −2.5 / −3.25 Up | `0x42F57A`, `0x42F5A5` | [V] |
+| `HELMET_OUT_TICKS` | 18 | `0x42F4D1` | [V] |
+| hover | height 24, window ±40, gains 1/128, 1/64, 1/32 | `0x42F78D`, `0x42F663`–`0x42F673` | [V] |
+| return | accel 0.34375, cap 5.5, min x speed 4.0 | `0x42F82E`, `0x42F84B`/`0x42F85E` | [V] |
+| vertical return | step 0.1875, min 1.5, aim box top + 8 | `0x42F917`/`0x42F920`, `0x42F8F8`/`0x42F90B`, `0x42F8CD` | [V] |
+| hit bounce | vy −3.0, vx 0 | `0x42F6CD`/`0x42F6D4` | [V] |
+| catch window | x ± 4, y box top − 4 … + 20 | `0x42F9CE`–`0x42F9EC` | [V] |
+| `TUMB` trigger and timers | 180 / 3 | `0x41078A`/`0x410794` | [V] |
+| `Moneybag` hit | \|vx\| 1.0 + (x & 31)/64, y + 32, g 0.1875 cap 5.0, bounce −4.0, burst at pose position `0x200`, 3 coins | §2.14.h | [V] |
+| `Pots` re-hit delay | 40 ticks, then the next hit shatters it | `0x42C0BF`, `0x42C5DB` | [V] |
+| defeat | counter + 1, flash 60, 50 → bonus | §2.14.h | [V] |
+| boxes `SPIN` (−7, −50, 7, −8), `TUMB` (−12, −41, 12, −9), `Helmet` `EINS` (−10, −18, 10, −1) | read from the user's data at run time — not constants | — | [M] |
+| sounds | `0x2B` spin, `0x30` throw, `0x13` flight loop, `0x37` catch, `0x33` tumble, `0x11`/`0x1C` pot, `0x4A` bag landing, `0x43`/`0x39` defeat | — | ids [V]; meanings [H] |
+
+#### §2.14.k Builder list (FL15b–FL15e) with `[H]` fallbacks
+
+- **FL15b (SPIN):** (1) the trigger of §2.14.c on the jump edge (needs an
+  edge-detected jump input; the engine's `Input` has a jump flag — FL15b
+  derives the edge itself); (2) `SPIN` drawn while airborne-spinning and for
+  15 ticks after touchdown then to the loop's wrap, rate 128; (3) no motion
+  change, facing frozen; (4) contact protection while `SPIN`/`TUMB`;
+  (5) `attack_hits(snapshot)` = the current `SPIN`/`TUMB` clip box at the
+  hero, unmirrored, applied on the **next** tick's target update (or the
+  same tick, labelled [H], if the engine's order differs); (6) no cooldown
+  timer. `[H]` fallback: if the engine cannot draw `SPIN` yet, a named
+  constant 16-tick loop with the box above.
+- **FL15c (helmet throw):** `helmet_worn`, `helmet_in_flight`, `spare` and the
+  six counts (all 0 at start); `HELM` pickup from the two L1 pots; the throw
+  on the throw edge with the hop, `THR1`/`THR2`/`THR3`, release at pose 4
+  (tick 11 of `THR1`) at the keyframe offset + (0, 16); the projectile of
+  §2.14.e with phase 0 (18 ticks, hover), phase 1 (homing), catch, no terrain
+  collision; one at a time. `[H]` fallbacks: if the floor probe cannot be
+  called from the projectile, phase 0 without hover (labelled); if the
+  event-keyframe offset is not available, (22, −41) as a named constant.
+  `slice` prints `helmet thrown, count a -> b` with **a = b** (the counts do
+  not change; the helmet flag does) — the card should print the helmet flag
+  instead.
+- **FL15d (hits):** the projectile marker `0x414130` (all overlapping
+  `0x10000` targets, once per plain helmet, then the `ZWEI` return); the
+  `Henchlemming` defeat (no respawn, freed + 1, coin on odd x, `Classic`
+  lemming pop, no score); the `Moneybag` (fall, bounce, 3 coins **every
+  landing**, released by the class-2 window, never respawned); `Pots` (open,
+  contents, 5 coins at (1238, 464), the helmet at (521, 560) and (2032,
+  240), the second hit shatters it, with one coin if its x is odd); TUMB hit (cheap; the slide is FL7's
+  `[H]`). The `Thief` is not hit-tested. `[H]` fallback: if the window is not
+  ported, stop a bag after a named number of bursts and say so in `slice`.
+- **FL15e (HUD):** the weapon icon `Icons` clip by selection (`FUNF` for 1)
+  at (27, 30) and the count of the selected weapon at (35, 41)/(30, 41),
+  drawn with the `0xA0` argument when 0 — in L1 always `FUNF` "0" [derived];
+  the spare helmet in the box (§2.12.d draw 5). No change on a throw.
+
+#### §2.14.l What stays open
+
+Q58 is answered (§2.14); Q56 answered (§2.14.h); Q57 answered by the
+maintainer (D7) and TUMB graded cheap. `[H]`: the steep-slope ground motion
+(§2.9), whether the throw event fires on the tick or the draw, how a control
+scheme row is chosen, `+0x70` bit `0x2`, `0x42FB30`'s effect, sound meanings,
+the role of `0x4245BB`, the `0x40D570` sound-call variant.
 
 ## 3. `SFX/*.WAV` **[V]**
 
