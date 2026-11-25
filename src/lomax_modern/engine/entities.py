@@ -85,11 +85,26 @@ AIR_POSE4_MIN_VY = -2.0
 AIR_POSE2_MAX_VY_STRAIGHT = -3.5
 AIR_POSE2_MAX_VY_MOVING = -3.875
 
-#: The jump kind before any jump has set state bit 0x2: ``False`` = the moving
-#: kind (bit clear, ``JMP2``/``FLO2``).  **[H]** -- §2.6.2 b traces every writer
-#: of the bit (the launch sites) but not what 0x49C4C4 holds at level load, so
-#: a zero-initialised global (bit clear) is this engine's choice, in one place.
-JUMP_STRAIGHT_AT_LEVEL_START = False
+#: The jump kind at a fresh level entry: state bit 0x2 is *set* (``0x42AC3B``),
+#: i.e. the straight kind (``JMP1``/``FLO1``).  **[V]** (Q40a, §2.10.c).  Applied
+#: by ``new_game_state``; a bare ``Player(...)`` keeps ``False`` (the build's
+#: state-0 / respawn kind) so direct fixtures are unchanged.
+JUMP_STRAIGHT_AT_LEVEL_START = True
+
+#: A Start placement ``(sx, sy)`` puts the hero's feet origin (bottom centre) at
+#: ``(sx, sy - 40)`` (``0x42AC22``-``0x42AC3E``, §2.10.c, [V]).
+START_FEET_OFFSET_Y = 40
+
+#: Hold-to-rise counter ``0x59E94C`` (16.16).  Jump held in the air with the
+#: lockout clear: ``new = counter - 0x800``; ``vy -= new``; ``counter = new``
+#: (``0x4105D4``-``0x4105E7``).  Not held -> counter := -1 (``0x4105AD``).
+#: The normal launch (``0x410667``) sets 0x9800; the other launch kinds
+#: (0xA800 at ``0x41065B``, 0xB000 at ``0x4106A5``) are NOT modelled.
+JUMP_HOLD_START = 0x9800
+JUMP_HOLD_STEP = 0x800
+JUMP_HOLD_RELEASED = -1
+#: 16.16 fixed point -> pixels per tick.
+JUMP_HOLD_SCALE = 1.0 / 65536
 
 #: ``DUCK``'s own clip rate in 1/256 poses per tick: 65, one pose every ~3.94
 #: ticks (§2.6.2 a row 23, [V]).  *When* the clip is selected is [H]: this
@@ -156,8 +171,9 @@ class Player:
     #: Sub-pose accumulator in 1/256-pose units (0..255 is the remainder); the
     #: pose advances whenever it reaches 256 (``state.advance_pose``).
     anim_phase: int = 0
-    jump_straight: bool = JUMP_STRAIGHT_AT_LEVEL_START  # state bit 0x2; straight == JMP1/FLO1
+    jump_straight: bool = False  # state bit 0x2; straight == JMP1/FLO1
     jump_lockout: int = 0  # 0x59E764, ticks of the time-driven jump clip still to draw
+    jump_hold: int = JUMP_HOLD_RELEASED  # 0x59E94C, raw 16.16 hold-to-rise counter
     landing_counter: int = 0  # 0x59F1CC, ticks of LND1 still to draw
     lnd1_shown: bool = False  # set by step_player when this tick's ground branch drew LND1
     air_clip_tag: str = ""  # the air clip set last tick (actor+0x08's role in the air branch)

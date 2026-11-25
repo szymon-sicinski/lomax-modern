@@ -355,12 +355,14 @@ def test_slice_report_names_the_clips_it_drew_and_counts_every_tick(
     assert counts == {
         PLAYER_STAND_ANIM: 4,
         PLAYER_IDLE_ANIM: 0,
-        PLAYER_WALK_ANIM: 2,
+        # Fresh entry is the straight kind (Q40a [V]): JMP1, and the touchdown
+        # tick draws LND1 (a held right cuts it to that one tick).
+        PLAYER_WALK_ANIM: 1,
         PLAYER_RUN_ANIM: 0,
         PLAYER_DUCK_ANIM: 0,
-        PLAYER_LAND_ANIM: 0,
-        PLAYER_JUMP_ANIM: 0,
-        PLAYER_JUMP_MOVING_ANIM: 2,
+        PLAYER_LAND_ANIM: 1,
+        PLAYER_JUMP_ANIM: 2,
+        PLAYER_JUMP_MOVING_ANIM: 0,
         PLAYER_FASTFALL_ANIM: 0,
         PLAYER_FASTFALL_MOVING_ANIM: 0,
     }
@@ -369,7 +371,7 @@ def test_slice_report_names_the_clips_it_drew_and_counts_every_tick(
         line for line in report.format().splitlines() if line.startswith("clips: ")
     )
     # Table order (``PLAYER_CLIP_TAGS``), zero counts omitted.
-    assert line == "clips: STA1 4, WALK 2, JMP2 2"
+    assert line == "clips: STA1 4, WALK 1, LND1 1, JMP1 2"
     assert "RUN 0" not in line
 
 
