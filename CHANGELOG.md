@@ -8,6 +8,16 @@ Versioning: [Semantic Versioning](https://semver.org/).
 
 ### Added
 
+- **Research answers from the FL4c disassembly pass (docs only).** Q58 is
+  answered `[V]`: `SPIN` is the jump pressed again in the air (rate 128, 15–17
+  ticks more after touchdown, no cooldown, contact-immune); the helmet throw
+  needs only the helmet and launches a boomerang `Helmet` projectile (18 ticks
+  out, hovering over the floor, then homing back; hits once; no terrain
+  collision); `TUMB` is graded cheap. A `Moneybag` bursts 3 coins on every
+  landing (Q56 answered). The hero starts L1 without the helmet — the first is
+  in the pot at (521, 560), opened by a `SPIN` — and a throw changes no HUD
+  count. New `file-formats.md` §2.14; Q54 narrowed, Q57 marked answered by the
+  maintainer.
 - **Research answers from the FL4b disassembly pass (docs only).** Q50 is
   answered `[V]`: the `Henchlemming` only hops (vx ±1.0, vy −4.0, 31 px per
   hop), rests 20 or 60 + (x & 127) ticks, and turns at a long rest, beside
