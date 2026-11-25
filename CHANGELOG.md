@@ -8,6 +8,14 @@ Versioning: [Semantic Versioning](https://semver.org/).
 
 ### Added
 
+- **Jump gate, hold-to-rise, fresh-entry start (FL8).** While the jump lockout
+  runs (launch tick + 4 moving / + 9 straight) the hero takes no gravity, no
+  vertical move and no floor probe (`0x410B19`, `0x410BED`, `0x410D4A`); holding
+  jump in the air subtracts the `0x59E94C` counter (`0x9800` at launch, `-0x800`
+  per tick) from `vy`. A Start-derived spawn puts the feet at `(sx, sy - 40)`,
+  facing +x, straight jump kind (`JUMP_STRAIGHT_AT_LEVEL_START = True`, Q40a).
+  `slice` prints a `start:` line; `spawn:` prints the placement. `Snapshot`
+  gains `jump_hold`. Tests: `tests/unit/test_jump_physics.py`.
 - **Collision classes (FL7).** `CollisionModel` decodes the FL2 classes
   (`docs/file-formats.md` §2.9.a-d): `0xC0`-class bytes are one-way floors with
   flat/shallow/steep, mirrored surfaces; every other non-zero byte stays

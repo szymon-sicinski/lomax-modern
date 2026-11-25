@@ -29,16 +29,22 @@ from .entities import (
     IDLE_REFREEZE_THRESHOLD,
     IDLE_START_THRESHOLD,
     IDLE_THRESHOLD_MASK,
+    JUMP_HOLD_RELEASED,
+    JUMP_HOLD_SCALE,
+    JUMP_HOLD_START,
+    JUMP_HOLD_STEP,
     JUMP_LOCKOUT_MOVING,
     JUMP_LOCKOUT_RATE,
     JUMP_LOCKOUT_STRAIGHT,
     JUMP_SPEED,
+    JUMP_STRAIGHT_AT_LEVEL_START,
     LANDING_TICKS,
     MAX_FALL,
     STA1_POSES,
     STA1_RATE,
     STA2_POSES,
     STA2_RATE,
+    START_FEET_OFFSET_Y,
     WALK_SPEED,
     Collectible,
     Entities,
@@ -512,23 +518,48 @@ def step_player(
 
     was_grounded = player.on_ground  # capture first, before the jump
     launched = bool(inp.jump and player.on_ground)
+    # Physics gate (0x410B19, 0x410BED, 0x410D4A): while the original's lockout
+    # 0x59E764 != 0 there is no gravity, no vertical integration and no ground
+    # probe.  It is set on the launch tick and decremented at the end of that same
+    # tick, while this engine's ``jump_lockout`` is the clip counter and is not
+    # decremented on the launch tick.  So the original's value at physics time on
+    # tick k after launch is (engine value at the start of tick k) - 1: frozen iff
+    # launched now, or the engine value read *before* this tick's update is > 1.
+    frozen = launched or (not was_grounded and player.jump_lockout > 1)
     if launched:
         player.vy = JUMP_SPEED
+        player.jump_hold = JUMP_HOLD_START
         player.on_ground = False
-    player.vy = min(player.vy + GRAVITY, MAX_FALL)
+    elif not was_grounded and not frozen:
+        # Hold-to-rise (0x4105A0-0x4105ED), before this tick's gravity add.
+        if not inp.jump:
+            player.jump_hold = JUMP_HOLD_RELEASED
+        elif player.jump_hold > 0:
+            player.jump_hold -= JUMP_HOLD_STEP
+            player.vy -= player.jump_hold * JUMP_HOLD_SCALE
+    elif not was_grounded and not inp.jump:
+        player.jump_hold = JUMP_HOLD_RELEASED
+    if not frozen:
+        player.vy = min(player.vy + GRAVITY, MAX_FALL)
 
     start_feet = _feet(player)
     start_floor = level.floor_at(*start_feet)
     player.x += player.vx
     _resolve_x(level, player)
-    player.y += player.vy
-    player.on_ground = False
-    _resolve_y(level, player)
-    if not player.on_ground:
-        _resolve_floor(
-            level, player, start_feet, start_floor,
-            grounded=was_grounded and not launched,
-        )
+    if frozen:
+        player.on_ground = False
+    else:
+        player.y += player.vy
+        player.on_ground = False
+        _resolve_y(level, player)
+        if not player.on_ground:
+            _resolve_floor(
+                level, player, start_feet, start_floor,
+                grounded=was_grounded and not launched,
+            )
+        if player.on_ground:
+            # [H] the original's landing reset of the counter is not traced.
+            player.jump_hold = JUMP_HOLD_RELEASED
     _update_air_and_landing(player, inp, was_grounded=was_grounded, launched=launched)
     _update_duck(player, inp)
     _update_idle(player, rand if rand is not None else default_random_bits())
@@ -592,17 +623,27 @@ def new_game_state(
     level with no ``NMY``/``GNMY`` data still runs.  Any of the four may be
     overridden explicitly by the caller.
     """
+    fresh_entry = False
     if spawn_x is None or spawn_y is None:
+        fresh_entry = True
         spawn = level.spawn
         if spawn is not None:
             sx, sy = spawn
-            spawn_x = spawn_x if spawn_x is not None else float(sx)
-            spawn_y = spawn_y if spawn_y is not None else float(sy)
+            if spawn_x is None and spawn_y is None:
+                # §2.10.c [V] 0x42AC22-0x42AC3E: the placement is 40 px below the
+                # feet origin (bottom centre); the box is centred on the feet [H].
+                spawn_x = sx - Player.width / 2
+                spawn_y = sy - START_FEET_OFFSET_Y - Player.height
+            else:
+                spawn_x = spawn_x if spawn_x is not None else float(sx)
+                spawn_y = spawn_y if spawn_y is not None else float(sy)
         else:
             sx, sy = first_passable_cell(level)
             spawn_x = spawn_x if spawn_x is not None else sx * CELL_PX
             spawn_y = spawn_y if spawn_y is not None else sy * CELL_PX
     player = Player(x=float(spawn_x), y=float(spawn_y))
+    if fresh_entry:
+        player.jump_straight = JUMP_STRAIGHT_AT_LEVEL_START  # 0x42AC3B, [V]
     if collectibles is None:
         collectibles = [
             Collectible(px_x // CELL_PX, px_y // CELL_PX)
@@ -657,6 +698,7 @@ class Snapshot:
     idle_clip_tag: str = ""
     idle_frame: int = 0
     idle_phase: int = 0
+    jump_hold: int = JUMP_HOLD_RELEASED
 
     def to_dict(self) -> dict:
         return {
@@ -675,6 +717,7 @@ class Snapshot:
             "idle_clip_tag": self.idle_clip_tag,
             "idle_frame": self.idle_frame,
             "idle_phase": self.idle_phase,
+            "jump_hold": self.jump_hold,
         }
 
     @classmethod
@@ -696,6 +739,7 @@ class Snapshot:
             idle_clip_tag=data.get("idle_clip_tag", ""),
             idle_frame=data.get("idle_frame", 0),
             idle_phase=data.get("idle_phase", 0),
+            jump_hold=data.get("jump_hold", JUMP_HOLD_RELEASED),
         )
 
 
@@ -717,6 +761,7 @@ def capture(state: GameState) -> Snapshot:
         idle_clip_tag=state.player.idle_clip_tag,
         idle_frame=state.player.idle_frame,
         idle_phase=state.player.idle_phase,
+        jump_hold=state.player.jump_hold,
     )
 
 
@@ -747,3 +792,4 @@ def restore(state: GameState, snapshot: Snapshot) -> None:
     state.player.idle_clip_tag = snapshot.idle_clip_tag
     state.player.idle_frame = snapshot.idle_frame
     state.player.idle_phase = snapshot.idle_phase
+    state.player.jump_hold = snapshot.jump_hold

@@ -999,17 +999,24 @@ not yet reproduce, recorded here so they are not silently dropped:
   uses a higher impulse (**−5.0** at `0x412F14`, **−6.0** at `0x41022A`), and a
   small hop uses **−2.0** (`0x41067B`); the engine's single `JUMP_SPEED` is the
   normal jump.
-- **Gravity is skipped for a few ticks after a jump.** `0x59E764` is set to 5
-  (jumping while moving) or 10 (a straight-up jump) at `0x4106EC`/`0x4106FF`,
-  decremented once a tick (`0x410D36`), and while it is non-zero the gravity
-  add is gated off (`0x410B19`–`0x410B21`) — so the impulse plays out before
-  gravity bites. The engine applies gravity unconditionally, so for the same
-  constants its jump arc is shorter than the original's.
-- **Holding the jump raises with reduced gravity** via a per-tick counter
-  `0x59E94C` (initialised to `0x9800`/`0xA800`/`0xB000`, decremented `0x800`
-  per tick at `0x4105D4`, the remainder subtracted from `vy`). A held
-  slide/down input instead uses a **0.125** fall (`0x2000` at `0x410B9A`)
-  clamped to **1.0**.
+- **Gravity is skipped for a few ticks after a jump — adopted (FL8).**
+  `0x59E764` is set to 5 (jumping while moving) or 10 (a straight-up jump) at
+  `0x4106EC`/`0x4106FF`, decremented once a tick (`0x410D36`, in the same tick as
+  the set), and while it is non-zero the gravity add (`0x410B19`–`0x410B21`), the
+  vertical integration (`0x410BED`–`0x410BF5`) and the ground probe
+  (`0x410D4A`–`0x410D52`) are all skipped; x still moves. The hero therefore
+  hangs for the launch tick plus N−1 ticks: first vertical move on tick 6
+  (moving) / 11 (straight), counting the launch as tick 1. The engine's
+  `step_player` gates on `launched or jump_lockout > 1` at the start of the tick
+  (its `jump_lockout` is the clip counter, not decremented on the launch tick).
+- **Holding the jump raises with reduced gravity — adopted (FL8, normal launch
+  only).** Counter `0x59E94C` (16.16): not held → −1 (`0x4105AD`); held with
+  counter > 0 and the lockout clear → `new = counter − 0x800`, `vy −= new`,
+  counter = new (`0x4105D4`–`0x4105E7`), before the tick's gravity add. The
+  normal launch sets `0x9800` (`0x410667`); `0xA800` (`0x41065B`) and `0xB000`
+  (`0x4106A5`) are other launch kinds, **not modelled**. The landing reset is
+  not traced [H]. A held slide/down input instead uses a **0.125** fall
+  (`0x2000` at `0x410B9A`) clamped to **1.0** (not modelled).
 - **A speed override depends on the slope kind `[V]`.** `0x426DEC`–`0x426E28`
   lie in the `Tonn` state function `0x426D20` (installed by the `Tonn` handler,
   name index 50, `0x426A10`: `mov [esi+0x18], 0x426D20` at `0x426A1B`), an
@@ -1022,10 +1029,9 @@ not yet reproduce, recorded here so they are not silently dropped:
   `0x49C4B4` at `0x4103B0`/`0x410461` only as an override when it is non-zero
   (`0x4103B6`–`0x4103B8`). The hero's own limit is Q51.
 
-The jump gravity-lockout and the hold-to-rise counter are the two measured
-mechanics that would make the engine's jump feel exactly like the original's;
-adopting them is follow-up work, not an open question — the mechanism is
-measured, only the engine's adoption is missing.
+The jump gravity-lockout and the hold-to-rise counter are adopted by the engine
+(FL8); the water/slide gravity, the other launch kinds and the stomp/spring
+impulses remain unmodelled.
 
 #### §2.9.a The collision byte: classes (2026-11-24, FL2; Q31, Q43)
 
@@ -1461,9 +1467,11 @@ handler 42 → `0x424500`.
   +4.0 launch) and its touchdown arms `LND1` for 10 ticks, state `0x100` being
   clear (§2.6.2 b) [derived from §2.6.2 b]. A respawn at a `Revive` and the
   walk-in after an `Exit` keep the build's state 0 — bit clear, the moving kind
-  (`JMP2`/`FLO2`) [V]. The engine's `JUMP_STRAIGHT_AT_LEVEL_START = False`
-  (`engine/entities.py`) is therefore wrong for a fresh entry; changing it is
-  FL8's, not this pass's.
+  (`JMP2`/`FLO2`) [V]. The engine's `JUMP_STRAIGHT_AT_LEVEL_START = True`
+  (`engine/entities.py`, FL8) now matches; a bare `Player(...)` keeps the
+  state-0 kind. `new_game_state` also places a Start-derived spawn so the feet
+  are at `(sx, sy − 40)` (`START_FEET_OFFSET_Y`); the 240-tick entry hold and
+  the vy +4.0 drop are not modelled [H].
 - **Collision box [V]+[M].** The hero's box for objects is the **current
   clip's** four signed words at animation-node `+0x10..+0x16` (the 2nd–5th of
   the nine `NMY` animation parameters, stored by the `NMY` reader at

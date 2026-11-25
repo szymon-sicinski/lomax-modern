@@ -329,5 +329,7 @@ def test_fast_fall_waits_for_the_lockout() -> None:
 
 
 def test_level_start_kind_is_one_named_constant() -> None:
-    assert JUMP_STRAIGHT_AT_LEVEL_START is False
-    assert Player(x=0.0, y=0.0).jump_straight is JUMP_STRAIGHT_AT_LEVEL_START
+    # Q40a [V] (0x42AC3B): a fresh entry is the straight kind; a bare Player keeps
+    # the build's state-0 kind (moving).
+    assert JUMP_STRAIGHT_AT_LEVEL_START is True
+    assert Player(x=0.0, y=0.0).jump_straight is False

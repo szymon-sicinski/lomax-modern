@@ -22,6 +22,7 @@ from lomax_modern.engine import (
     new_game_state,
     run_slice,
 )
+from lomax_modern.engine.state import _feet
 from tests.fixtures.synth import (
     build_container,
     cell_payload,
@@ -144,8 +145,10 @@ def test_new_game_state_spawns_at_the_start_placement(tmp_path: Path) -> None:
         ),
     )
     state = new_game_state(level)
-    assert state.player.x == 10.0
-    assert state.player.y == 20.0
+    # §2.10.c [V]: the placement is 40 px below the feet origin (bottom centre).
+    assert _feet(state.player) == (10, 20 - 40)
+    assert state.player.facing == 1
+    assert state.player.jump_straight is True
 
 
 def test_new_game_state_builds_entities_from_placements(tmp_path: Path) -> None:
@@ -220,7 +223,7 @@ def test_state_collects_a_moneybag_placement(tmp_path: Path) -> None:
             8,
             4,
             [
-                (0, 0, 0, 0x0000, (1,), None),  # Start at cell (0, 0)
+                (0, 6, 54, 0x0000, (1,), None),  # Start: box top-left (0, 0)
                 (2, 0, 0, 0x0000, (1,), None),  # Moneybag at cell (0, 0)
             ],
             nmy_names=("Start", "Exit", "Moneybag"),
@@ -239,7 +242,7 @@ def test_state_completes_at_an_exit_placement(tmp_path: Path) -> None:
             8,
             4,
             [
-                (0, 0, 0, 0x0000, (1,), None),  # Start at cell (0, 0)
+                (0, 6, 54, 0x0000, (1,), None),  # Start: box top-left (0, 0)
                 (1, 0, 0, 0x0000, (1,), None),  # Exit at cell (0, 0)
             ],
             nmy_names=("Start", "Exit", "Moneybag"),
