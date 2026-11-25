@@ -129,7 +129,7 @@ class SliceReport:
             "tile art: composed -- map cell -> tile record resolved (Q20), each "
             "record blitted as four CELLs in 2x2 column-major order (V, G1) "
             "with the HEAD palette (slot 1) and index-0 transparency; flip "
-            "pairing [H] (Q33); the geometric collision grid stays on render() "
+            "pairing [V] (Q33); the geometric collision grid stays on render() "
             "as a debug path",
             f"GNMY markers: {self.gnmy_entries} placements drawn by NMY name "
             f"-- start {self.gnmy_roles.get('start', 0)}, "
@@ -243,13 +243,14 @@ def run_slice(
             f"player: no {PLAYER_WALK_ANIM} clip resolved (no sibling MAIN.WLD) "
             "-- the standing sprite is reused while moving"
         )
+    histogram = _collision_histogram(level)
     report = SliceReport(
         world=world_name,
         planes=len(level.sections),
         playfield=playfield,
         playfield_size=(level.plane.width_cells, level.plane.height_cells),
-        collision_histogram=_collision_histogram(level),
-        collision_model=level.collision.report(),
+        collision_histogram=histogram,
+        collision_model=level.collision.report(extra_values=histogram),
         spawn=spawn_pos,
         spawn_name=spawn_name,
         ticks=ticks,

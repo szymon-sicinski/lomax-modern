@@ -54,9 +54,9 @@ def test_slice_first_world_reports_ticks_and_clean_exit() -> None:
     assert frame.width == 320 and frame.height == 240
     # The collision byte is preserved and its semantics flagged, not guessed.
     assert report.collision_histogram  # non-empty: 0x00 and at least one solid
-    assert "retracted" in report.format()
+    assert "collision: FL2 classes [V]" in report.format()
     assert "resolved (Q20)" in report.format()
-    assert "Q31" in report.format()
+    assert "still [H]:" in report.format()
 
 
 def test_render_tiles_composes_real_tile_art() -> None:

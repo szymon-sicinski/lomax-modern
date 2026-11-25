@@ -38,6 +38,12 @@ GRAVITY = 0.375
 #: ``0x412EC2``) (``docs/file-formats.md`` §2.9). Stomps/springs use −5.0/−6.0.
 JUMP_SPEED = -4.0
 
+#: Ground-follow tolerance in px: a grounded player is snapped onto the floor
+#: surface when ``|feet - floor|`` is within it.  [V] comparison at
+#: 0x410F09-0x410F5E (18 px with 0x52C704 != 0, 3 px when 0); which one applies
+#: in play is [H].
+GROUND_FOLLOW_TOLERANCE_PX = 18
+
 #: Terminal fall speed, pixels per tick (360 px/s at 60 Hz).
 #: Measured: ``vy`` is clamped to ``0x60000`` (6.0 in 16.16 fixed point) at VA
 #: ``0x410BC2`` (``docs/file-formats.md`` §2.9).

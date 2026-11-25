@@ -11,6 +11,11 @@ Helper scripts for contributors. Nothing here is shipped in the package.
   `GAME.TXT` and `DEMOS` structure. Thin wrapper over
   `lomax_modern.measure`; read-only and prints no asset bytes.
 
+- `geometric_reachability.py <game_dir> [--world MEDIEVAL]` — plan 47 R1: a
+  breadth-first search of the engine's own `step_player` on the collision grid
+  only (no objects, no enemies); says whether `Start` reaches `Exit` on geometry
+  alone. Read-only; prints counts and coordinates only.
+
 Planned:
 
 - `check_no_game_data.sh` — fail if a staged file looks like game data

@@ -8,6 +8,18 @@ Versioning: [Semantic Versioning](https://semver.org/).
 
 ### Added
 
+- **Collision classes (FL7).** `CollisionModel` decodes the FL2 classes
+  (`docs/file-formats.md` §2.9.a-d): `0xC0`-class bytes are one-way floors with
+  flat/shallow/steep, mirrored surfaces; every other non-zero byte stays
+  conservative solid `[H]`. `Level.floor_at` is the floor probe; `step_player`
+  lands on floors (vy gate by slope kind) and follows them while grounded
+  (`GROUND_FOLLOW_TOLERANCE_PX`). `slice` prints a multi-line `collision:` block
+  with one line per level-1 value and the remaining `[H]` residues. Flip pairing
+  labels are now `[V]` (Q33); behaviour unchanged. The surface sits at the
+  collision cell's bottom edge (spawn lands at feet y = 496, was 480), so the
+  120-tick `clips:` line moves (`WALK 34, JMP2 62, FLO2 24` ->
+  `WALK 49, JMP2 50, FLO2 21`). `scripts/geometric_reachability.py` is the
+  R1 geometry-only reachability pass (no objects, no enemies).
 - **Research answers from the FL4c disassembly pass (docs only).** Q58 is
   answered `[V]`: `SPIN` is the jump pressed again in the air (rate 128, 15–17
   ticks more after touchdown, no cooldown, contact-immune); the helmet throw
