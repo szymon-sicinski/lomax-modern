@@ -32,9 +32,10 @@ repository commits only this decoding code, never game content.
 from __future__ import annotations
 
 import struct
-from collections.abc import Mapping
+from collections.abc import Iterable, Mapping
 from dataclasses import dataclass, field
 from pathlib import Path
+from typing import Any
 
 # ---------------------------------------------------------------------------
 # ANIM
@@ -319,28 +320,119 @@ def decode_nmy(payload: bytes) -> tuple[list[NmyRecord], int] | None:
     return records, pos
 
 
-#: ``NMY`` name prefixes whose ``GNMY`` placement role Q32 evidenced **[V]**.
+#: ``NMY`` name prefixes and the ``GNMY`` placement role of each (the 15 names
+#: of level 1; see ``docs/file-formats.md`` §2.12.b for roles and grades).
 #: The loader matches a record's name on its first four bytes against the
 #: 89-entry name table, so ``Start``/``Moneybag`` match as ``Star``/``Mone``.
 PLACEMENT_ROLES: dict[str, str] = {
-    "Star": "start",
-    "Exit": "exit",
+    "Bees": "critter",
+    "Henc": "enemy",
+    "Rope": "rope",
+    "Gene": "generator",
+    "Jump": "jumppad",
+    "Pots": "pots",
     "Mone": "moneybag",
+    "Exit": "exit",
+    "Loro": "npc",
+    "Musi": "music",
+    "Para": "parallax",
+    "Revi": "revive",
+    "Star": "start",
+    "Thie": "thief",
+    "Ufos": "ufos",
 }
+
+#: Name prefix -> (human label, grade string) for the ``objects:`` report; see
+#: ``docs/file-formats.md`` §2.12.b.  A label starting with "—" is printed
+#: after the role without parentheses.
+ROLE_DESCRIPTIONS: dict[str, tuple[str, str]] = {
+    "Bees": ("ambient critter", "[V] (a bug is [H])"),
+    "Henc": ("— behaviour: AC16–AC18", "[V]"),
+    "Rope": ("climbable rope", "[V]"),
+    "Gene": ("invisible spawn trigger", "[V]"),
+    "Jump": ("springboard platform", "[V]"),
+    "Pots": ("breakable container", "[V]"),
+    "Mone": ("hanging coin bag", "[V]; burst count [H]"),
+    "Exit": ("level end", "[V]"),
+    "Loro": ("talking NPC", "[V]"),
+    "Musi": ("music cue", "[V]"),
+    "Para": ("foreground backdrop layer", "[V]"),
+    "Revi": ("checkpoint", "[V]"),
+    "Star": ("hero entry point", "[V]"),
+    "Thie": ("coin thief", "[V]"),
+    "Ufos": ("ambient spawner", "[V] ('UFOs/bubbles' [H])"),
+}
+
+_UNMAPPED_GRADE = "[H] unmapped"
 
 
 def placement_role(name: str | None) -> str:
-    """The evidenced role of a ``GNMY`` placement from its ``NMY`` name.
+    """The role of a ``GNMY`` placement from its ``NMY`` name.
 
-    Returns ``"start"``, ``"exit"`` or ``"moneybag"`` for the three roles Q32
-    resolved, and ``"other"`` for everything else — a missing/unknown name, a
-    name whose handler is unmapped, or a documented sibling this overlay does
-    not distinguish.  Matching is on the four-byte table prefix
+    Returns one of the :data:`PLACEMENT_ROLES` values, and ``"other"`` for a
+    missing or unknown name.  Matching is on the four-byte table prefix
     (:data:`PLACEMENT_ROLES`), never on the whole string.
     """
     if not name:
         return "other"
     return PLACEMENT_ROLES.get(name[:4], "other")
+
+
+@dataclass(frozen=True)
+class ObjectRoleRow:
+    """One distinct ``NMY`` name in an :class:`ObjectRolesReport`."""
+
+    name: str
+    count: int
+    role: str
+    grade: str
+    label: str
+
+
+@dataclass(frozen=True)
+class ObjectRolesReport:
+    """Placement counts per distinct name with role and grade."""
+
+    placements: int
+    unresolved: int
+    rows: tuple[ObjectRoleRow, ...]
+
+    def format(self) -> str:
+        lines = [
+            (
+                f"objects: {self.placements} placements, {len(self.rows)} names, "
+                f"{self.unresolved} unresolved"
+            ),
+            "name -> role -> grade",
+        ]
+        for row in self.rows:
+            if row.label.startswith("—"):
+                role = f"{row.role} {row.label}"
+            else:
+                role = f"{row.role} ({row.label})"
+            lines.append(f"{row.name} ({row.count}) -> {role} -> {row.grade}")
+        return "\n".join(lines)
+
+
+def object_roles_report(entries: Iterable[Any]) -> ObjectRolesReport:
+    """Summarise placements (anything with ``.name``) by name, role and grade."""
+    counts: dict[str, int] = {}
+    total = 0
+    for entry in entries:
+        total += 1
+        name = entry.name or ""
+        counts[name] = counts.get(name, 0) + 1
+    rows = []
+    unresolved = 0
+    for name in sorted(counts):
+        role = placement_role(name)
+        if role == "other":
+            unresolved += 1
+            label, grade = "unmapped", _UNMAPPED_GRADE
+        else:
+            label, grade = ROLE_DESCRIPTIONS[name[:4]]
+        rows.append(ObjectRoleRow(name, counts[name], role, grade, label))
+    return ObjectRolesReport(total, unresolved, tuple(rows))
 
 
 # ---------------------------------------------------------------------------

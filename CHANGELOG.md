@@ -18,6 +18,17 @@ Versioning: [Semantic Versioning](https://semver.org/).
   in the pot at (521, 560), opened by a `SPIN` — and a throw changes no HUD
   count. New `file-formats.md` §2.14; Q54 narrowed, Q57 marked answered by the
   maintainer.
+- **`slice` prints an `objects:` block (FL6).** `placement_role` now names the
+  15 level-1 object names (critter, enemy, rope, generator, jumppad, pots,
+  moneybag, exit, npc, music, parallax, revive, start, thief, ufos); the block
+  lists placements per name with role and grade (`docs/file-formats.md`
+  §2.12.b), and unknown names show as `other` / `[H] unmapped`. Rendering and
+  the `GNMY markers:` line are unchanged.
+- **`slice`/`play --section N [--sublevel M]` (FL5b).** The CLI reads the
+  section table from the user's own `LOMAX.EXE`, resolves the world and planes,
+  prints a `level:` line (also for `--world`, best effort), and `Level` now
+  carries decoded `backdrops` (never drawn). Read-only; one-line error and
+  exit 2 when the executable has no such table.
 - **Research answers from the FL4b disassembly pass (docs only).** Q50 is
   answered `[V]`: the `Henchlemming` only hops (vx ±1.0, vy −4.0, 31 px per
   hop), rests 20 or 60 + (x & 127) ticks, and turns at a long rest, beside
