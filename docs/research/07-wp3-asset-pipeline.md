@@ -101,6 +101,7 @@ loop in `LOMAX.EXE`.
 1,783, both on 716. Flip-H/flip-V is the obvious guess and is *not* evidence.
 **Test:** pick a tile used with each flag and diff its rendering; or read the
 blit routine that consumes the word.
+*(Superseded: the bit roles are `[V]` (Q21) and the axis pairing is `[V]` (Q33: `0x2000` horizontal, `0x4000` vertical, `0x6000` both), read from the copy loops, `file-formats.md` §2.4/§2.8.)*
 
 **G3. `TTAB` → `CELL` resolution anomaly — V(observation) / H(cause).** In
 `BONUS.WLD` 1,644 words carry index **256** while that world's `CELL` chunk

@@ -126,8 +126,8 @@ abandoned).
   - The audio reader loads the 82 RIFF/WAVE files (22,050 Hz 16-bit mono, Q7):
     67 SFX, 12 ambient loops (6 worlds × a stereo `_L`/`_R` pair), 3 jingles.
   - `file-formats.md` grades the flip **bit pair** `H → V` (bits 13–14, Q21) for
-    the confirmed layouts, keeps the **axis pairing** at `H` (Q33 — no render
-    compared against the game), and marks the falsified `D` claims `retracted`.
+    the confirmed layouts, kept the **axis pairing** at `H` (Q33 — no render
+    compared against the game; *superseded: Q33 answered `[V]`, `file-formats.md` §2.8*), and marks the falsified `D` claims `retracted`.
 - **Dependencies.** M1. **Out of scope.** The engine itself (M3); 2× art (M8);
   redistributing exported art (never).
 - **Effort.** 6–10 agent-days (the chunk container and `TTAB` are confirmed; the

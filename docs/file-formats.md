@@ -109,8 +109,9 @@ palette 0 `[D]` (unverified — Q8).
 
 Recovered by static analysis of the readers in `LOMAX.EXE` (§2.8) and validated
 against all 9 retail world files with `lomax-modern probe-tiles` (2026-11-18).
-This subsection closes Q20/Q21/Q22 and opens Q33 (the flip *pairing*, which no
-measurement settles); every count below is reproduced by that command.
+This subsection closes Q20/Q21/Q22 and opened Q33 (the flip *pairing*, which no
+measurement settles); Q33 was closed later by the copy-loop reading in §2.8
+(FL2). Every count below is reproduced by that command.
 
 - **`MAP` [V]**: `N` big-endian `u16` tile words, then `N` collision bytes,
   padded with 0–3 zero bytes to a multiple of 4. `N` is the plane's 16x16-cell
@@ -143,11 +144,11 @@ measurement settles); every count below is reproduced by that command.
   four distinct copy loops (§2.8). (The earlier "range" of 15,787–16,503 /
   1,783–2,499 came from two runs counting different units; the per-*flag-word*
   counts above are authoritative — Q27.)
-  **Which of the two bits is horizontal is `[H]`, not `[V]`.** This decoder reads
-  `0x2000` as horizontal and `0x4000` as vertical, and every consumer states the
-  same pairing (`art.py`, `renderer.py`, `native/renderer.h`), but that pairing
-  is a convention: nothing has compared a render of a flagged tile against the
-  game. Only "bits 13–14 flip the cell" is measured. The pairing is Q33.
+  **`0x2000` = horizontal mirror, `0x4000` = vertical mirror, `0x6000` = both
+  `[V, Q33]`**, applied to each 8x8 cell inside its own quadrant (quadrants are
+  not swapped). Read from the strides of the copy loops in `0x4154B0` (§2.8). The
+  decoder's pairing (`art.py`, `renderer.py`, `native/renderer.h`) was right; no
+  rendering change follows.
 - **Cell order inside a record [V, G1]**: the four cells assemble **column-major**
   — slot 0 top-left, slot 1 bottom-left, slot 2 top-right, slot 3 bottom-right.
   Measured by rendering a retail plane both ways: row-major produces visible
@@ -167,12 +168,15 @@ measurement settles); every count below is reproduced by that command.
   `0x0100` (palette 1) — `0x0100 & 0x1FFF == 256`. The index words themselves
   are all in-bank. There is therefore **no out-of-bank cell index to reject or
   preserve**: a writer round-trips every word verbatim.
-- **Collision byte [retracted layout, 2026-11-18]**: the third-byte bit-field
-  `[D]` was retracted as "near-uniform", but that histogram was itself read off
-  the interleaved bytes. On the true collision run (the `N` bytes after the `N`
-  words) the byte is `0x00` on **509,860 of 523,229 cells (97.4 %)** with 27
-  distinct values, the non-zero ones clustering in `0x80`–`0xF9`. Per-value
-  semantics stay unresolved (Q31); the engine's 0-vs-non-zero rule is unchanged.
+- **Collision byte [V for the classes, 2026-11-24]**: on the true collision run
+  (the `N` bytes after the `N` words) the byte is `0x00` on **509,860 of 523,229
+  cells (97.4 %)**, with 27 distinct values `[M]`. The earlier "third-byte
+  bit-field" reading was retracted 2026-11-18 because its histogram was read off
+  the interleaved bytes. The **top two bits are the class**: `11` = floor surface,
+  `10` = wall/ceiling, and every one of the 27 retail values fits that schema `[M]`;
+  the low bits are per class (§2.9.a–c). The engine's 0-vs-non-zero "solid from
+  all sides" rule is a hypothesis superseded by §2.9.a; adopting the classes is
+  FL7.
 
 ### 2.5 `GNMY` placements, and the `NMY` type table **[V]**
 
@@ -877,6 +881,10 @@ virtual address + file offset:
 | player build (uses the spawn plane index) | `0x40F856` | `0xEC56` |
 | `Exit` handler (last 50 px of the plane at the Exit's height → exit flag `0x49C4B0`; §2.10.b) | `0x427670` | `0x26A70` |
 | `Mone` handler (collectable pickup) | `0x428190` | `0x27590` |
+| ledge test (one caller, `0x411D85`; §2.9.b) | `0x413940` | `0x12D40` |
+| wall probe (§2.9.c) | `0x412F50` | `0x12350` |
+| ceiling probe (§2.9.c) | `0x413130` | `0x12530` |
+| floor probe (§2.9.a) | `0x413B90` | `0x12F90` |
 | name→type table (89 four-byte names) — **data** | `0x464650` | — |
 | type handler table (89 function pointers) — **data** | `0x4647B8` | — |
 
@@ -906,9 +914,26 @@ the four cells of a 16-byte record it reads the index word, computes
 the flag word — masking bits 13–14 (`and bx, 0x6000`) to dispatch into one of
 four copy loops at `0x41566B` (no flip), `0x415686`, `0x4156A8` and `0x4156C6`
 (flag word has both bits set — 180°), and bits 8–11 (`and bp, 0xF00; shr bp, 8`)
-for the palette index. That these are four distinct transforms is `[V]`; calling
-`0x415686` horizontal and `0x4156A8` vertical is the decoder's convention
-(`[H]`, Q33), not a pairing measured against the game's own output. The map word
+for the palette index. The loops are read as follows `[V]` (Q33 answered). The 16x16 tile is
+assembled in a stack buffer with a **16-byte row stride**; the four cell
+pointers are buffer+0 (top-left), +0x80 (bottom-left, 8 rows x 16), +8
+(top-right) and +0x88 (bottom-right), stored in slot order TL, BL, TR, BR
+(`0x4154CD`–`0x41550B`) — which independently matches the column-major cell
+order of §2.4. The buffer is then blitted as a 16x16 surface (`push 0x10` width
+and height, `0x415B1C`–`0x415B26`). Each source `CELL` is 64 bytes, 8 rows of 8.
+Dispatch on `flags & 0x6000` is at `0x415634`–`0x415667`:
+
+| flag bits | loop VA | what the loop does | transform |
+|---|---|---|---|
+| none | `0x41566B` | src forward, dst forward 8 bytes, then dst `+8` (`0x41567E`) to the next 16-byte row | identity |
+| `0x2000` | `0x415686` | src `+8` (`0x41568B`); reads `[edx-1]` and decrements src (`0x415693`/`0x415696`) while dst increments; after the row src `+8` (`0x41569D`), dst `+8` | each row reversed = **horizontal mirror** |
+| `0x4000` | `0x4156A8` | dst starts at `+0x70` = row 7 (`0x4156A8`); src forward 8 bytes; after the row dst `−0x18` (`0x4156BE`): +8 −24 = −16 = previous row | row order reversed = **vertical mirror** |
+| `0x6000` | `0x4156C6` | src `+0x40` (`0x4156C6`), all 64 bytes read backwards (`[edx-1]`, `dec edx`), dst forward with the 16-byte stride | both = 180° rotation |
+
+So `0x2000` is horizontal, `0x4000` vertical, `0x6000` both `[V]`. Each loop
+writes only through its own quadrant pointer, so quadrants are not swapped `[V]`.
+There is also a 12x12 path at `0x41581B` that copies 3 of every 4 bytes of the
+already-flipped 16x16 buffer; it does not change the pairing `[V]`. The map word
 itself is consumed elsewhere as a direct tile index (Q20).
 
 **GNMY consumer chain (Q32).** After the loader builds each plane's placement
@@ -940,7 +965,7 @@ so "per tick" is "per 1/60 s". The four rates, which the engine carries as
 
 | Constant | Value (px/tick) | Fixed-point | VA (file offset) | Evidence |
 |---|---|---|---|---|
-| `WALK_SPEED` | **2.0** | `0x20000` | `0x426E28` (`0x26228`) | `mov ebp, 0x20000` — the terrain-0 max horizontal speed, stored to the max-speed global `0x49C4B4` (`0x426E78`) |
+| `WALK_SPEED` | **2.0** | `0x20000` | `0x426E28` (`0x26228`) | `mov ebp, 0x20000` — the flat-floor (slope kind 0) speed of the `Tonn` state function `0x426D20`, stored to the hero's max-speed override `0x49C4B4` (`0x426E78`) [V]; whether 2.0 is also the hero's own on-foot maximum is Q51 [H] |
 | `GRAVITY` | **0.375** | `0x6000`/tick | `0x410BB8` (`0xFFB8`) | `add eax, 0x6000` added to `vy` every airborne tick |
 | `JUMP_SPEED` | **−4.0** | `0xFFFC0000` | `0x41083C` (`0xFC3C`) | `mov ds:0x59F250, 0xFFFC0000` (also `0x4108B7`, `0x410929`, `0x4109D1`, `0x412DAB`, `0x412EC2`) |
 | `MAX_FALL` | **6.0** | `0x60000` | `0x410BC2` (`0xFFC2`) | `cmp vy, 0x60000; jle` … `mov vy, 0x60000` terminal-velocity clamp |
@@ -963,14 +988,237 @@ not yet reproduce, recorded here so they are not silently dropped:
   per tick at `0x4105D4`, the remainder subtracted from `vy`). A held
   slide/down input instead uses a **0.125** fall (`0x2000` at `0x410B9A`)
   clamped to **1.0**.
-- **Walk speed is terrain-dependent.** Terrain type 1 (the cell byte's
-  `0x30 >> 4 == 1`, dispatched at `0x413C93`) replaces 2.0 with a directional
-  **1.5** / **2.5** (`0x426DEC`–`0x426E26`); terrains 0 and 2 use 2.0.
+- **A speed override depends on the slope kind `[V]`.** `0x426DEC`–`0x426E28`
+  lie in the `Tonn` state function `0x426D20` (installed by the `Tonn` handler,
+  name index 50, `0x426A10`: `mov [esi+0x18], 0x426D20` at `0x426A1B`), an
+  object's code, not the hero's tick; riding a barrel is `[H]`. It branches on
+  `0x52C4C8 == 1`, the floor probe's **slope kind** (1 for both shallow shapes,
+  §2.9.a), and replaces 2.0 with a directional **1.5** / **2.5**
+  (`0x426DEC`–`0x426E26`). Slope kind 2 (steep) forces that object's `vx` to
+  ±1.5 (`0x426DC7`–`0x426DEA`). The function writes `0x49C4B4` at `0x426E78`;
+  `0x427036` (in the next function, `0x427030`) clears it; the hero reads
+  `0x49C4B4` at `0x4103B0`/`0x410461` only as an override when it is non-zero
+  (`0x4103B6`–`0x4103B8`). The hero's own limit is Q51.
 
 The jump gravity-lockout and the hold-to-rise counter are the two measured
 mechanics that would make the engine's jump feel exactly like the original's;
 adopting them is follow-up work, not an open question — the mechanism is
 measured, only the engine's adoption is missing.
+
+#### §2.9.a The collision byte: classes (2026-11-24, FL2; Q31, Q43)
+
+Recovered by a read-only objdump pass over `LOMAX.EXE`. Grades as in §2.10:
+**[V]** an instruction in `LOMAX.EXE` carries it, **[M]** measured by running a
+command, **[H]** a guess / interpretation, **[derived]** arithmetic on graded
+numbers. Plane records are `0x9C` bytes from `0x49B880`; `plane+0x1C` is the
+collision-byte pointer (`map + 2·N`, §2.8), `+0x10` the width in cells, `+0x14`
+the height in cells. The **top two bits are the class**; exactly two classes
+have a reader:
+
+| bits 7–6 | class | reader(s) | grade |
+|---|---|---|---|
+| `11` (`0xC0`–`0xFF`) | **floor surface** | `0x413B90` only: `and cl,0xC0; cmp cl,0xC0` at `0x413C46`/`0x413C49` | [V] |
+| `10` (`0x80`–`0xBF`) | **wall / ceiling** | `0x412F50` (walls, `and dl,0xC0; cmp dl,0x80` at `0x413064`/`0x413067`) and `0x413130` (ceiling, `0x413196`/`0x413199`) | [V] |
+| `01`, `00` (non-zero) | no reader found | — | [M] by a search of the disassembly for every `and/test/cmp …,0xC0` (9 hits; the other 5 are unrelated: `0x40C499`, `0x4161E6`, `0x43E1AA`, `0x43E1E5`, `0x44B4C7`). A reader written another way (e.g. `shr 6`) would be missed; no retail cell carries such a value (C8 below), so it does not matter for data |
+
+**The floor probe `0x413B90(plane, x, y, rows)` [V].**
+
+- Returns the floor y in pixels, or `0x4E20` (20000) = "no floor".
+- Special planes: if `plane+0x48` ≠ 0 it returns 190; if the loaded section's
+  world-kind byte (section entry +10, `0x46645A`) is 6 it returns 122
+  (`0x413BB1`–`0x413BCA`, `0x413D19`–`0x413D38`). The meaning of those two cases
+  is [H]; `MEDIEVAL` plane 0 uses neither (plan 47's L1).
+- `y < 16` → no floor (`0x413BD4`). `x` outside `[0, width·16)` → no floor,
+  unless hero state bit `0x20000000` of `0x49C4C4` is set, in which case `x`
+  wraps modulo the plane width (`0x413BEF`–`0x413C10`).
+- Scan: column `x >> 4`; first row `max(0, (y − 16) & ~15)`; it walks **down** at
+  most `rows` cells (the hero passes 4, `0x410C4E`) while inside the plane, and
+  stops at the first byte with `(b & 0xC0) == 0xC0` (`0x413C3A`–`0x413C57`).
+- On a hit (`0x413C66`–`0x413C93`): `xi = x & 15`; `0x59E760 = b & 7`
+  (material); `0x52C5A4 = 0`; shape `= (b & 0x30) >> 4`, dispatched through the
+  4-entry jump table at `0x413D48` (`jmp [ecx*4+0x413D48]` at `0x413C93`), whose
+  entries are `0x413C9A`, `0x413CAF`, `0x413CB2`, `0x413CE0` (read from the
+  table, C9). Let `top` be the pixel y of the hit cell's top edge:
+
+| shape (`b & 0x30`) | entry | floor y returned | `0x52C4C8` (slope kind) | bit `0x08` |
+|---|---|---|---|---|
+| 0 (`0x00`) flat | `0x413C9A` | `top + 16` (the cell's **bottom** edge) | 0 | not read |
+| 1 (`0x10`) shallow, lower half | `0x413CAF` | `top + 8 + (xi >> 1)` | 1 | if set: `top + 8 + 7 − (xi >> 1)` and `0x52C5A4 = 1` |
+| 2 (`0x20`) shallow, upper half | `0x413CB2` (enters shape 1's code after its `+8`) | `top + (xi >> 1)` | 1 | if set: `top + 7 − (xi >> 1)`, `0x52C5A4 = 1` |
+| 3 (`0x30`) steep 45° | `0x413CE0` | `top + xi` | 2 | if set: `top + 15 − xi`, `0x52C5A4 = 1` |
+
+y grows downward, so without bit `0x08` a slope **descends to the right**; bit
+`0x08` mirrors it (rises to the right) [V for the arithmetic, "descends/rises"
+[derived]]. `0x52C4C8` is a slope *kind* (0 flat, 1 shallow, 2 steep), **not** the
+raw `(b & 0x30) >> 4`: shapes 1 and 2 both give kind 1, shape 3 gives kind 2 [V].
+
+**Material (low 3 bits).** [V for the plumbing, the name is [H].] `0x59E760` is
+copied to `0x46AB40` each hero tick (`0x410C76`/`0x410C8D`; zeroed when an object
+platform wins, `0x410D27`). On landing without an object platform the hero calls
+`0x4309F0` three times (`0x410E01`–`0x410E0C`): material 0 spawns an object of
+`NMY` name `Gras` (string at `0x4669F0`, C10); material 2 spawns `Geld`
+(`0x4669F8`) only when the section's world-kind byte is 5 (`0x430A05`–`0x430A23`);
+other materials spawn nothing. The particle's launch speed also differs between
+material 0 and the rest (`0x430ACE`–`0x430AF8`). A walking-dust spawner `0x42FCA0`
+also fires only on material 0 (`0x42FCB3`). "Grass/dust particles" is [H]; the
+branches are [V].
+
+#### §2.9.b Floor contact: landing, one-way, ground-follow (Q43)
+
+The hero tick function starts at `0x40FB70` [V].
+
+- At the start of the tick the hero keeps `prev_y` (`[esp+0x34]` ← `0x59F24A`),
+  `prev_floor` (`[esp+0x38]` ← `0x52C558`) and `prev_kind` (`[esp+0x44]` ←
+  `0x52C574`) (`0x40FCA4`–`0x40FCBE`) [V].
+- Each tick after the move it probes `0x413B90(hero plane, x, y, 4)` (`0x410C5E`)
+  → `0x52C558` = floor y, `0x52C574` = kind, `0x52C5B0` = mirror, `0x46AB40` =
+  material (`0x410C66`–`0x410C8D`). An object platform's top (`0x52C704`,
+  `0x4E20` = none, set at `0x40EF16`) replaces the floor when it is higher
+  (`0x410CE8`–`0x410D27`) [V].
+- **Landing** (airborne bit `0x1` of `0x49C4C4` set, jump gravity-lock `0x59E764`
+  = 0, death timer `0x59C708` = 0; `0x410D3D`–`0x410D5F`) [V]:
+  1. if `prev_floor` is `0x4E20` it is replaced by the current floor
+     (`0x410D65`–`0x410D75`);
+  2. a vertical-speed gate by kind: kind 0 needs `vy > 0` (falling); kind 1 needs
+     `vy > −1.5` (`0xFFFE8000`); kind 2 needs `vy > −3.25` (`0xFFFCC000`)
+     (`0x410D79`–`0x410DB9`);
+  3. `prev_floor ≥ prev_y` (the feet were on or above the surface before the move,
+     `0x410DBF`–`0x410DC9`) **and** `floor ≤ y` now (`0x410DCF`–`0x410DDC`);
+  4. then `y = floor` (`0x410E25`), the airborne/`0x400`/`0x400000` bits are
+     cleared (`and 0xFFBFFBFE`, `0x410E19`) and `vy = 0` (`0x410E4E`).
+
+  Rule 3 makes every floor-class cell **one-way**: the hero passes up through it
+  from below and lands only when it comes down onto it [V]. Floor-class cells
+  never block sideways motion or the head; only the wall/ceiling class does
+  (§2.9.c) [V].
+- **Staying grounded** (`0x410F09`–`0x410F5E`): with `d = |y − floor|`, the hero
+  stays on the ground if `d ≤ 18` when `0x52C704` ≠ 0, or if `d < 3` when it is 0;
+  otherwise it becomes airborne (`y += 2`, floor = `0x4E20`). [V] for the
+  comparisons; which branch applies in ordinary play is [H] (`0x52C704` holds
+  `0x4E20` when there is no platform, which is non-zero, so the 18 px tolerance is
+  the likely one).
+- What the hero does while **standing on a steep (kind 2) slope** (code from
+  `0x410F63`, using `prev_kind` and extra probes at `x ± 1`) was **not traced**
+  [H]; named in Q43.
+- **Ledge test `0x413940`** (called once, at `0x411D85`) [V] is a ledge test, not a
+  class probe. With no object platform it probes the floor at `x − 7` and `x + 7`
+  (`0x4139AC`–`0x413A49`, rows 4); a side counts as "edge" when there is no floor,
+  when the kind is 2 and the floor is below the feet (`0x4139D6`–`0x4139EA`; it
+  checks `0x52C4C8 == 2`), or when `|floor − y| > 10`. It returns 1 and records the
+  side in bit `0x08` of `0x59F258` (left edge → set, right edge → cleared); 0 when
+  both sides have floor. On an object platform it compares `x` with the platform
+  box ± 8 instead (`0x413941`–`0x4139AB`). What the caller does with it (a teeter
+  clip?) is [H].
+
+#### §2.9.c Walls and ceilings (Q31)
+
+- **Wall probe `0x412F50(entity, clamp)`** [V]: returns 0 at once when
+  `plane+0x48` ≠ 0. Moving left (`vx < 0`) it tests `x − 8` with mask `0x10`;
+  moving right `x + 8` with mask `0x20`; `vx = 0` tests right then left (sentinel
+  `0xBC614E`, `0x412FC2`, `0x413088`–`0x413092`). Rows: the cells at `y − 1`,
+  `y − 17`, `y − 33` (3 cells, stepping up 16 px; `0x41302A`–`0x413086`). A hit is
+  `(b & 0xC0) == 0x80` and `b & mask`; it returns 1 (left blocked) or 2 (right
+  blocked) and pins the x fraction (`0x413097`–`0x4130BF`). So bit `0x10` blocks
+  movement to the left and bit `0x20` movement to the right. The hero calls it at
+  `0x411150` with `(0x59F200, 0)` and on a hit sets `vx = 0` (`0x411161`). The
+  probe ignores the clip box: the hero's wall width is ±8 px about the feet
+  origin [V].
+- **Ceiling probe `0x413130(entity)`** [V]: only while moving up (`[entity+0x50]`
+  < 0); tests the cell at the box top `+ 11` px; a hit is `(b & 0xC0) == 0x80` and
+  `b & 0x08` (`0x413191`–`0x4131A2`). The hero calls it at `0x410AEA` and on a hit
+  raises `vy` to at least **+2.0** (`0x20000`, `0x410AF6`–`0x410B05`) — a bonk
+  that turns the jump into a fall.
+- The low 3 bits of a wall byte (`0x91`, `0xA1` occur): no reader found [H].
+
+#### §2.9.d L1's eight values (AC3)
+
+`MEDIEVAL` plane 0 is 198 × 40 = 7,920 cells. Counts are [M] (C1).
+
+| value | class | shape | mirror | material | count in L1 [M] | behaviour for the engine | grade |
+|---|---|---|---|---|---|---|---|
+| `0x00` | none | — | — | — | 7,624 | passable | [V: no reader matches 0] |
+| `0xC0` | floor | flat (0) | no | 0 | 76 | one-way surface at the cell's bottom edge | [V] |
+| `0xC8` | floor | flat (0) | bit set, **not read for shape 0** | 0 | 114 | behaves exactly as `0xC0` | [V] for `0x413B90`; "no other reader" [M] by search |
+| `0xD0` | floor | shallow, lower half (1) | no | 0 | 26 | one-way slope, descending to the right | [V] |
+| `0xD8` | floor | shallow, lower half (1) | yes | 0 | 18 | one-way slope, rising to the right | [V] |
+| `0xE0` | floor | shallow, upper half (2) | no | 0 | 26 | one-way slope, descending to the right | [V] |
+| `0xE8` | floor | shallow, upper half (2) | yes | 0 | 18 | one-way slope, rising to the right | [V] |
+| `0xF0` | floor | steep 45° (3) | no | 0 | 18 | one-way slope, descending to the right; landing gate `vy > −3.25` | [V] |
+
+Measurements on L1 (all [M] unless marked; commands under **Reproduce**):
+
+1. **Population (C1).** `0x00` 7,624, `0xC0` 76, `0xC8` 114, `0xD0` 26, `0xD8` 18,
+   `0xE0` 26, `0xE8` 18, `0xF0` 18. All 296 non-zero cells are floor class (top
+   bits `11`); there is **no wall or ceiling cell in L1**.
+2. **Slope pairing (C2).** Every `0xE0` has `0xD0` on its right (26/26) and every
+   `0xD0` has `0xE0` on its left (26/26); every `0xD8` has `0xE8` on its right
+   (18/18) and every `0xE8` has `0xD8` on its left (18/18). Shallow slopes are
+   two-cell pieces: `E0,D0` descends 16 px over 32 px to the right, `D8,E8` rises
+   to the right [M]+[derived].
+3. **Surface continuity (C3).** Emulating `0x413B90` around every slope cell, the
+   surface height between adjacent pixel columns changes by 0 px 811 times and by
+   1 px 1,097 times, never more. This supports the shape table on real data.
+4. **Steep cells (C4).** The 18 `0xF0` cells have `0x00` as left and right
+   neighbour; diagonally they form staircases (up-left/down-right neighbours
+   `(0xD0, 0xF0)` 3, `(0xF0, 0xF0)` 12, `(0xF0, 0xE0)` 3): three 45° runs of 6
+   cells, each entered from a shallow `D0` and left into a shallow `E0`, all
+   descending to the right (no `0xF8` in L1).
+5. **One cell thick (C5).** All 76 `0xC0` and all 114 `0xC8` have `0x00` directly
+   above and below: collision is a surface line, not a solid volume.
+6. **Art vs collision (C6).** Mean opaque-pixel share for flat cells — `0xC0`:
+   cell above 0.27, own top 8 rows 0.532, own bottom 8 rows 0.995, top 8 rows of
+   the cell below 1.0; `0xC8`: 0.307 / 0.516 / 0.982 / 1.0. The drawn ground top
+   lies **inside** the flat cell (around its middle), while `0x413B90` puts the
+   surface at the cell's **bottom** edge. The 8–16 px difference is unexplained
+   (sprite draw offset, map draw offset, or a deliberate sink) → Q52 [H].
+7. **Spawn (C7).** `Start (89, 407)`, feet at `(89, 367)` (§2.10.c); the floor
+   probe from the feet finds nothing within 4 rows, and the first floor below is
+   at **y = 496** (row 30's bottom edge) [M, emulation of `0x413B90`]. Plan 47
+   §6 (G) reports the engine's "first solid row 30 (y = 480)"; the original's
+   surface rule gives 496 [derived].
+8. **Retail census (C8).** All 104 planes (523,229 cells): 27 distinct values and
+   **every one fits the class schema** — `0x00` 509,860; wall/ceiling `0x88` 112
+   (ceiling only), `0x90` 215 / `0x91` 18 (block left), `0xA0` 242 / `0xA1` 39
+   (block right); floors `0xC0` 1,153, `0xC1` 1,874, `0xC2` 146, `0xC8` 1,599,
+   `0xC9` 2,921, `0xCA` 136, `0xD0` 569, `0xD1` 371, `0xD2` 100, `0xD8` 459,
+   `0xD9` 349, `0xDA` 94, `0xE0` 690, `0xE1` 576, `0xE2` 106, `0xE8` 580, `0xE9`
+   522, `0xEA` 106, `0xF0` 130, `0xF1` 232, `0xF8` 30. Materials used: 0, 1, 2
+   only; no value with top bits `00`/`01` other than `0x00`.
+
+**Still [H]:**
+
+1. the hero's grounded behaviour on kind-2 (steep, `0xF0`) cells — code from
+   `0x410F63` not traced;
+2. the 8–16 px offset between the collision surface and the drawn ground (Q52);
+3. the meaning of `0xC8`'s bit `0x08` on a flat cell, if any (no reader found);
+4. which ground-follow tolerance (18 or 3 px) applies in play.
+
+**For the engine (FL7).**
+
+- Floor class = a one-way surface: land only when coming down from at or above
+  it; surface y by the shape formula above; no sideways or head blocking from
+  floor-class cells.
+- Wall class blocks only in the direction of its bit (`0x10` leftward, `0x20`
+  rightward) over the three cells at feet −1/−17/−33.
+- Ceiling bit `0x08` bonks to `vy ≥ +2.0`.
+- Values outside both classes stay on the conservative rule and are printed.
+
+**Reproduce.** The scripts are scratch files outside the repository and are not
+committed; run them against the user's install:
+
+```
+objdump -d -M intel --no-show-raw-insn "$LOMAX_GAME_DIR/LOMAX.EXE" > /tmp/fl2/lomax.asm
+env PYTHONPATH=src python3 coll_census.py "$LOMAX_GAME_DIR" MEDIEVAL 0   # histogram, slope neighbours, surface continuity, Start landing
+env PYTHONPATH=src python3 coll_ctx.py    "$LOMAX_GAME_DIR" MEDIEVAL 0   # 0xF0 diagonals; cells above/below flat cells
+env PYTHONPATH=src python3 coll_art.py    "$LOMAX_GAME_DIR" MEDIEVAL 0   # opaque-pixel share around flat cells
+env PYTHONPATH=src python3 coll_all.py    "$LOMAX_GAME_DIR"              # every plane of every world
+python3 -I va_str.py "$LOMAX_GAME_DIR/LOMAX.EXE" 0x4669f0 0x4669f8       # the two object names
+od -A x -t x4 -j $((0x413d48-0x400c00)) -N 16 "$LOMAX_GAME_DIR/LOMAX.EXE"  # the 4 jump-table targets
+```
+
+Measured outputs: C1–C8 as listed above. C9: the jump table at `0x413D48` holds
+`0x413C9A`, `0x413CAF`, `0x413CB2`, `0x413CE0`. C10: `0x4669F0` = `Gras`,
+`0x4669F8` = `Geld`.
 
 ### 2.10 Level flow, start state and the fail rule (2026-11-24, FL1)
 
