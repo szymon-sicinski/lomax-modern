@@ -24,7 +24,7 @@ from .level import (
     Level,
     load_level,
 )
-from .render import Frame, render_tiles
+from .render import Frame, backdrop_report, render_tiles
 from .state import POSE_PHASE, GameState, new_game_state, pose_rate_px256, select_clip
 
 #: A script turns the current tick and state into one tick of input.
@@ -89,6 +89,9 @@ class SliceReport:
     next_level: str | None = None
     #: The ``objects:`` block (:func:`lomax_modern.anim_nmy.object_roles_report`).
     objects: str = ""
+    #: The ``backdrop:`` block (:func:`lomax_modern.engine.render.backdrop_report`);
+    #: empty when the level has no backdrop planes.
+    backdrop: str = ""
 
     def format(self) -> str:
         if self.spawn_name is not None:
@@ -140,6 +143,8 @@ class SliceReport:
         ]
         if self.objects:
             lines.append(self.objects)
+        if self.backdrop:
+            lines.append(self.backdrop)
         if self.player_anim:
             lines.append(self.player_anim)
         drawn = [f"{tag} {count}" for tag, count in self.clip_ticks if count]
@@ -263,6 +268,7 @@ def run_slice(
         gnmy_entries=len(level.gnmy),
         gnmy_roles=dict(gnmy_roles),
         objects=object_roles_report(level.gnmy).format(),
+        backdrop=backdrop_report(level),
         exits=level.exits,
         player_anim=player_anim,
         clip_ticks=tuple(clip_ticks.items()),

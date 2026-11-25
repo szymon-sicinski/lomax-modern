@@ -8,6 +8,14 @@ Versioning: [Semantic Versioning](https://semver.org/).
 
 ### Added
 
+- **Backdrop planes and sky (FL9).** `render_tiles` draws `Level.backdrops` behind
+  the playfield, back to front (reverse of the tuple, each plane's `Parallax` sky
+  right after its tiles; `docs/file-formats.md` §2.11): `ScrollMap` ratio/offset/
+  drift, wrapping tiles, per-tile palette slot from the tile nibble, and the
+  periodic drifting sky sprite, all pre-rendered once per level and composited
+  with row slices. `slice` prints a graded `backdrop:` block; the playfield's own
+  `Parallax`, `Birds`, the `ScrollMap` variant key and section-mask palette sets
+  stay `[H]`/not drawn.
 - **Collision classes (FL7).** `CollisionModel` decodes the FL2 classes
   (`docs/file-formats.md` §2.9.a-d): `0xC0`-class bytes are one-way floors with
   flat/shallow/steep, mirrored surfaces; every other non-zero byte stays

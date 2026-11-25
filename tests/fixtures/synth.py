@@ -359,3 +359,79 @@ def main_world_with_clips(
     chunks += [("ANIM", payload) for payload in sprites]
     chunks.append(("END", b""))
     return build_container(chunks, endian=">")
+
+
+def nmy_records_payload(
+    records: Sequence[
+        tuple[str, int, Sequence[tuple[str, Sequence[tuple[int, int, int, int, int]]]]]
+    ],
+) -> bytes:
+    """An ``NMY`` payload of named records: ``(name, W_A, clips)`` each.
+
+    ``W_A >> 4`` is the placement's parameter count K; ``clips`` entries are
+    ``(tag, keyframes)`` as in :func:`hero_nmy_payload`.
+    """
+    nmy = bytearray()
+    for name, w_a, clips in records:
+        raw = name.encode("ascii") + b"\x00"
+        name_size = len(raw) + (-len(raw) % 4)
+        nmy += struct.pack("<H", name_size) + raw + b"\x00" * (name_size - len(raw))
+        nmy += struct.pack("<HH", w_a, len(clips)) + b"\x00" * 2
+        for tag, keyframes in clips:
+            tag_bytes = tag.encode("ascii").ljust(4, b" ")
+            nmy += struct.pack("<I", struct.unpack("<I", tag_bytes[::-1])[0])
+            nmy += struct.pack("<I", 20 + 8 * len(keyframes))
+            nmy += struct.pack("<H", len(keyframes)) + b"\x00" * 18
+            for sprite, step, dx, dy, flags in keyframes:
+                nmy += struct.pack("<BBHHH", sprite, step, dx & 0xFFFF, dy & 0xFFFF, flags)
+    nmy += b"\x00" * 4  # u16 terminator + pad
+    return bytes(nmy)
+
+
+def backdrop_palettes() -> list[list[int]]:
+    """Ten distinct-per-(slot, index) 15-bit palettes (index 0 stays 0)."""
+    return [
+        [0] + [((slot * 29 + index * 7 + 1) & 0x7FFF) for index in range(1, 256)]
+        for slot in range(10)
+    ]
+
+
+def backdrop_world(
+    planes: Sequence[dict],
+    *,
+    records: Sequence[tuple[str, int, Sequence]] = (),
+    sprites: Sequence[bytes] = (),
+    tile_slots: dict[int, int] | None = None,
+) -> bytes:
+    """A world of 16-px-tile planes for the backdrop renderer.
+
+    ``planes`` are dicts ``{"w": cells, "h": cells, "tiles": {(cx, cy): word},
+    "gnmy": [(type, x, y, flags, params, None), ...]}``.  Tile record ``0`` is
+    empty; record ``i >= 1`` is four copies of CELL ``i`` (one solid colour,
+    palette index ``i``) whose flag word carries the palette nibble
+    ``tile_slots.get(i, 1)``.  ``records`` is the ``NMY`` table (see
+    :func:`nmy_records_payload`); ``sprites`` are extra ``ANIM`` payloads.
+    """
+    tile_slots = tile_slots or {}
+    count = 8
+    cells = [[0] * 64] + [[i] * 64 for i in range(1, count)]
+    ttab = [[0] * 8] + [[i, tile_slots.get(i, 1) << 8] * 4 for i in range(1, count)]
+    chunks: list[tuple[str, bytes]] = [
+        ("WRLD", b"PS-X" + b"\0" * 4),
+        ("NMY", nmy_records_payload(records)),
+        ("PARA", b"\0" * 8),
+    ]
+    for plane in planes:
+        w, h = plane["w"], plane["h"]
+        tiles = plane.get("tiles", {})
+        map_cells = [(tiles.get((x, y), 0), 0) for y in range(h) for x in range(w)]
+        chunks += [
+            ("HEAD", head_payload(w * 2, h * 2, endian=">", palettes=backdrop_palettes())),
+            ("TTAB", ttab_payload(ttab)),
+            ("MAP", map_payload(w * 2, h * 2, cells=map_cells)),
+            ("GNMY", gnmy_entries_payload(plane.get("gnmy", ()))),
+        ]
+    chunks += [("MACR", b"\0" * 8), ("PAGE", b"\0" * 8), ("CELL", cell_payload(cells))]
+    chunks += [("ANIM", payload) for payload in sprites]
+    chunks.append(("END", b""))
+    return build_container(chunks, endian=">")
