@@ -116,11 +116,14 @@ def test_collision_model_zero_is_passable() -> None:
     model = CollisionModel()
     assert not model.is_solid(0)
     assert model.is_solid(1)
-    assert model.is_solid(0xFF)
-    # One-way semantics are unknown and never guessed.
-    assert model.one_way(0x80) is False
-    assert "retracted" in model.report()
-    assert "Q31" in model.report()
+    # 0xFF is a one-way floor now (top bits 11), not solid; off-map solidity is
+    # Level.solid_at's own bounds test.
+    assert not model.is_solid(0xFF)
+    assert model.one_way(0xFF)
+    assert not model.one_way(0x80)  # wall/ceiling class: conservative solid
+    assert model.is_solid(0x80)
+    assert "conservative solid [H]" in model.report()
+    assert "FL2 classes [V]" in model.report()
 
 
 def test_collision_at_bounds_is_solid(tmp_path) -> None:
@@ -456,7 +459,8 @@ def test_run_slice_reports_ticks_and_clean_exit(tmp_path) -> None:
     # The corrected MAP/TTAB layout resolves Q20 on this branch.
     assert "resolved (Q20)" in text
     assert "unresolved (Q20)" not in text
-    assert "retracted" in text
+    assert "collision: FL2 classes [V]" in text
+    assert "still [H]:" in text
     # Q32 is now wired, not just named: this synthetic fixture carries no NMY
     # names, so the engine falls back and says so instead of blaming Q32.
     assert report.spawn_name is None

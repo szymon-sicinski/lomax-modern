@@ -7,13 +7,13 @@ simulation walks on.  It interprets nothing beyond what is measured (see
 flagged.
 
 The one deliberate model here is :class:`CollisionModel`, which maps a raw
-``MAP`` collision byte to solidity.  It is a labelled hypothesis, not a claim:
-see the class docstring.
+``MAP`` collision byte to its class (empty / one-way floor / conservative solid);
+see the class docstring for what is [V] and what stays [H].
 """
 
 from __future__ import annotations
 
-from collections.abc import Sequence
+from collections.abc import Iterable, Sequence
 from dataclasses import dataclass, field, replace
 from pathlib import Path
 
@@ -185,39 +185,105 @@ def load_player_sprite(main_world_path: str | Path) -> AnimPixels | None:
     return poses[0].pixels if poses else None
 
 
+#: The eight collision values level 1's playfield uses (``docs/file-formats.md``
+#: §2.9.a-d).
+L1_COLLISION_VALUES = (0x00, 0xC0, 0xC8, 0xD0, 0xD8, 0xE0, 0xE8, 0xF0)
+
+_SHAPE_NAMES = ("flat", "shallow lower half", "shallow upper half", "steep")
+
+
 @dataclass(frozen=True)
 class CollisionModel:
-    """Map a raw ``MAP`` collision byte to gameplay solidity.
+    """Decode a raw ``MAP`` collision byte (``docs/file-formats.md`` §2.9.a-d).
 
-    The ``N`` collision bytes that follow the ``N`` tile words are preserved
-    verbatim; their per-value
-    semantics are **unresolved** (Q31).  The only robust invariant measured
-    across all 104 retail planes is *0 vs non-zero*: byte ``0`` is passable and
-    every non-zero byte is treated as solid.  That rule is a **hypothesis [H]**,
-    printed as such and never asserted as the game's own collision.
+    Class = the top two bits.  ``0`` is passable.  ``0xC0`` (top bits ``11``) is a
+    one-way FLOOR surface [V]: low 3 bits are the material (ignored), bits 4-5
+    the shape, bit 3 the mirror.  Every other non-zero byte (wall/ceiling class
+    ``0x80``-``0xBF``, or ``0x01``-``0x7F``) stays on the conservative rule
+    "solid from all sides" [H].
 
-    The documented third-party bit-field ``[D]`` (``0x80`` solid, ``0xC0``
-    one-way, ``0x08``/``0x10``/``0x20`` directional) is **retracted**: the
-    measured histogram of the byte is near-uniform over all 256 values (with
-    ``0x00`` dominant and ``0x01`` the clear second), which a flag byte would
-    not produce.  See ``docs/file-formats.md`` §2.4 and Q31.
+    Residual [H]: steep (``0xF0``) grounded behaviour (``0x410F63`` untraced),
+    ``0xC8``'s bit ``0x08``, the 8-16 px collision-vs-art offset (Q52) and the
+    ground-follow tolerance choice.
     """
 
+    def kind(self, byte: int) -> str:
+        """``"empty"``, ``"floor"`` or ``"solid"`` (the conservative [H] kind)."""
+        if byte == 0:
+            return "empty"
+        if (byte & 0xC0) == 0xC0:
+            return "floor"
+        return "solid"
+
     def is_solid(self, byte: int) -> bool:
-        """Whether the byte blocks movement from any side (``[H]`` non-zero)."""
-        return byte != 0
+        """Whether the byte blocks from every side: only the conservative kind."""
+        return self.kind(byte) == "solid"
 
     def one_way(self, byte: int) -> bool:
-        """Whether the byte is a one-way platform.  Unknown; never guessed."""
-        return False
+        """Whether the byte is a one-way floor [V]."""
+        return self.kind(byte) == "floor"
 
-    def report(self) -> str:
-        """One-line statement of what is used and what is flagged unknown."""
-        return (
-            "collision: byte 0 = passable, non-zero = solid [H]; per-value "
-            "semantics (material/one-way/hazard) unresolved (Q31); the "
-            "documented [D] bit-field is retracted"
+    def floor_shape(self, byte: int) -> int:
+        return (byte & 0x30) >> 4
+
+    def floor_mirror(self, byte: int) -> bool:
+        """The mirror bit; shape 0 never reads it."""
+        return self.floor_shape(byte) != 0 and bool(byte & 0x08)
+
+    def floor_kind(self, byte: int) -> int:
+        """Slope kind for the landing vy gate: flat 0, shallow 1, steep 2."""
+        return (0, 1, 1, 2)[self.floor_shape(byte)]
+
+    def floor_offset(self, byte: int, xi: int) -> int:
+        """Surface y inside the cell (0 = top, 16 = bottom) at ``xi = feet_x & 15``."""
+        shape = self.floor_shape(byte)
+        if shape == 0:
+            return CELL_PX
+        mirror = self.floor_mirror(byte)
+        if shape == 3:
+            return 15 - xi if mirror else xi
+        half = xi >> 1
+        if shape == 1:
+            return 8 + (7 - half if mirror else half)
+        return 7 - half if mirror else half
+
+    def describe(self, byte: int) -> str:
+        """A one-line class + grade label for the byte."""
+        kind = self.kind(byte)
+        if kind == "empty":
+            return f"{byte:#04x}: empty, passable [V]"
+        if kind == "solid":
+            return f"{byte:#04x}: solid from all sides, conservative [H]"
+        shape = self.floor_shape(byte)
+        parts = ["floor", _SHAPE_NAMES[shape]]
+        if shape:
+            parts.append("descends left" if self.floor_mirror(byte) else "descends right")
+        parts.append("one-way")
+        grade = "[V]"
+        if shape == 3:
+            grade = "[V] surface, grounded behaviour [H]"
+        elif shape == 0 and byte & 0x08:
+            grade = "[V] surface, bit 0x08 [H]"
+        return f"{byte:#04x}: {', '.join(parts)} {grade}"
+
+    def report(self, extra_values: Iterable[int] = ()) -> str:
+        """The multi-line ``collision:`` block."""
+        lines = [
+            (
+                "collision: FL2 classes [V] (top bits 11 = one-way floor, 10 = "
+                "wall/ceiling not implemented -> conservative solid [H], other "
+                "non-zero -> conservative solid [H])"
+            )
+        ]
+        values = list(L1_COLLISION_VALUES)
+        values += sorted(v for v in set(extra_values) if v not in values)
+        lines += [f"  {self.describe(v)}" for v in values]
+        lines.append(
+            "  still [H]: steep (0xF0) grounded behaviour (0x410F63 untraced); "
+            "0xC8's bit 0x08; 8-16 px collision-vs-art offset (Q52); "
+            "ground-follow tolerance choice"
         )
+        return "\n".join(lines)
 
 
 #: ``GNMY`` placement names that drive a backdrop plane's motion.
@@ -308,7 +374,27 @@ class Level:
         return self.plane.at(cell_x, cell_y).collision
 
     def solid_at(self, cell_x: int, cell_y: int) -> bool:
+        """Conservative-solid cell; off-map is solid (the byte 0xFF is a floor now)."""
+        if not (0 <= cell_x < self.plane.width_cells and 0 <= cell_y < self.plane.height_cells):
+            return True
         return self.collision.is_solid(self.collision_at(cell_x, cell_y))
+
+    def floor_at(self, feet_x: int, feet_y: int, rows: int = 4) -> tuple[int, int] | None:
+        """Floor probe (original ``0x413B90``): ``(surface_y, kind)`` or ``None``.
+
+        Column ``feet_x >> 4``; scans down at most ``rows`` rows from
+        ``max(0, (feet_y - 16) // 16)``; the first floor-class cell wins.
+        """
+        if feet_y < CELL_PX or not (0 <= feet_x < self.width_px):
+            return None
+        cell_x = feet_x >> 4
+        first = max(0, (feet_y - CELL_PX) // CELL_PX)
+        for row in range(first, min(first + rows, self.plane.height_cells)):
+            byte = self.collision_at(cell_x, row)
+            if self.collision.one_way(byte):
+                offset = self.collision.floor_offset(byte, feet_x & 15)
+                return row * CELL_PX + offset, self.collision.floor_kind(byte)
+        return None
 
     def solid_px(self, px_x: int, px_y: int) -> bool:
         return self.solid_at(px_x // CELL_PX, px_y // CELL_PX)

@@ -49,8 +49,7 @@ Confidence, per claim (see ``docs/file-formats.md``):
   G1 answered — see ``art``).
 * *Flip pairing.*  Bits 13-14 are the flip pair ``[V]`` (three combinations
   occur, Q21); that ``0x2000`` is the *horizontal* one and ``0x4000`` the
-  vertical is this decoder's convention ``[H]`` — no render has been compared
-  against the game (Q33).  A flipped cell occupies the same 8x8 destination box
+  vertical is ``[V]`` (Q33 answered, ``docs/file-formats.md`` §2.8).  A flipped cell occupies the same 8x8 destination box
   as its unflipped form.
 
 **Kept explicit so a test can pin it**

@@ -24,6 +24,7 @@ from .entities import (
     FLO1_RATE,
     FLO2_RATE,
     GRAVITY,
+    GROUND_FOLLOW_TOLERANCE_PX,
     IDLE_MIN_THRESHOLD,
     IDLE_REFREEZE_THRESHOLD,
     IDLE_START_THRESHOLD,
@@ -307,6 +308,47 @@ def _resolve_y(level: Level, player: Player) -> None:
                 break
 
 
+#: Landing vy gate by floor kind (flat, shallow, steep): land only when
+#: ``vy`` exceeds it (§2.9.d [V]).
+_LANDING_MIN_VY = (0.0, -1.5, -3.25)
+
+
+def _feet(player: Player) -> tuple[int, int]:
+    """The floor probe's feet origin: bottom centre of the box, floored to ints."""
+    return int(player.x + player.width / 2), int(player.y + player.height)
+
+
+def _resolve_floor(
+    level: Level,
+    player: Player,
+    start_feet: tuple[int, int],
+    start_floor: tuple[int, int] | None,
+    *,
+    grounded: bool,
+) -> None:
+    """One-way floor landing (airborne) or ground-follow (grounded at tick start)."""
+    feet_x, feet_y = _feet(player)
+    bottom = player.y + player.height
+    found = level.floor_at(feet_x, feet_y)
+    if found is None:
+        return
+    floor1, kind = found
+    if grounded:
+        if abs(bottom - floor1) > GROUND_FOLLOW_TOLERANCE_PX:
+            return
+    else:
+        floor0 = start_floor[0] if start_floor is not None else floor1
+        if not (
+            player.vy > _LANDING_MIN_VY[kind]
+            and floor0 >= start_feet[1]
+            and floor1 <= bottom
+        ):
+            return
+    player.y = floor1 - player.height
+    player.vy = 0.0
+    player.on_ground = True
+
+
 def _update_air_and_landing(
     player: Player, inp: Input, *, was_grounded: bool, launched: bool
 ) -> None:
@@ -475,11 +517,18 @@ def step_player(
         player.on_ground = False
     player.vy = min(player.vy + GRAVITY, MAX_FALL)
 
+    start_feet = _feet(player)
+    start_floor = level.floor_at(*start_feet)
     player.x += player.vx
     _resolve_x(level, player)
     player.y += player.vy
     player.on_ground = False
     _resolve_y(level, player)
+    if not player.on_ground:
+        _resolve_floor(
+            level, player, start_feet, start_floor,
+            grounded=was_grounded and not launched,
+        )
     _update_air_and_landing(player, inp, was_grounded=was_grounded, launched=launched)
     _update_duck(player, inp)
     _update_idle(player, rand if rand is not None else default_random_bits())

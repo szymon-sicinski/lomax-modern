@@ -4,7 +4,7 @@ The corrected layouts below were recovered by static analysis of the retail
 ``LOMAX.EXE`` readers and **validated against the retail install**; they are
 documented in ``docs/file-formats.md`` §2.4/§2.8 and close the open questions
 Q20/Q21/Q22 (``docs/research/05-open-questions.md``); Q33 — which flip bit is
-horizontal — stays open because no render has been compared against the game:
+horizontal — was later answered ``[V]`` (``docs/file-formats.md`` §2.8):
 
 * ``MAP`` — ``N`` big-endian ``u16`` tile words, then ``N`` collision bytes,
   padded to a multiple of 4.  The map word is a **direct index** into the
@@ -13,9 +13,8 @@ horizontal — stays open because no render has been compared against the game:
 * ``TTAB`` — 16-byte records = eight big-endian ``u16`` words = four cells of
   ``[index word, flag word]``.  The index word is a 16-bit ``CELL`` index; the
   flag word carries the flip pair in bits 13-14 and a palette index in bits
-  8-11 (``0xf00``).  Which bit is the horizontal one is *named*, not measured:
-  this probe prints ``0x2000`` as H and ``0x4000`` as V by convention
-  (``[H]``, Q33 — nothing has compared a render against the game).
+  8-11 (``0xf00``).  ``0x2000`` is horizontal and
+  ``0x4000`` vertical ``[V]`` (Q33 answered).
 
 This module is a *probe*, not an asset exporter: it reports counts, offsets and
 scoreboard results, and never emits a pixel, a tile or a payload.  No game
@@ -42,8 +41,8 @@ TTAB_CELLS = 4
 #: measured (``[V]``, Q21); the axis labels below are the decoder's convention
 #: (``[H]``, Q33) — nothing has compared a render against the game.
 FLIP_MASK = 0x6000
-FLIP_H = 0x2000  # horizontal flip (convention, [H])
-FLIP_V = 0x4000  # vertical flip (convention, [H])
+FLIP_H = 0x2000  # horizontal flip [V]
+FLIP_V = 0x4000  # vertical flip [V]
 
 #: Palette index lives in bits 8-11 of a ``TTAB`` *flag* word.
 PALETTE_MASK = 0x0F00
@@ -282,7 +281,7 @@ def format_report(report: dict) -> str:
         f"index out-of-bank {t['index_out_of_bank']} (Q22: none -> flag words, not indices)",
         "  flag word flips (bits 13-14): "
         + ", ".join(f"{k} {v}" for k, v in t["flag_flip_counts"].items())
-        + "  (0x2000 H, 0x4000 V, 0x6000 both — axis names are a [H] convention, Q21/Q33)",
+        + "  (0x2000 H, 0x4000 V, 0x6000 both — axis names [V], Q21/Q33)",
         "  flag word palettes (bits 8-11): "
         + ", ".join(f"slot {k}: {v}" for k, v in t["flag_palette_counts"].items()),
         f"  flag words with unused bits set (0-7/12/15): {t['flag_words_with_unused_bits']}",

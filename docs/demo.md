@@ -164,7 +164,7 @@ final position: (314.0, 190.2) px
 next level: none (end of sequence or exit not reached)
 exit: Exit (4747, 246) px
 run exit: clean
-tile art: composed -- map cell -> tile record resolved (Q20), each record blitted as four CELLs in 2x2 column-major order (V, G1) with the HEAD palette (slot 1) and index-0 transparency; flip pairing: Q33 answered [V] (file-formats.md 2.8; the CLI string still printed [H] when this was captured); the geometric collision grid stays on render() as a debug path
+tile art: composed -- map cell -> tile record resolved (Q20), each record blitted as four CELLs in 2x2 column-major order (V, G1) with the HEAD palette (slot 1) and index-0 transparency; flip pairing: Q33 answered [V] (file-formats.md 2.8; the CLI string now prints `flip pairing [V] (Q33)`); the geometric collision grid stays on render() as a debug path
 GNMY markers: 32 placements drawn by NMY name -- start 1, exit 1, moneybag 0, other 30 (Start/Exit/Moneybag [V]; the other names' handlers are unmapped)
 frames: 120 PNGs in demo-out/frames (frame_0000.png .. frame_0119.png)
 ```

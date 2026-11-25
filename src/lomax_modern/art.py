@@ -28,11 +28,9 @@ Confidence, per claim (see ``docs/file-formats.md``):
   word's bits 8-11 (Q8, narrowed from "the container names no slot").  The
   exporter decodes and counts the flag-word palette, but still draws the sheet
   with its default slot (1): slot selection is counted, not yet switched.
-* *Which* of those two bits is horizontal and which is vertical.  The decoder
-  reads ``0x2000`` as horizontal and ``0x4000`` as vertical, but that pairing has
-  not been confirmed against a render of the game — only "these bits flip the
-  cell" is ``[V]``.  The pairing is Q33, the same open question the docs and the
-  C port carry.
+* *Which* of those two bits is horizontal and which is vertical: ``0x2000`` is
+  horizontal and ``0x4000`` vertical ``[V]`` (Q33 answered from the original's
+  copy loops, ``docs/file-formats.md`` §2.8).
 * The order of the four cells inside a ``TTAB`` record.  This was G1 and is now
   settled: column-major, verified against a retail render (row-major produces
   visible vertical striping; column-major is continuous).  The default
@@ -76,10 +74,10 @@ TILE_SIZE = TILE_WORDS * 2
 #: Flip flags live in bits 13-14 of a ``TTAB`` *flag* word (``[V]``: only these
 #: three combinations occur across 150,244 retail cells; every other high bit 0).
 FLIP_MASK = 0x6000
-#: The axis pairing below is a convention (``[H]``), not a measurement: which
-#: bit mirrors which axis has not been confirmed against the game's own output.
-FLIP_H = 0x2000  # horizontal flip (convention, [H])
-FLIP_V = 0x4000  # vertical flip (convention, [H])
+#: The axis pairing is read from the original's copy loops ``[V]`` (Q33
+#: answered, ``docs/file-formats.md`` §2.8).
+FLIP_H = 0x2000  # horizontal flip [V]
+FLIP_V = 0x4000  # vertical flip [V]
 
 #: Palette index lives in bits 8-11 of a ``TTAB`` *flag* word.
 PALETTE_MASK = 0x0F00

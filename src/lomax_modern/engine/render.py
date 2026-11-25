@@ -20,7 +20,7 @@ Two placements stay hypotheses and are rendered exactly as
 :mod:`lomax_modern.renderer` blits them, so a wrong assumption shows up in the
 output instead of hiding: the four cells of a ``TTAB`` record are assembled in
 the verified 2x2 column-major order (``[V]``, G1) and the flip-axis pairing (``0x2000``
-horizontal / ``0x4000`` vertical) is this decoder's convention (``[H]``, Q33).
+horizontal / ``0x4000`` vertical) is ``[V]`` (Q33, ``docs/file-formats.md`` §2.8).
 
 ``Frame`` is a genuine 16-bit buffer: pixels are packed ``B5G6R5`` and
 ``to_bytes()`` emits little-endian ``u16`` words suitable for a 16-bit surface.
