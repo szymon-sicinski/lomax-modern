@@ -8,6 +8,13 @@ Versioning: [Semantic Versioning](https://semver.org/).
 
 ### Added
 
+- **Research answers from the FL4 disassembly pass (docs only).** Q46 is
+  answered `[V]` (the HUD: one entity from `MAIN`'s `Display`/`Icons`, four
+  elements, positions, initial values, update rules; a coin is worth 1, 100
+  coins a life), Q47 is narrowed (role, idle clip, contact and visibility of
+  L1's 15 names; placement flag `0x2000` = spawned by a `Generator`), Q50 gets
+  pointers, and Q54–Q56 are added. New `file-formats.md` §2.12; three §2.10.d
+  residuals resolved by address range.
 - **Research answers from the FL3 disassembly pass (docs only).** Q44 is
   answered `[V]` (draw order, `ScrollMap` ratios 50 %/25 %, the sky is plane
   13's tiled `Parallax` sprite, the teal islands were a palette-selection
