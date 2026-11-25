@@ -8,6 +8,14 @@ Versioning: [Semantic Versioning](https://semver.org/).
 
 ### Added
 
+- **Research answers from the FL2 disassembly pass (docs only).** Q33 is
+  answered `[V]`: `0x2000` mirrors horizontally, `0x4000` vertically, `0x6000`
+  both, read from the strides of the tile-cache copy loops (`file-formats.md`
+  §2.8), so the decoder's pairing was right. Q31 (collision-byte classes) is
+  answered `[V]` and Q43 (the eight `MEDIEVAL` values) is answered with named
+  `[H]` residues. Q51 (the hero's own on-foot speed limit) and Q52 (floor
+  surface vs drawn ground) are added as open. Pairing claims elsewhere in the
+  docs are marked superseded.
 - **First-level plan (`docs/roadmap/47-first-level-plan.md`, docs only, no
   code).** The next milestone — make the first level of the first world fully
   recreated and improve the test worlds — is scoped. Reading the executable's
