@@ -8,6 +8,11 @@ Versioning: [Semantic Versioning](https://semver.org/).
 
 ### Added
 
+- **`slice`/`play --section N [--sublevel M]` (FL5b).** The CLI reads the
+  section table from the user's own `LOMAX.EXE`, resolves the world and planes,
+  prints a `level:` line (also for `--world`, best effort), and `Level` now
+  carries decoded `backdrops` (never drawn). Read-only; one-line error and
+  exit 2 when the executable has no such table.
 - **Research answers from the FL4b disassembly pass (docs only).** Q50 is
   answered `[V]`: the `Henchlemming` only hops (vx ±1.0, vy −4.0, 31 px per
   hop), rests 20 or 60 + (x & 127) ticks, and turns at a long rest, beside
