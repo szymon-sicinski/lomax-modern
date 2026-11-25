@@ -8,6 +8,15 @@ Versioning: [Semantic Versioning](https://semver.org/).
 
 ### Added
 
+- **Research answers from the FL4b disassembly pass (docs only).** Q50 is
+  answered `[V]`: the `Henchlemming` only hops (vx ±1.0, vy −4.0, 31 px per
+  hop), rests 20 or 60 + (x & 127) ticks, and turns at a long rest, beside
+  another `Henchlemming`, at ledges/steps and on steep slopes; it has its own
+  spawn/despawn windows. A stomp is a harmless bounce for both; side contact
+  kills the hero without a helmet; it is killed only by `SPIN`/`TUMB`/a
+  projectile; it is separable from the other enemies (shared utilities only).
+  New `file-formats.md` §2.13; Q57 added (maintainer decision on the `TUMB`
+  kill).
 - **Research answers from the FL4 disassembly pass (docs only).** Q46 is
   answered `[V]` (the HUD: one entity from `MAIN`'s `Display`/`Icons`, four
   elements, positions, initial values, update rules; a coin is worth 1, 100
