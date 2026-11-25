@@ -23,6 +23,7 @@ from ..anim_nmy import (
     AnimDecode,
     AnimPixels,
     GnmyEntry,
+    anim_tag_name,
     decode_anim_pixels,
     decode_gnmy,
     decode_nmy,
@@ -325,6 +326,196 @@ class BackdropPlane:
     parallax: tuple[ParallaxSprite, ...] = ()
 
 
+#: Idle clip per ``NMY`` name prefix (first four bytes, like
+#: :data:`lomax_modern.anim_nmy.PLACEMENT_ROLES`); ``docs/file-formats.md``
+#: §2.12.b "Idle clip" column.  A tuple of several tags is chosen by placement
+#: index parity (``Bees``: the original reads a random bit, ``0x4270B2`` -> [H]).
+PLACEMENT_IDLE_CLIPS: dict[str, tuple[str, ...]] = {
+    "Bees": ("EINS", "DREI"),
+    "Henc": ("STAY",),
+    "Rope": ("ROPE",),
+    "Jump": ("PAD",),
+    "Mone": ("HANG",),
+    "Exit": ("EXIT",),
+    "Revi": ("EINS",),
+    "Loro": ("HAT",),  # the four STAR satellites are not drawn [H]
+    "Thie": ("STAY",),
+}
+
+#: Names not drawn as a sprite at their placement, with the reason (§2.12.b).
+PLACEMENT_HIDDEN: dict[str, str] = {
+    "Gene": "invisible spawn trigger [V]",
+    "Musi": "music cue [V]",
+    "Ufos": "ambient spawner, its children are not placements [V]",
+    "Star": "hero entry point, hidden for its first 136 ticks; Trapdoor record "
+    "lives in MAIN, not drawn in this slice [H]",
+    "Para": "drawn as a layer, not a sprite; playfield Parallax not drawn yet [H]",
+}
+
+#: Placement flag of an object spawned by a ``Generator`` (``Pots``' ``0x2000``
+#: attaches ``ROCK``; the ``Henchlemming`` at (1018, 320) carries it) [M].
+GENERATOR_SPAWNED_FLAG = 0x2000
+GENERATOR_SPAWNED_REASON = "does not exist until its Generator fires [M]"
+#: ``Henchlemming`` is mirrored when ``x & 0x10`` (``0x42DDA8``) [V].
+MIRROR_X_BIT = 0x10
+#: ``Rope`` stacks keyframe 0 ``p1`` times, ``y`` stepping by 32 (``0x42A280``) [V].
+ROPE_STEP_PX = 32
+
+
+@dataclass(frozen=True)
+class PlacedSprite:
+    """One placement layer resolved to pixels, ready to blit (load time).
+
+    ``x``/``y`` is the layer's top-left in level pixels (``origin + (dx, dy)``,
+    mirrored about the origin column when the placement is mirrored);
+    ``indices`` are palette indices, already flipped, index 0 transparent.
+    """
+
+    entry: GnmyEntry
+    x: int
+    y: int
+    width: int
+    height: int
+    indices: tuple[int, ...]
+
+
+@dataclass(frozen=True)
+class PlacementSpriteReport:
+    """How the playfield's placements split into drawn / hidden / missing."""
+
+    total: int
+    drawn: int
+    #: ``(name, count, reason)`` per distinct hidden name, first-seen order.
+    hidden: tuple[tuple[str, int, str], ...]
+    #: Placements neither drawn nor hidden by design (drawn as markers).
+    missing: tuple[GnmyEntry, ...]
+
+    @property
+    def hidden_count(self) -> int:
+        return sum(count for _name, count, _reason in self.hidden)
+
+    def format(self) -> str:
+        lines = [
+            (
+                f"sprites: {self.drawn}/{self.total} drawn, "
+                f"{self.hidden_count} hidden by design, {len(self.missing)} missing"
+            )
+        ]
+        lines += [f"  hidden: {n} x{c} — {r}" for n, c, r in self.hidden]
+        return "\n".join(lines)
+
+
+def _keyframe_layer(sprites, kf):
+    """``(dx, dy, pixels)`` of one keyframe, or ``None`` if it does not resolve."""
+    sprite, step, w2, w3, _flags = kf
+    chunk = anim_clip.sprite_for(sprites, sprite)
+    sub = anim_clip.frame_for_step(step, chunk.frame_count) if chunk else None
+    if chunk is None or sub is None:
+        return None
+    pixels = decode_anim_pixels(chunk, sub)
+    if pixels is None:
+        return None
+    return _signed16(w2), _signed16(w3), pixels
+
+
+def _placement_layers(entry: GnmyEntry, anim, sprites):
+    """The ``(dx, dy, pixels, y_offset)`` layers one placement draws, or ``None``."""
+    frames = anim.frames
+    if not frames:
+        return None
+    if entry.name[:4] == "Rope":
+        # [H] One layer per keyframe drawn (kf 0 repeated p1 times, then kf 1),
+        # not a whole pose each; kf 1 sits below the last repeat.
+        p1 = entry.params[0] if entry.params else 0
+        first = _keyframe_layer(sprites, frames[0])
+        if first is None:
+            return None
+        out = [(*first, ROPE_STEP_PX * i) for i in range(p1)]
+        if len(frames) > 1:
+            last = _keyframe_layer(sprites, frames[1])
+            if last is None:
+                return None
+            out.append((*last, ROPE_STEP_PX * p1))
+        return out
+    # Pose 0: every keyframe sharing the first keyframe's step, base layer first.
+    layers = []
+    for kf in frames:
+        if kf[1] != frames[0][1]:
+            continue
+        layer = _keyframe_layer(sprites, kf)
+        if layer is None:
+            return None
+        layers.append((*layer, 0))
+    layers.sort(key=lambda lay: anim_clip._content_area(lay[2]), reverse=True)
+    return layers
+
+
+def resolve_placed_sprites(
+    world: wld.World, entries: Sequence[GnmyEntry]
+) -> tuple[tuple[PlacedSprite, ...], PlacementSpriteReport]:
+    """Resolve every placement to its idle-clip sprite layers, once, at load.
+
+    Idle clips, hidden-by-design names and the Generator-spawned rule come from
+    :data:`PLACEMENT_IDLE_CLIPS` / :data:`PLACEMENT_HIDDEN`; a name in neither,
+    or one whose record, clip or sprite does not resolve, is *missing* (never
+    invented).  Sprites come from the world's own ``ANIM`` bank.
+    """
+    nmy = next((c for c in world.chunks if c.tag == "NMY"), None)
+    decoded = decode_nmy(nmy.payload) if nmy is not None else None
+    records: dict[str, object] = {}
+    for record in decoded[0] if decoded else ():
+        records.setdefault(record.name, record)
+    sprites = anim_clip.sprite_map(world)
+
+    placed: list[PlacedSprite] = []
+    hidden: dict[str, list] = {}
+    missing: list[GnmyEntry] = []
+    drawn = 0
+    for index, entry in enumerate(entries):
+        prefix = (entry.name or "")[:4]
+        spawned = prefix == "Pots" or (
+            prefix == "Henc" and entry.flags & GENERATOR_SPAWNED_FLAG
+        )
+        reason = GENERATOR_SPAWNED_REASON if spawned else PLACEMENT_HIDDEN.get(prefix)
+        if reason is not None:
+            hidden.setdefault(entry.name, [0, reason])[0] += 1
+            continue
+        tags = PLACEMENT_IDLE_CLIPS.get(prefix)
+        record = records.get(entry.name) if tags else None
+        if record is None:
+            missing.append(entry)
+            continue
+        tag = tags[index % len(tags)]
+        anim = next((a for a in record.anims if anim_tag_name(a.tag).strip() == tag), None)
+        layers = _placement_layers(entry, anim, sprites) if anim else None
+        if not layers:
+            missing.append(entry)
+            continue
+        mirrored = prefix == "Henc" and bool(entry.x & MIRROR_X_BIT)
+        for dx, dy, pixels, y_off in layers:
+            if mirrored:
+                dx = 1 - pixels.width - dx
+                pixels = anim_clip.mirrored(pixels)
+            placed.append(
+                PlacedSprite(
+                    entry,
+                    entry.x + dx,
+                    entry.y + dy + y_off,
+                    pixels.width,
+                    pixels.height,
+                    tuple(pixels.indices),
+                )
+            )
+        drawn += 1
+    report = PlacementSpriteReport(
+        total=len(entries),
+        drawn=drawn,
+        hidden=tuple((n, c, r) for n, (c, r) in hidden.items()),
+        missing=tuple(missing),
+    )
+    return tuple(placed), report
+
+
 @dataclass(frozen=True)
 class Level:
     """One world file loaded for play.
@@ -362,6 +553,17 @@ class Level:
     clips: dict[str, tuple[anim_clip.BodyPose, ...]] = field(default_factory=dict)
     #: Backdrop planes requested from :func:`load_level`, decoded only.
     backdrops: tuple[BackdropPlane, ...] = ()
+    #: Playfield placements resolved to idle-clip sprite layers
+    #: (:func:`resolve_placed_sprites`); empty for a level built without a world.
+    placed_sprites: tuple[PlacedSprite, ...] = ()
+    #: The drawn / hidden / missing split; ``None`` when not resolved.
+    placement_report: PlacementSpriteReport | None = None
+
+    def marker_entries(self) -> tuple[GnmyEntry, ...]:
+        """Placements still drawn as grey markers (all of them if unresolved)."""
+        if not self.placed_sprites or self.placement_report is None:
+            return self.gnmy
+        return self.placement_report.missing
 
     def clip_pose(self, tag: str, pose_index: int) -> anim_clip.BodyPose | None:
         """The pose ``pose_index`` of the clip ``tag``, cycling over its poses.
@@ -591,6 +793,7 @@ def load_level(
 
     # One decode of the global bank feeds both the clip table and the standing
     # sprite, which is the table's ``STA1`` pose — they cannot disagree.
+    placed, placement_report = resolve_placed_sprites(world, gnmy)
     clips = load_clip_table(source.parent / "MAIN.WLD")
     stand_poses = clips.get(PLAYER_STAND_ANIM, ())
 
@@ -606,4 +809,6 @@ def load_level(
         player_sprite=stand_poses[0].pixels if stand_poses else None,
         clips=clips,
         backdrops=tuple(backdrops),
+        placed_sprites=placed,
+        placement_report=placement_report,
     )

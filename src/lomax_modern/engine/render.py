@@ -238,6 +238,32 @@ def overlay_gnmy(
         frame.fill_rect(sx - d // 2, sy - d // 2, d, d, style.colour)
 
 
+def draw_placed_sprites(fb: Framebuffer, sprites, palette, cam_x: int, cam_y: int) -> None:
+    """Blit the load-time resolved placement sprites that overlap the viewport.
+
+    Off-screen sprites are culled before any pixel work; index 0 is transparent.
+    """
+    if not sprites:
+        return
+    vw, vh = fb.width, fb.height
+    pix = fb.pixels
+    words = [palette.word(i) for i in range(256)]
+    for sp in sprites:
+        sx = sp.x - cam_x
+        sy = sp.y - cam_y
+        if sx >= vw or sy >= vh or sx + sp.width <= 0 or sy + sp.height <= 0:
+            continue
+        x0 = max(0, -sx)
+        x1 = min(sp.width, vw - sx)
+        for y in range(max(0, -sy), min(sp.height, vh - sy)):
+            src = y * sp.width
+            dst = (sy + y) * vw + sx
+            for x in range(x0, x1):
+                index = sp.indices[src + x]
+                if index:
+                    pix[dst + x] = words[index]
+
+
 def pose_origin(player: Player) -> tuple[int, int]:
     """Origin column/row the original places poses on (AN3's chosen mapping).
 
@@ -690,7 +716,8 @@ def render_tiles(
                     layout="2x2",
                 )
 
-    overlay_gnmy(fb, level.gnmy, cam_x, cam_y)
+    overlay_gnmy(fb, level.marker_entries(), cam_x, cam_y)
+    draw_placed_sprites(fb, level.placed_sprites, sprite_palette, cam_x, cam_y)
 
     # Clip choice is data: the pure selector names a (tag, pose index) pair, the
     # level's clip table resolves it to a whole-body pose.  No branch per clip
