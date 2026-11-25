@@ -280,6 +280,42 @@ def synthetic_world(
     return build_container(chunks, order=order, endian=endian)
 
 
+MULTI_PLANE_NAMES = ("ScrollMap", "Parallax", "scrollmap", "Other")
+
+
+def multi_plane_world(per_plane: Sequence[Sequence[int]]) -> bytes:
+    """A world with one small (2x2-cell) plane per list.
+
+    Each list holds the ``NMY`` type indexes (into :data:`MULTI_PLANE_NAMES`)
+    that plane's ``GNMY`` places, one per 16 px along the top row.
+    """
+    chunks: list[tuple[str, bytes]] = [
+        ("WRLD", b"PS-X" + b"\0" * 4),
+        ("NMY", nmy_payload([(n, 0) for n in MULTI_PLANE_NAMES], trailer=2)),
+        ("PARA", b"\0" * 8),
+    ]
+    for types in per_plane:
+        chunks += [
+            ("HEAD", head_payload(4, 4, endian=">")),
+            ("TTAB", ttab_payload([[0] * 8])),
+            ("MAP", map_payload(4, 4)),
+            (
+                "GNMY",
+                gnmy_entries_payload(
+                    [(t, 16 * i, 0, 0, (0,), None) for i, t in enumerate(types)]
+                ),
+            ),
+        ]
+    chunks += [
+        ("MACR", b"\0" * 8),
+        ("PAGE", b"\0" * 8),
+        ("CELL", cell_payload([[0] * 64])),
+        ("ANIM", b"\0" * 20),
+        ("END", b""),
+    ]
+    return build_container(chunks, endian=">")
+
+
 def hero_nmy_payload(
     clips: Sequence[tuple[str, Sequence[tuple[int, int, int, int, int]]]],
 ) -> bytes:

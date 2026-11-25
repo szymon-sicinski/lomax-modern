@@ -220,14 +220,31 @@ class CollisionModel:
         )
 
 
+#: ``GNMY`` placement names that drive a backdrop plane's motion.
+BACKDROP_SCROLL_NAMES = ("ScrollMap", "Parallax")
+
+
+@dataclass(frozen=True)
+class BackdropPlane:
+    """A non-playfield plane the level table names, decoded only (never drawn).
+
+    ``gnmy`` is every placement of that plane; ``scroll`` the subset named
+    ``ScrollMap`` or ``Parallax`` (case-sensitive, as decoded).
+    """
+
+    plane: int
+    gnmy: tuple[GnmyEntry, ...] = ()
+    scroll: tuple[GnmyEntry, ...] = ()
+
+
 @dataclass(frozen=True)
 class Level:
     """One world file loaded for play.
 
     ``playfield`` selects which of the world's planes is the walkable grid.
-    The plane → level mapping lives in the executable's level table (Q3), which
-    this repository never reads, so the default is the first plane and the
-    caller may override it.
+    The plane → level mapping lives in the executable's section table (Q3),
+    which only the CLI reads (``exe_tables``); this module takes plane numbers
+    from its caller, so the default is the first plane.
     """
 
     name: str
@@ -255,6 +272,8 @@ class Level:
     #: when ``MAIN.WLD`` is absent or the clips do not resolve; the renderer then
     #: falls back to the standing sprite, and to the marker without that.
     clips: dict[str, tuple[anim_clip.BodyPose, ...]] = field(default_factory=dict)
+    #: Backdrop planes requested from :func:`load_level`, decoded only.
+    backdrops: tuple[BackdropPlane, ...] = ()
 
     def clip_pose(self, tag: str, pose_index: int) -> anim_clip.BodyPose | None:
         """The pose ``pose_index`` of the clip ``tag``, cycling over its poses.
@@ -378,6 +397,7 @@ def load_level(
     path: str | Path,
     *,
     playfield: int = 0,
+    backdrop_planes: Sequence[int] = (),
     collision: CollisionModel | None = None,
 ) -> Level:
     """Load a ``.WLD`` into a :class:`Level`.
@@ -408,6 +428,21 @@ def load_level(
     gnmy_planes = _decode_gnmy_per_plane(world)
     gnmy = gnmy_planes[playfield] if playfield < len(gnmy_planes) else ()
 
+    backdrops: list[BackdropPlane] = []
+    for plane in backdrop_planes:
+        if not 0 <= plane < len(sections):
+            raise art.ArtError(
+                f"backdrop plane {plane} is out of range for {len(sections)} planes"
+            )
+        entries = gnmy_planes[plane] if plane < len(gnmy_planes) else ()
+        backdrops.append(
+            BackdropPlane(
+                plane=plane,
+                gnmy=entries,
+                scroll=tuple(e for e in entries if e.name in BACKDROP_SCROLL_NAMES),
+            )
+        )
+
     # One decode of the global bank feeds both the clip table and the standing
     # sprite, which is the table's ``STA1`` pose — they cannot disagree.
     clips = load_clip_table(source.parent / "MAIN.WLD")
@@ -424,4 +459,5 @@ def load_level(
         gnmy=gnmy,
         player_sprite=stand_poses[0].pixels if stand_poses else None,
         clips=clips,
+        backdrops=tuple(backdrops),
     )

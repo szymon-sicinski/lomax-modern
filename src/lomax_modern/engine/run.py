@@ -151,6 +151,7 @@ def run_slice(
     world_path: str | Path | None = None,
     max_ticks: int = 300,
     playfield: int = 0,
+    backdrop_planes: tuple[int, ...] = (),
     script: InputScript | None = None,
     on_frame: FrameSink | None = None,
 ) -> tuple[SliceReport, Frame]:
@@ -181,7 +182,7 @@ def run_slice(
     if not resolved.is_file():
         raise FileNotFoundError(f"no world file at {resolved}")
 
-    level = load_level(resolved, playfield=playfield)
+    level = load_level(resolved, playfield=playfield, backdrop_planes=backdrop_planes)
     state = new_game_state(level)
     spawn_pos = (state.player.x, state.player.y)
     spawn_name = "Start" if level.spawn is not None else None

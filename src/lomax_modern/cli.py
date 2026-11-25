@@ -39,7 +39,11 @@ from .engine.entities import Input
 from .engine.render import VIEWPORT_HEIGHT, VIEWPORT_WIDTH, camera
 from .engine.run import default_script, run_slice
 from .input import DEFAULT_KEYMAP
-from .install import check_install, is_inside_tree, resolve_world
+from . import art as _art_mod
+from . import wld as _wld_mod
+from .engine.sections import ResolvedLevel, find_level, resolve_level
+from .exe_tables import ExeLayoutError, SectionTable, read_section_table
+from .install import _child, check_install, is_inside_tree, resolve_world
 from .measure import measure_install, summarise, to_json
 from .probe_anim_nmy import format_report as format_probe_report
 from .probe_anim_nmy import probe_anim_nmy
@@ -265,9 +269,113 @@ def _check_capture_args(args: argparse.Namespace) -> int | None:
     return None
 
 
+_SECTION_EXE_ERROR = (
+    "error: LOMAX.EXE does not have the expected section table ({check}); "
+    "a different build or language is not supported here — use "
+    "--world/--playfield, or the supported install"
+)
+
+
+def _read_exe_table(root: Path) -> SectionTable:
+    """Read the section table from ``<root>/LOMAX.EXE`` (case-insensitive name)."""
+    exe = _child(root, "LOMAX.EXE")
+    if exe is None or not exe.is_file():
+        raise FileNotFoundError("LOMAX.EXE not found")
+    return read_section_table(exe)
+
+
+def _exe_reason(exc: Exception) -> str:
+    if isinstance(exc, (ExeLayoutError, FileNotFoundError, LookupError)):
+        return str(exc.args[0]) if isinstance(exc, LookupError) else str(exc)
+    return f"cannot read LOMAX.EXE: {exc.__class__.__name__}"
+
+
+def _check_selection_args(args: argparse.Namespace) -> int | None:
+    """Usage rules for ``--section``/``--sublevel`` (exit 2 on violation)."""
+    if args.section is None:
+        if args.sublevel is not None:
+            print("error: --sublevel needs --section", file=sys.stderr)
+            return 2
+        return None
+    if getattr(args, "world_given", False) or getattr(args, "playfield_given", False):
+        print(
+            "error: --section cannot be combined with --world or --playfield",
+            file=sys.stderr,
+        )
+        return 2
+    return None
+
+
+def _resolve_section_arg(root: Path, args: argparse.Namespace) -> ResolvedLevel | None:
+    """Resolve ``--section/--sublevel`` from the exe; print the error and return
+    ``None`` on any failure.  Opens no world file."""
+    try:
+        table = _read_exe_table(root)
+        return resolve_level(table, args.section, args.sublevel or 0)
+    except IndexError as exc:
+        print(f"error: {exc}", file=sys.stderr)
+    except (ExeLayoutError, OSError) as exc:
+        print(_SECTION_EXE_ERROR.format(check=_exe_reason(exc)), file=sys.stderr)
+    return None
+
+
+def _section_level_line(resolved: ResolvedLevel) -> str:
+    backdrop = " ".join(map(str, resolved.backdrop)) or "none"
+    return (
+        f"level: section {resolved.section} sub-level {resolved.sublevel} = "
+        f"{resolved.world}, playfield plane {resolved.playfield}, "
+        f"backdrop planes {backdrop}"
+    )
+
+
+def _world_level_line(root: Path, world: str, playfield: int) -> str:
+    """Best-effort ``level:`` line for ``--world``; never raises."""
+    try:
+        table = _read_exe_table(root)
+        section, sublevel = find_level(table, world, playfield)
+        resolved = resolve_level(table, section, sublevel)
+    except (LookupError, ValueError, OSError) as exc:
+        return (
+            f"level: world {world}, playfield plane {playfield} "
+            f"(section unknown: {_exe_reason(exc)})"
+        )
+    active = " ".join(map(str, (resolved.playfield, *resolved.backdrop)))
+    return (
+        f"level: section {resolved.section} sub-level {resolved.sublevel} = "
+        f"{resolved.world}, playfield plane {resolved.playfield}, "
+        f"active planes {active}"
+    )
+
+
+def _planes_present(world_path: Path, resolved: ResolvedLevel) -> bool:
+    """Every plane the resolved level names must exist in the world file.
+
+    An unreadable world is not judged here; the run reports it.
+    """
+    try:
+        count = len(_art_mod.planes(_wld_mod.parse_file(world_path)))
+    except (OSError, ValueError):
+        return True
+    for plane in (resolved.playfield, *resolved.backdrop):
+        if plane >= count:
+            print(
+                _SECTION_EXE_ERROR.format(
+                    check=f"plane {plane} is missing from {resolved.world_file}"
+                ),
+                file=sys.stderr,
+            )
+            return False
+    return True
+
+
+def _section_world_path(root: Path, resolved: ResolvedLevel) -> Path:
+    worlds = _child(root, "WORLDS") or root / "WORLDS"
+    return _child(worlds, resolved.world_file) or worlds / resolved.world_file
+
+
 def _cmd_slice(args: argparse.Namespace) -> int:
     """Run the headless vertical slice of the first world (read-only)."""
-    usage = _check_capture_args(args)
+    usage = _check_capture_args(args) or _check_selection_args(args)
     if usage is not None:
         return usage
     game_dir = args.game_dir or os.environ.get("LOMAX_GAME_DIR")
@@ -289,20 +397,45 @@ def _cmd_slice(args: argparse.Namespace) -> int:
                 file=sys.stderr,
             )
             return 2
+    resolved: ResolvedLevel | None = None
+    world_name = args.world
+    playfield = args.playfield
+    world_path: Path | None = None
+    backdrop: tuple[int, ...] = ()
+    if args.section is not None:
+        resolved = _resolve_section_arg(Path(game_dir), args)
+        if resolved is None:
+            return 2
+        world_name = resolved.world
+        playfield = resolved.playfield
+        backdrop = resolved.backdrop
+        world_path = _section_world_path(Path(game_dir), resolved)
     out_dir: Path | None = None
     if args.out is not None:
         out_dir = Path(args.out).expanduser()
         try:
-            check_output_dir(out_dir, Path(game_dir) / "WORLDS" / f"{args.world}.WLD")
+            check_output_dir(
+                out_dir,
+                world_path or Path(game_dir) / "WORLDS" / f"{world_name}.WLD",
+            )
         except ArtError as exc:
             print(f"error: {exc}", file=sys.stderr)
             return 2
+    if resolved is not None:
+        assert world_path is not None
+        if not _planes_present(world_path, resolved):
+            return 2
+        print(_section_level_line(resolved))
+    else:
+        print(_world_level_line(Path(game_dir), world_name, playfield))
     try:
         report, frame = run_slice(
             game_dir,
-            worlds=(args.world,),
+            worlds=(world_name,),
+            world_path=world_path,
             max_ticks=args.frames if args.frames is not None else args.ticks,
-            playfield=args.playfield,
+            playfield=playfield,
+            backdrop_planes=backdrop,
             on_frame=(
                 _frame_sink(out_dir, SLICE_CAPTURE_SETTINGS)
                 if out_dir is not None
@@ -310,7 +443,7 @@ def _cmd_slice(args: argparse.Namespace) -> int:
             ),
         )
     except WLDError as exc:
-        print(f"error: cannot read {args.world}.WLD: {exc}", file=sys.stderr)
+        print(f"error: cannot read {world_name}.WLD: {exc}", file=sys.stderr)
         return 1
     except (OSError, ValueError) as exc:
         print(f"error: {exc}", file=sys.stderr)
@@ -459,6 +592,32 @@ def _parse_scale(text: str) -> int | str:
     if value < 1:
         raise argparse.ArgumentTypeError(f"scale must be >= 1, got {value}")
     return value
+
+
+class _Given(argparse._StoreAction):
+    """Store the value and record that the option was given explicitly."""
+
+    def __call__(self, parser, namespace, values, option_string=None):
+        super().__call__(parser, namespace, values, option_string)
+        setattr(namespace, f"{self.dest}_given", True)
+
+
+def _add_section_args(parser: argparse.ArgumentParser) -> None:
+    parser.add_argument(
+        "--section",
+        type=_non_negative_int,
+        default=None,
+        metavar="N",
+        help="select the level by section number from LOMAX.EXE's table "
+        "(conflicts with --world/--playfield)",
+    )
+    parser.add_argument(
+        "--sublevel",
+        type=_non_negative_int,
+        default=None,
+        metavar="M",
+        help="sub-level within --section (default: 0)",
+    )
 
 
 def _non_negative_int(text: str) -> int:
@@ -799,6 +958,9 @@ def _cmd_play(args: argparse.Namespace) -> int:
     moves and jumps live.  Esc or window-close quits; ``--seconds N`` bounds
     the run so ``SDL_VIDEODRIVER=dummy`` exits cleanly headless.
     """
+    usage = _check_selection_args(args)
+    if usage is not None:
+        return usage
     requested = Path(args.game_dir).expanduser()
     manifest = check_install(requested)
     if not manifest.ok:
@@ -812,11 +974,29 @@ def _cmd_play(args: argparse.Namespace) -> int:
         return 2
     print(manifest.format())
 
-    try:
-        world_path = resolve_world(manifest, args.world)
-    except LookupError as exc:
-        print(f"error: {exc}", file=sys.stderr)
-        return 2
+    playfield = args.playfield
+    backdrop: tuple[int, ...] = ()
+    if args.section is not None:
+        resolved = _resolve_section_arg(manifest.root, args)
+        if resolved is None:
+            return 2
+        playfield = resolved.playfield
+        backdrop = resolved.backdrop
+        try:
+            world_path = resolve_world(manifest, resolved.world)
+        except LookupError as exc:
+            print(f"error: {exc}", file=sys.stderr)
+            return 2
+        if not _planes_present(world_path, resolved):
+            return 2
+        print(_section_level_line(resolved))
+    else:
+        try:
+            world_path = resolve_world(manifest, args.world)
+        except LookupError as exc:
+            print(f"error: {exc}", file=sys.stderr)
+            return 2
+        print(_world_level_line(manifest.root, world_path.stem, playfield))
 
     modern = True if args.modern is None else args.modern
     settings = PresentSettings().with_profile(modern)
@@ -889,7 +1069,8 @@ def _cmd_play(args: argparse.Namespace) -> int:
             worlds=(world_path.stem,),
             world_path=world_path,
             max_ticks=args.seconds * 60,
-            playfield=args.playfield,
+            playfield=playfield,
+            backdrop_planes=backdrop,
             script=keyboard_script,
             on_frame=on_frame,
         )
@@ -1202,9 +1383,11 @@ def build_parser() -> argparse.ArgumentParser:
     )
     p_slice.add_argument(
         "--world",
+        action=_Given,
         default="VILLAGE",
         help="world file stem to play (default: VILLAGE)",
     )
+    _add_section_args(p_slice)
     p_slice.add_argument(
         "--ticks",
         type=int,
@@ -1213,6 +1396,7 @@ def build_parser() -> argparse.ArgumentParser:
     )
     p_slice.add_argument(
         "--playfield",
+        action=_Given,
         type=int,
         default=0,
         help="plane index used as the playable grid (default: 0)",
@@ -1450,6 +1634,7 @@ def build_parser() -> argparse.ArgumentParser:
     p_play.add_argument(
         "--world",
         metavar="NAME",
+        action=_Given,
         default="VILLAGE",
         help="world stem to play (default: VILLAGE)",
     )
@@ -1463,9 +1648,11 @@ def build_parser() -> argparse.ArgumentParser:
     p_play.add_argument(
         "--playfield",
         type=_non_negative_int,
+        action=_Given,
         default=0,
         help="plane index used as the playable grid (default: 0)",
     )
+    _add_section_args(p_play)
     play_profile = p_play.add_mutually_exclusive_group()
     play_profile.add_argument(
         "--modern",
