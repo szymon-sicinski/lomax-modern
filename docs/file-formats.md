@@ -1501,11 +1501,15 @@ handler 42 → `0x424500`.
   `0x59E938` := 180, vy := −5.0 (`0x412EDB`–`0x412F14`). Both knock the hero
   2.5 px/tick away from the source's x unless state `0x200`
   (`0x412F1E`–`0x412F3C`). While `0x59E938` > 0 the input is cleared and it
-  counts down by 1 a tick (`0x4100D0`–`0x4100E7`). Calling `0x52C570`/`0x59E944`
-  "a power-up" (a helmet, say) is [H]. Other callers of `0x412E30`: `0x41E0D4`,
-  `0x41F849`, `0x428ED1` (inside handlers not identified [H]). Direct writers
+  counts down by 1 a tick (`0x4100D0`–`0x4100E7`). `0x52C570` is set by
+  picking up an `Items` `HELM` (`0x42C8FF`, §2.12.c), so the power-up is the
+  helmet [V]; `0x59E944` is [H]. Other callers of `0x412E30`: `0x41E0D4`,
+  `0x41F849`, `0x428ED1` — by address range the `Flue` (16), `Slim` (22) and
+  `Boul` (59) handlers, none placed in L1 [V by address range]. Direct writers
   of the 300 death timer: `0x410216` (the pit, below), `0x412EAE`, `0x41BE99`,
-  `0x41C0F2`, `0x41C3E3` [V]; which objects own the last three is FL4's [H].
+  `0x41C0F2`, `0x41C3E3` [V]; by address range the last three lie in the
+  `Airs` (7: `0x41BE99`, `0x41C0F2`) and `Forc` (8: `0x41C3E3`) handlers, none
+  placed in L1 [V by address range].
 - **The pit [V].** In the player update (`0x4101B4`–`0x41025A`): when state
   `0x200` is clear, vy ≥ 0 and hero y − camera top (`plane+0x8`) > view height
   (`0x464424` = 240 [M]) + 60 — i.e. the feet are **more than 60 px below the
@@ -1885,6 +1889,219 @@ camera update within a frame (a one-frame lag); who sets hero bits
 `0x20`/`0x40`/`0x80`/`0x2000000` besides `ForceScrolling`, and the shake
 counter `0x59E93C`; Q53. Builders (FL9, FL12) take the ratios, order, sky
 source, palette rule and camera rule from here.
+
+### 2.12 Placed objects of L1 and the HUD (2026-11-25, FL4)
+
+Recovered by a read-only objdump pass over `LOMAX.EXE` for the first-level plan
+([`../roadmap/47-first-level-plan.md`](../roadmap/47-first-level-plan.md), FL4;
+Q46, Q47; AC5, AC6, AC11). Grades and the reproduce convention are those of
+§2.10. L1 = `MEDIEVAL` section 0 sub-level 0, playfield plane 0. The
+`Henchlemming`'s behaviour is FL4b's (Q50); here it is only classified.
+
+**Reproduce.** Scratch files outside the repository, not committed:
+
+```
+objdump -d -M intel --no-show-raw-insn "$EXE" > /tmp/fl4/lomax.asm
+python3 -I tables.py "$EXE"                                   # 89 names -> handler VAs, sorted by VA (gives each handler's address range)
+env PYTHONPATH=src python3 names15.py "$LOMAX_GAME_DIR"         # plan 47 §6 script C + handler VA + placements (x, y, flags, params)
+env PYTHONPATH=src python3 l1_types.py "$LOMAX_GAME_DIR"        # placement -> NMY record index -> its clips
+env PYTHONPATH=src python3 gen_chain.py "$LOMAX_GAME_DIR"       # bit-15 placements and each Generator's chain
+env PYTHONPATH=src python3 hud_clips.py "$LOMAX_GAME_DIR" MAIN Display Icons Items Krug Trapdoor   # keyframes, offsets, sprite sizes
+env PYTHONPATH=src python3 poses.py "$LOMAX_GAME_DIR" MEDIEVAL Jumppad            # pose count (keyframes with flag 0x80)
+env PYTHONPATH=src python3 hud_boxes.py "$LOMAX_GAME_DIR"       # screen boxes of the HUD draw calls [derived]
+python3 -I bytes.py "$EXE" 46441c 1 u32                       # -> 0
+python3 -I bytes.py "$EXE" 466818 6 tag                       # -> VIER FUNF SECH EINS ZWEI DREI
+python3 -I bytes.py "$EXE" 466830 6 hex                       # -> 0x49c4c0 0x59f1e0 0x59f320 0x46abb8 0x4777d4 0x52c544
+python3 -I cstr.py "$EXE" 466920 4669d0 466974 466904 4669b4 4669c0 466984   # Display Icons Items Krug Trapdoor Inserts Classic
+```
+
+#### §2.12.a How a placed object lives (the shared machinery)
+
+- **Dispatch [V].** The spawn pass `0x4126A0` turns a placement into an entity
+  and calls the type's init through `0x4647B8[index]` (`0x4127CE`). An init sets
+  the update pointer `+0x18`, optionally a draw pointer `+0x1C` (0 = the default
+  draw, `0x40C270(entity, 1000, 0, 0)`, `0x40F3A1`–`0x40F3AB`) and forces a clip
+  with `0x416140(entity, tag)` (the tag is the byte-swapped four-letter name
+  pushed as an immediate).
+- **Entity flags `+0x58` [V]**, read by the shared code: bit `0x4` — not drawn
+  (the update loop leaves it out of the draw mask, `0x40EF89`–`0x40EF90`); bit
+  `0x2` — not updated unless bit `0x4000000` (always updated) is set
+  (`0x40EF6D`–`0x40EF84`); bit `0x40` — drawn in **screen coordinates**, the
+  camera is not subtracted (`0x40C50C`–`0x40C52F`); bit `0x8` — mirrored; bit
+  `0x20` — hurts the hero on contact (§2.10.d, `0x40FF07`); bit `0x10000` — can
+  be **hit** (below). Removal `0x412C50` sets `0x6` (`0x412D00`–`0x412D03`).
+- **When a placement spawns [V].** At level build `0x4123A0` spawns every
+  placement whose flags have `0x4000` (`0x412411`–`0x41242F`; in L1: `Start`,
+  `Music` `0x4001`, `Parallax` `0x4C00`). The windowed spawn `0x412450` spawns
+  the rest as the camera nears, but **skips placements with flag `0x2000`**
+  (`test [node+0x11], 0x20` at `0x4125A0`) and those already spawned
+  (`0x4125AA`). So placement flag `0x2000` means **"spawned only by a
+  trigger"** — in L1 by a `Generator` (`0x42D22F` calls `0x4126A0`). Plan 47
+  §1.4's reading of the `Henchlemming`'s `0x2000` as "an initial facing [H]"
+  does not hold; the plan file is not edited by this pass.
+- **Contact tests [V].** `0x414390` — the hero's box overlaps the entity's box
+  (same plane, no death in progress). `0x413510` — the entity is a
+  **platform**: the hero lands on its top and `0x59C744` := the entity
+  (`0x41368F`). `0x413E40` — the entity is **hit**: true if `+0x58` has
+  `0x20000` (set by a projectile through `0x414130`, `0x41423F`), or it has
+  `0x10000` and the hero's current clip is `SPIN` or `TUMB`
+  (`0x413E97`–`0x413EA3`) and the boxes overlap. Hero attacks and throws are
+  deferred by plan 47 §2.3, so in this milestone nothing can hit an object
+  [derived].
+- **Helpers [V].** `0x4162D0(name)` finds a record by name in the `MAIN.WLD`
+  bank (`or 0x100`, `0x4162E9`) — `Krug`, `Trapdoor`, `Display`, `Icons`,
+  `Inserts`, `Classic` are `MAIN` records; `0x4160E0(clip)` counts a clip's
+  poses (keyframes with flag `0x80`); `0x4161B0` advances the 8.8 pose position
+  `+0x6A` by `+0x68` and returns 1 when it wraps; `0x412B50` moves an entity to
+  another slot bank (copies it, removes the original) — what the bank changes
+  is [H].
+- **Shared enemy-defeat routine `0x42CD00`** (pointer for FL4b, [V] writes):
+  spawns a `Classic` lemming (`MAIN` record, clip `CLA1`;
+  `0x42CD06`–`0x42CD54`), adds 1 to the freed-lemming counter `0x52C5A8` — at
+  50 it sets the bonus flag `0x59C718` and resets the counter to 0
+  (`0x42CD1B`–`0x42CD37`) — sets the HUD flash timer `0x52C700` := 60
+  (`0x42CD3C`), and drops one coin when the enemy's x is odd
+  (`0x42CDE4`–`0x42CDED`). Callers: `0x41F878`, `0x42030D`, `0x420A1C`,
+  `0x421A4E`, `0x42DDF4` (the `Henchlemming`), `0x42E06F`, `0x42E386`,
+  `0x42E5C8` — by address range the `Slim`, `Cowb`, `Drac`, `Were`, `Henc`,
+  `Barr`, `Muta`, `Zomb` handlers [V by address range].
+
+#### §2.12.b The 15 names: role, idle clip, contact, visibility
+
+| Name (count) | Index → handler | Role | Idle clip | At contact | Drawn? | Grade |
+|---|---|---|---|---|---|---|
+| `Beestjes` (19) | 52 → `0x4270A0` | ambient critter (a bug is the reading [H]) | `EINS` or `DREI`, by bit 0 of `0x43AAD0` (`0x4270B2`–`0x4270C8`) | walks at ±0.125 px/tick (`0x2000`, `0x4270D5`–`0x4270E0`) and turns on random timers (`0x42724F`–`0x42726D`); when the hero touches it (`0x414390`, `0x4271D5`) it switches to `ZWEI` (from `EINS`) or `VIER` (from `DREI`) and flies off at vy −1.0…0 px/tick (`0x42728B`–`0x4272F6`; flight `0x427176`–`0x4271AC`). No `0x20`/`0x10000`: harmless | yes, default draw | [V] |
+| `Henchlemming` (8) | 84 → `0x42DD70` | **enemy** | `STAY` (`0x42DD82`); mirrored when x & `0x10` (`0x42DDA8`–`0x42DDAF`) | `+0x58` gets `0x20` (hurts the hero, §2.10.d) and `0x10000` (can be hit; stomp per §2.10.d) (`0x42DD7F`–`0x42DD90`); calls the defeat routine `0x42CD00` at `0x42DDF4`; the rest is FL4b's (Q50). The placement at (1018, 320) has flag `0x2000` and is spawned only by the `Generator` at (1231, 336) [M] | yes | role [V]; behaviour → FL4b |
+| `Rope` (5) | 67 → `0x429F60` | **climbable rope** | `ROPE`; draw `0x42A280` paints keyframe 0 p1 times stepping y by 32, then keyframe 1 (`0x42A292`–`0x42A2D9`) | length = p1 · 32 px (`0x429F9A`–`0x429FA1`). Grab `0x413D60`: hero airborne, \|hero x − rope x\| ≤ 2 and rope y + 20 ≤ hero y ≤ rope y + length + 20 → hero x := rope x, vx = vy = 0, state \|= `0x1010` (`0x413DAC`–`0x413E05`). Then (update `0x42A000`) input `0x1000` (Up) climbs and `0x4000` (Down) descends 1 px/tick within that span, leaving the bottom releases (`0x42A0D3`–`0x42A161`); the jump input releases with vx ±2.0 (`0x42A06E`–`0x42A0C9`), being hurt releases (`0x42A019`–`0x42A04F`); 10-tick re-grab delay (`+0x80` := 10). L1 p1 = 5, 3, 4, 5, 3 → 160, 96, 128, 160, 96 px [derived]; placement flags `0x100`/`0x200` reach `+0x58`, meaning [H] | yes | [V] |
+| `Generator` (4) | 86 → `0x42D0D0` | **invisible spawn trigger** | none (no clips) | `+0x58` \|= `0x4` (`0x42D0E0`); target = the placement's resolved extra word (`0x42D0DA`–`0x42D0E3`), none → removed (`0x42D0F7`); height = p1, or 64 when p1 = 0 (`0x42D10A`–`0x42D11E`); repeat = placement flag bit 0 (`0x42D128`–`0x42D145`). When the hero (same plane) has the generator's x inside its box's x-span and its box's y-span overlaps [y − height, y] (`0x42D18F`–`0x42D1DA`), it spawns the target and then each placement the target's own extra word names, skipping those already spawned (`0x42D228`–`0x42D25E`); a one-shot generator then removes itself (`0x42D287`–`0x42D292`). L1: all four flags `0x8000`, p1 0 → 64 px, one-shot [M/derived]; chains: (424, 560) → `Pots` (521, 560); (1231, 336) → `Henchlemming` (1018, 320); (1129, 544) → `Pots` (1238, 464); (1934, 272) → `Pots` (2032, 240) [M, `gen_chain.py`] | **hidden by design** | [V] |
+| `Jumppad` (3) | 68 → `0x433ED0` | **springboard platform** | `PAD` pose 0, held: the animation advances only while `+0x80` = 1 (`0x433F48`–`0x433F59`) | the hero stands on it (`0x413510` with a per-pose surface-height function `0x433F20`, table `0x466870`; `0x433F5B`–`0x433F69`) → sound `0x3F` once, the pad animates; when its pose (`+0x6A >> 8`) equals the launch pose — poses − 2, or 4 when poses > 5 (`0x433EFC`–`0x433F18`; `PAD` has 9 poses [M] → 4) — the hero gets state \|= `0x403`, **vy := −6.0** (`0xFFFA0000`) and the hold counter `0x59E94C` := `0xA000`, sound `0x35` (`0x433FA0`–`0x433FDE`); at the wrap it re-forces `PAD` and stops (`0x433FF2`–`0x434001`). The normal jump is −4.0 (§2.9) | yes | [V] |
+| `Pots` (3) | 85 → `0x42BEE0` | **breakable container** (not a platform: no call to `0x413510` in `0x42BEE0`–`0x42D0CF` [V by scan]; no `0x20`: harmless) | record replaced by `MAIN`'s `Krug` (`0x42BFBC`–`0x42BFC9`), clip `CLAY` (`0x42BFD5`) | content = p1 (`0x42BEED`–`0x42BEF1`); `+0x58` \|= `0x10000` (`0x42BFDA`). With placement flag `0x2000` it attaches `ROCK` (`0x42BFFE`–`0x42C004`) and starts 40 px low, launched at vy −4.0 (`0x42C00C`–`0x42C03C`) and pulled back to its placement y (`0x42C184`–`0x42C18D`) — "it pops out of the ground" is [H]. **Hit** (`0x413E40`, `0x42C067`): sound `0x11`, a `LID` child flies off at vy −6.0, vx ±2.0 (`0x42C0C9`–`0x42C132`), and the pot releases its content (`0x42C2E0`): p1 −200 empty (`0x42C367`–`0x42C372`); p1 < 0 → −p1 coins (`0x42C37C`–`0x42C3BC`); 0 → an `Items` `HELM` (`0x42C42C`–`0x42C48B`); 1 → an `Items` `UP` (`0x42C490`–`0x42C4EB`); 2–7 → an `Icons` clip for weapon p1 − 2 (`0x42C4ED`–`0x42C55E`; "ammo" [H]); then content := −200 (`0x42C56B`). Hit again with an odd x it drops one coin (`0x42C590`–`0x42C5C3`). L1: (521, 560) p1 0 → helmet; (1238, 464) p1 −5 → 5 coins; (2032, 240) p1 0 → helmet; all three flags `0x2000` → spawned only by their `Generator` [M] | yes, once its `Generator` fires | [V] |
+| `Moneybag` (2) | 57 → `0x428190` | **hanging coin bag** | `HANG` (`0x428191`), own draw `0x428400` passing a rotation argument `+0x80`/10 (`0x428400`–`0x42841C`); `+0x80` swings between ±400 (`0x428226`–`0x428280`; "swinging" is the reading [H]) | `+0x58` \|= `0x10000` (`0x4281B1`), no `0x20`: **not stompable, not harmful**. **Hit** (`0x413E40`, `0x428287`) → clip `JUMP`, falls with \|vx\| = 1.0 + (x & 31)/64 px/tick, signed like the hero's vx at the hit (`+0x54`, stored by `0x413E40` at `0x413F43`), y + 32, default draw, `0x10000` cleared (`0x428297`–`0x4282FC`); gravity 0.1875/tick capped at 5.0 (`0x428391`–`0x4283A3`), bounces off walls (`0x42837A`–`0x42838E`); on the ground sound `0x4A`, vy := −4.0 (`0x4283DB`–`0x4283EA`), and when its pose position reaches 2.0 (`+0x6A` = `0x200`) it releases **3 coins** (`0x428323`–`0x428373`; velocities from `0x4645E8`). Whether a bag bursts once or on every bounce is Q56 [H] | yes | [V]; burst count [H] |
+| `Exit` (1) | 2 → `0x427670` | level end (§2.10.b) | `EXIT` | §2.10.b: the last 50 px of the plane at its height | yes | [V] |
+| `Lorock` (1) | 69 → `0x4339B0` | **talking NPC** (the wizard) | `HAT` (`0x433A1F`) with four `STAR` satellites (`0x433A0D`–`0x433A17`) in its own draw `0x433DC0`; the hat bobs at ±0.25 px/tick, flipping every 32 ticks (`0x433AFE`–`0x433B2F`) | touch (`0x414390`, `0x433AA5`) → `APPE` (`0x433ACA`), then `STAY`/`TALK`/`EXHA`/`BLAH` at random every 60–183 ticks (`0x433CB9`–`0x433D3A`), with a speech-bubble child (draw `0x433DF0`, created at `0x433B9E`); message index = p1 (`0x433A49`; L1 p1 = 0). When the hero is more than 100 px away horizontally or 80 px vertically → `DISA`, sound `0x1B`, removed when `DISA` ends (`0x433D47`–`0x433D85`, `0x433C84`–`0x433C95`). **No write** to lives, coins, power-up or hero state in `0x4339B0`–`0x433ECF` [V by scan] | yes | [V] |
+| `Music` (1) | 37 → `0x423A60` | **music cue** | none | at spawn: p1 > 0 → `0x40E0B0(p1)` (`0x423A65`–`0x423A6E`; "plays track p1" [H]); flag bit 0 with K ≥ 1 → `0x59F170` := 1, else 0 (`0x423A76`–`0x423A92`) — the `Exit` copies it to `0x59E75C` (`0x42774E`); then removes itself (`0x423AA1`). L1: p1 1, flags `0x4001` (spawned at load) | **hidden by design** | [V] |
+| `Parallax` (1) | 88 → `0x42D460` | foreground backdrop layer (§2.11.c) | `PARA`, own draw `0x42D6B0`, screen-space flag `0x40` (`0x42D490`) | none | drawn as a tiled layer (§2.11.c), not as a sprite at its placement | [V] |
+| `Revive` (1) | 3 → `0x427760` | checkpoint (§2.10.b) | `EINS`; `ZWEI` once touched | §2.10.b | yes | [V] |
+| `Start` (1) | 0 → `0x42A780` | hero entry point (§2.10.c) | record replaced by `MAIN`'s `Trapdoor` (`0x42A780`–`0x42A791`); fresh entry forces `EINS` and sets `+0x58` \|= `0x4` (`0x42AC46`–`0x42AC62`), timer 240; at 120 it calls `0x42B2D0(4)` (`0x42B163`–`0x42B16B`, effect [H]), at 104 it clears `0x4` (`0x42B179`–`0x42B184`) | the shared init also **creates the HUD** (`0x42A862` → `0x42A2F0`) unless the demo flag `0x52C6D0` is set (`0x42A859`) | **hidden for the first 136 ticks** of a fresh entry [derived: 240 − 104], then `Trapdoor` `EINS`; also hidden on the after-`Exit` walk-in (`0x42AA1A`–`0x42AA20`) and on a `Revive` respawn when the node's bit 0 is set (`0x42AB57`–`0x42AB5D`) | [V] |
+| `Thief` (1) | 44 → `0x4249D0` | **coin thief** | `STAY` (`0x4249D1`) | `+0x58` \|= `0x90000` (`0x4249F9`: `0x10000` hittable, `0x80000` [H]); no `0x20`: no damage. Hit → knocked away vx ±2.5, vy −4.0, 20 ticks, `0x10000` cleared (`0x424BE8`–`0x424C18`). With `+0x8C` set and \|thief x − hero x\| ≤ 4, \|thief y − hero y + 10\| ≤ 8 it **grabs** the hero: clip `GRAB`, update `0x424A30`, draw `0x424B40` at the hero's position, up to 10 coins (`0x424CDB`–`0x424D68`); every 16 ticks one coin leaves `0x498F2C` and flies out as a collectable coin (`0x424AB7`–`0x424AFD`); it lets go when the hero has no coins after a 30-tick hold, or is hurt/dying (`0x424A50`–`0x424AB1`), with vy −4.0, vx ±3.0 (`0x424B0C`–`0x424B34`). It moves with `WALK`/`JUMP` (`0x424D77`–`0x424E60`); what sets `+0x8C` and the pursuit rule are [H] | yes | [V] |
+| `Ufos` (1) | 53 → `0x427300` | **ambient spawner** (rising objects; "UFOs/bubbles" [H]) | none for the spawner; children take a random clip of its record (L1: record 41, `EINS`, `ZWEI`, `DREI` [M]) (`0x42739F`–`0x4273BD`, `0x42741F`–`0x427435`) | spawner `+0x58` \|= `0x4` (`0x427320`–`0x427326`); every p1 ticks (`0x4273DE`–`0x427406`) a child appears at the view's edge: from below (x = cam.x + random · 4/3 − 10, y = cam.y + 240 + 10) when \|p3\| > \|p2\| (`0x427494`–`0x4274EB`), else from the left or right edge (`0x427521`–`0x427590`); velocities p2 · 650, p3 · 650 in 16.16 (`0x427329`–`0x427361`); the child update `0x4275F0` only integrates velocity (no contact test). L1: p (10, 0, −200) → a child every 10 ticks rising from the bottom at −2.30…−0.33 px/tick [derived] | spawner **hidden by design**, children drawn | [V] |
+
+- **Hidden by design (AC6) [V]:** `Generator` (4), `Music` (1), the `Ufos`
+  spawner (1; its children are drawn); `Start` for its first 136 ticks;
+  `Parallax` is drawn, but as a layer. The three `Pots` and the `Henchlemming`
+  at (1018, 320) do not exist until their `Generator` fires. So of 52
+  placements, 6 are never drawn as a sprite at their placement (4 + 1 + 1) and
+  1 more (`Parallax`) is a layer [derived].
+- **Which the route needs (Q47) [H]:** the handlers fix the mechanics, not the
+  route. `Jumppad`s are platforms that launch at −6.0 vs the normal −4.0;
+  `Rope`s are climbable over 96–160 px; `Pots` are not platforms and only hold
+  pickups. Whether the `Start` → `Exit` route needs a `Jumppad` or a `Rope` is
+  for the solver (FL16). **Collecting a `Moneybag` (AC12) needs a hit** —
+  `SPIN`/`TUMB` or a projectile (§2.12.a) — which plan 47 §2.3 defers: Q54.
+
+#### §2.12.c Coins, lives and the other counters
+
+- **A coin is worth 1 [V].** A coin item is created by `0x42C240` (`MAIN`
+  `Items`, clip `COIN`, `+0x84` = −1; `0x42C24B`–`0x42C2DB`); after a 40-tick
+  delay (`+0x80` := 40, `0x42C2B6`) touching it (`0x414390`, `0x42C7EA`) adds 1
+  to the coin counter `0x498F2C` (`0x42C809`–`0x42C80F`). **At 100** the counter
+  becomes 0, `0x59E770` := 1 and a screen-space `Items` `UP` starts at (190, 40)
+  moving right (vx 0.5, `0x42C81D`–`0x42C8C1`); when its x passes 295 the lives
+  go up by 1, at most 30 (`0x42CAA9`–`0x42CAD6`).
+- **What a `Moneybag` is worth:** 3 coins per burst (row 7) [V]; the number of
+  bursts per bag is Q56 [H]. Other coin sources in L1: the `Pots` at (1238, 464),
+  5 coins; any defeated enemy with an odd x, 1 (§2.12.a). Sinks: the `Thief`, 1
+  per 16 ticks while it holds the hero.
+- **Lives** (`0x52C56C`, §2.10.d): + 1 for an `Items` `UP` touched
+  (`0x42CA25`–`0x42CA3D`) and for 100 coins, capped at 30 (`0x42CA37`,
+  `0x42CACB`) [V].
+- **Helmet [V]:** touching an `Items` `HELM` sets `0x52C570` when neither
+  `0x52C570` nor `0x59E944` is set, otherwise the spare `0x59F1E4`
+  (`0x42C8E8`–`0x42C90B`). This is the "power-up" of §2.10.d.
+- **Freed lemmings** `0x52C5A8` (§2.12.a): + 1 per defeated enemy, 50 → the
+  bonus flag and back to 0 [V].
+- **Weapon selection** `0x52C58C` cycles 0–5 on the input bits `0x8000`/`0x2000`
+  (`0x430DAF`–`0x430DF9`, in code at `0x430D98` whose owner is not identified
+  [H]); its six counts are the u16 words listed by `0x466830` (all 0 at reset).
+- **Initial values (new game, reset `0x40EDC0`) [V]:** lives 3 (`0x40EE06`),
+  coins 0 (`0x40EE11`), freed lemmings 0 (`0x40EE0C`), weapon selection 1
+  (`0x40EDE3`), the six weapon counts 0 (`0x40EDC7`–`0x40EE00`), helmet and
+  spare 0 (`0x40EE16`–`0x40EE1B`), `0x59E770` 0 (`0x40EE2A`). The attract-demo
+  setup also clears them: `0x41C939`–`0x41C99A` zeroes the six weapon counts,
+  the freed-lemming and coin counters, the helmet and spare, the bonus flag and
+  `0x59E770`, and sets the weapon selection from the demo table `0x466414`
+  (`0x41C992`–`0x41C9A0`) [V]. No level load resets the coin or lemming
+  counters (their other writers are the HUD's mod-100 store-back, the pickups,
+  the `Thief` and `0x42CD00`) [V by scan], so they carry across levels.
+
+#### §2.12.d The HUD (Q46, AC11)
+
+- **The HUD is one entity [V].** `0x42A2F0` (called by the entry point, §2.12.b
+  row `Start`) creates it from `MAIN`'s `Display` record
+  (`0x42A2F1`–`0x42A2F8`): update `0x42A370` (a frame counter `+0x80` + 1 per
+  tick unless paused, `0x52C5F8`), draw `0x42A390`, `+0x58` \|= `0x4000040`
+  (always updated, screen coordinates; `0x42A314`–`0x42A31C`), `+0x74` := 1
+  (`0x42A32A`; tested by the draw loop at `0x40F36C`, meaning [H]), `+0x84` =
+  the `Display` record, `+0x88` = the `Icons` record (`0x42A341`–`0x42A351`).
+- **Coordinates [V]+[M].** Screen pixels of the 320 × 240 view. Each y depends
+  on `0x46441C`: 0 in the file [M] and never written by a direct store (only
+  read or compared) [V by scan] — so the values below are the `0x46441C` = 0
+  branch; with it set every y is 4 less. With it set a `Timer` also counts p1 · 50 ticks
+  instead of p1 · 60 (`0x427F19`–`0x427F3C`), so a 50 Hz mode is the reading
+  [H]. What could set it is Q55.
+- **Draw calls, in order** (what | counter / condition | clip | origin (x, y) |
+  VA):
+  1. freed-lemming count, `0x52C5A8` mod 100 (stored back,
+     `0x42A3C2`–`0x42A3CB`) | `Display` `KLEI` digits | units (138, 41), tens
+     (133, 41) only when ≠ 0 | `0x42A3D9`–`0x42A42F`
+  2. coin count, `0x498F2C` mod 100 (stored back, `0x42A437`–`0x42A444`) |
+     `KLEI` | units (184, 41), tens (179, 41) when ≠ 0 |
+     `0x42A453`–`0x42A4A9`
+  3. lives `0x52C56C` | `GROS` digits | units (285, 43), tens (278, 43) when
+     ≠ 0 | `0x42A4AC`–`0x42A52D`
+  4. the box | `EINS` | (160, 51); `+0x70` := 2, or 0 when the bonus flag is set
+     (`0x42A545`–`0x42A554`, meaning [H]) | `0x42A55A`–`0x42A579`
+  5. the spare helmet, only if `0x59F1E4` | `HELM`, pose ((`+0x80` >> 2) & 7) ·
+     2 | (160, 51) | `0x42A581`–`0x42A5BD`
+  6. the lemming figure | `DREI`, pose 1 while `0x52C700` > 0 (decremented per
+     draw), else 0 | (130, 51) | `0x42A5C5`–`0x42A5F9`
+  7. the coin | `VIER`, pose (`+0x80` >> 2) & 7 (spins) | (190, 51) |
+     `0x42A601`–`0x42A631`
+  8. the face (the reading [H]; it is `Display` `ZWEI`, not a `Hero` sprite) |
+     `ZWEI` | (295, 51) | `0x42A639`–`0x42A658`
+  9. the weapon: count = the u16 that `0x466830[sel]` points to, mod 100 |
+     `KLEI` | units (35, 41), tens (30, 41) when ≠ 0 |
+     `0x42A660`–`0x42A6F4`; icon = `Icons` clip `0x466818[sel]` (`VIER FUNF
+     SECH EINS ZWEI DREI` for 0–5), pose (`+0x80` >> 2) mod its poses, at (27,
+     30), drawn with a 4th argument `0xA0` when the count is 0
+     (`0x42A6F7`–`0x42A773`; "greyed" [H])
+- **The four elements of plan 47 §2.2 [V positions; names H]:** element 1
+  (top-left) = the weapon icon and its count; element 2 (top-centre) = the
+  lemming figure with the freed-lemming count, beside the box that shows the
+  spare helmet; element 3 = the spinning coin and the coin count; element 4
+  (top-right) = the face and the life count. Sprite sources: `Display` (all of
+  2–4 and the digits) and `Icons` (element 1) [V]; `Items` is used by pickups
+  only, `Inserts` by the `Timer` object (`0x427ECE`) and the continue screen
+  (`0x42A8F8`), not by this HUD [V]; `Timer` (index 55, `0x427EB0`) is a placed
+  object and L1 places none [M].
+- **L1's first frame [derived from the initial values]:** lemmings "0", coins
+  "0", lives "3", empty box, figure pose 0, the coin spinning, the face, and the
+  weapon icon `FUNF` with count "0", drawn with the `0xA0` argument.
+- **Screen boxes [derived, `hud_boxes.py`; top-left = origin + (dx, dy), §2.6.2
+  c]:** weapon icon x 19–36, y 22–38; weapon digits x 27–39, y 34–41; lemming
+  figure x 119–142, y 22–42; lemming digits x 130–142, y 34–41; box x 144–177,
+  y 14–50 (three layers); spare helmet x 154–170, y 22–45; coin x 183–200, y
+  26–41; coin digits x 176–188, y 34–41; lives digits x 274–291, y 34–43; face
+  x 280–309, y 19–44. The digits overlap the icons drawn after them; whether
+  `0x40C270` paints the HUD in call order (its `+0x60` is −1) is [H].
+
+#### §2.12.e What stays open
+
+Q54 (the `Moneybag`/`Pots` need a hit that plan 47 defers), Q55 (`0x46441C`),
+Q56 (bursts per `Moneybag`); [H]: entity `+0x70`, `+0x74`, `0x80000`, placement
+flags `0x100`/`0x200`, the `Thief`'s pursuit, what `0x42B2D0(4)` shows.
+Builders: FL6 takes the role column, FL10 the idle clips and the hidden list,
+FL11 the coin/lives rules, FL13 the HUD table.
 
 ## 3. `SFX/*.WAV` **[V]**
 
