@@ -20,8 +20,10 @@ from pathlib import Path
 from .. import art, wld
 from .. import anim_clip
 from ..anim_nmy import (
+    AnimDecode,
     AnimPixels,
     GnmyEntry,
+    decode_anim_pixels,
     decode_gnmy,
     decode_nmy,
     placement_role,
@@ -291,16 +293,36 @@ BACKDROP_SCROLL_NAMES = ("ScrollMap", "Parallax")
 
 
 @dataclass(frozen=True)
+class ParallaxSprite:
+    """A backdrop ``Parallax`` placement resolved to its sprite (§2.11.c).
+
+    ``entry`` is the placement; ``pixels`` the first keyframe of its ``NMY``
+    record's ``PARA`` clip (sprite byte 1-based, sub-frame ``step - 1``);
+    ``dx``/``dy`` that keyframe's signed draw offsets; ``palette_slot`` the
+    ``ANIM`` chunk's ``flags & 0x7FFF`` (``docs/file-formats.md`` §2.11.e).
+    """
+
+    entry: GnmyEntry
+    pixels: AnimPixels
+    dx: int
+    dy: int
+    palette_slot: int
+
+
+@dataclass(frozen=True)
 class BackdropPlane:
-    """A non-playfield plane the level table names, decoded only (never drawn).
+    """A non-playfield plane the level table names; ``render_tiles`` draws it.
 
     ``gnmy`` is every placement of that plane; ``scroll`` the subset named
-    ``ScrollMap`` or ``Parallax`` (case-sensitive, as decoded).
+    ``ScrollMap`` or ``Parallax`` (case-sensitive, as decoded); ``parallax``
+    the ``Parallax`` placements whose sprite resolved (the others are not
+    drawn).
     """
 
     plane: int
     gnmy: tuple[GnmyEntry, ...] = ()
     scroll: tuple[GnmyEntry, ...] = ()
+    parallax: tuple[ParallaxSprite, ...] = ()
 
 
 @dataclass(frozen=True)
@@ -479,6 +501,42 @@ def _decode_gnmy_per_plane(world: wld.World) -> tuple[tuple[GnmyEntry, ...], ...
     return tuple(tuple(entries) for entries in per_plane)
 
 
+def _signed16(word: int) -> int:
+    """A little-endian ``u16`` read back as signed."""
+    return word - 0x10000 if word & 0x8000 else word
+
+
+def _resolve_parallax(
+    world: wld.World,
+    entries: Iterable[GnmyEntry],
+    sprites: dict[int, AnimDecode],
+) -> tuple[ParallaxSprite, ...]:
+    """Resolve each ``Parallax`` placement's ``PARA`` clip, first keyframe.
+
+    Same helpers as :func:`lomax_modern.anim_clip.resolve_clip`; a placement
+    whose record, clip, sprite byte or step does not resolve is left out.
+    """
+    out: list[ParallaxSprite] = []
+    for entry in entries:
+        if entry.name != "Parallax":
+            continue
+        anim = anim_clip.find_animation(world, record_name=entry.name, clip_tag="PARA")
+        if anim is None or not anim.frames:
+            continue
+        sprite, step, w2, w3, _flags = anim.frames[0]
+        chunk = anim_clip.sprite_for(sprites, sprite)
+        sub = anim_clip.frame_for_step(step, chunk.frame_count) if chunk else None
+        if chunk is None or sub is None:
+            continue
+        pixels = decode_anim_pixels(chunk, sub)
+        if pixels is None:
+            continue
+        out.append(
+            ParallaxSprite(entry, pixels, _signed16(w2), _signed16(w3), chunk.flags & 0x7FFF)
+        )
+    return tuple(out)
+
+
 def load_level(
     path: str | Path,
     *,
@@ -515,6 +573,7 @@ def load_level(
     gnmy = gnmy_planes[playfield] if playfield < len(gnmy_planes) else ()
 
     backdrops: list[BackdropPlane] = []
+    sprites = anim_clip.sprite_map(world) if backdrop_planes else {}
     for plane in backdrop_planes:
         if not 0 <= plane < len(sections):
             raise art.ArtError(
@@ -526,6 +585,7 @@ def load_level(
                 plane=plane,
                 gnmy=entries,
                 scroll=tuple(e for e in entries if e.name in BACKDROP_SCROLL_NAMES),
+                parallax=_resolve_parallax(world, entries, sprites),
             )
         )
 

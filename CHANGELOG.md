@@ -8,6 +8,14 @@ Versioning: [Semantic Versioning](https://semver.org/).
 
 ### Added
 
+- **Backdrop planes and sky (FL9).** `render_tiles` draws `Level.backdrops` behind
+  the playfield, back to front (reverse of the tuple, each plane's `Parallax` sky
+  right after its tiles; `docs/file-formats.md` §2.11): `ScrollMap` ratio/offset/
+  drift, wrapping tiles, per-tile palette slot from the tile nibble, and the
+  periodic drifting sky sprite, all pre-rendered once per level and composited
+  with row slices. `slice` prints a graded `backdrop:` block; the playfield's own
+  `Parallax`, `Birds`, the `ScrollMap` variant key and section-mask palette sets
+  stay `[H]`/not drawn.
 - **Jump gate, hold-to-rise, fresh-entry start (FL8).** While the jump lockout
   runs (launch tick + 4 moving / + 9 straight) the hero takes no gravity, no
   vertical move and no floor probe (`0x410B19`, `0x410BED`, `0x410D4A`); holding
