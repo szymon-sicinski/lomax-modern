@@ -8,6 +8,14 @@ Versioning: [Semantic Versioning](https://semver.org/).
 
 ### Added
 
+- **Research answers from the FL3 disassembly pass (docs only).** Q44 is
+  answered `[V]` (draw order, `ScrollMap` ratios 50 %/25 %, the sky is plane
+  13's tiled `Parallax` sprite, the teal islands were a palette-selection
+  difference), Q45 is answered `[V]` (the camera rule and `ForceScrolling`), Q5
+  and Q8 are answered, and Q53 is added as open. New `file-formats.md` §2.11;
+  the sprite palette slot is the `ANIM` header field and varies per chunk (the
+  earlier "global sprite setting" reading is retracted), and the `0x498F1C`
+  plane-record pointer is corrected in §2.6/§2.8.
 - **Research answers from the FL2 disassembly pass (docs only).** Q33 is
   answered `[V]`: `0x2000` mirrors horizontally, `0x4000` vertically, `0x6000`
   both, read from the strides of the tile-cache copy loops (`file-formats.md`

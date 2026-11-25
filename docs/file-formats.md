@@ -90,20 +90,21 @@ All 9 files parse as a chain that reaches EOF (`wldscan`: `confirmed-chain`,
   reading fails for all of them.
 - Payload size is constant: **5,240 bytes (0x1478)**.
 - 10 palettes × 256 colours, little-endian, 15-bit (blue bits 0–4, red bits
-  10–14) `[D]`.
+  10–14) `[V]` (§2.11.e).
 - 0x50 bytes of editor data (0xFF filler) `[D]`.
 - A 256-bit ANIM bitmap at +0x1458 `[D]` — arithmetic confirms it:
   0x1458 + 32 = 0x1478, the measured payload size.
 - Colour 0 becomes the transparent key: white, with real white moved to 0x7FFE
-  `[D]`.
+  `[V]` (§2.11.e).
 
 Plane sizes are **not** bounded by the screen: measured widths 320–7,200 px and
 heights 240–2,928 px. Heights 240 and 256 both occur (the 256-line ones are the
 PS1 PAL layout leftovers `[S2]`).
 
-Only HEADs whose plane bit is in the active plane mask load palettes; every
-plane's tiles are built from the last palettes loaded, and all shipped tiles use
-palette 0 `[D]` (unverified — Q8).
+Palettes load only from the HEADs whose file plane bit is in the section's third
+loader argument `A`, each overwriting all ten global slots; a tile uses the slot
+given by its own `TTAB` palette nibble; a sprite uses the slot in its `ANIM`
+header — see §2.11.e `[V]`.
 
 ### 2.4 `TTAB`, `MAP`, `CELL` — the tile pipeline
 
@@ -343,7 +344,7 @@ Recovered from the reader at VA `0x414A82` / file offset `0x13E82`, validated on
 u16 a              # copied verbatim by the reader
 u16 b              # copied verbatim by the reader
 u16 n              # frame count
-u16 flags          # bit 15 = packed (4-bit) pixels; low bits carried to the frame
+u16 flags          # bit 15 = packed (4-bit) pixels; low 15 bits = the sprite's palette slot [V, §2.11.e]
 u16 type_index     # animation slot (reader stores the frame array at slot index+1)
 u16 pad            # skipped by the reader
 n × frame:
@@ -539,23 +540,31 @@ registration. The `ANIM` frame's
 registration offsets but their sign and role are unresolved (Q35); the actor
 blit does not read them (§2.6.2 c).
 
-**Sprite palette slot `[H]` (user-confirmed against retail).** Sprites resolve
-their indices through `HEAD` palette **slot 0**, not the tile slot (1): slot 0
-carries the hero's true colours (red plume 13-15, orange face 1-5, green tunic
-16-19, blue helmet/pants 20-23), where slot 1 maps indices 16-31 to an all-green
-ramp — the "green hero" defect the tile slot produced before the split. There is
-no palette field in the `ANIM` chunk header, so the selection is game state:
-`art.SPRITE_PALETTE_SLOT` hard-codes 0 for the sprite paths only
+**Sprite palette slot `[V]` (§2.11.e).** The `ANIM` header's `flags & 0x7FFF`
+is the slot the sprite is converted through. The hero's chunks (`MAIN.WLD` ANIM
+26 and 32) carry 0 [M], which is why slot 0 shows the hero's true colours (red
+plume 13-15, orange face 1-5, green tunic 16-19, blue helmet/pants 20-23), where
+slot 1 maps indices 16-31 to an all-green ramp — the "green hero" defect the
+tile slot produced before the split.
+
+**The slot is per `ANIM` chunk, not a global sprite setting** [M]: across all
+566 `ANIM` chunks of the 9 worlds the field is 0–9, always one of the ten
+slots. In `MAIN.WLD` 95 of 148 chunks carry 0 and the others 1 (1 chunk), 2
+(1), 3 (1), 6 (16), 7 (11), 8 (8), 9 (15); in `MEDIEVAL` 0 (10), 1 (19), 4 (4),
+5 (12), 6 (27), 7 (11), 8 (2), 9 (1). The earlier reading — that sampling
+`Items` (type 35), `Trapdoor` (40), `Explosions` (101) and `Cset` (143) by eye
+showed a global setting — is retracted. Reproduce: `env PYTHONPATH=src python3
+anim_fields.py "$LOMAX_GAME_DIR" MAIN MEDIEVAL BONUS ED HAUNTED MAP TITLE
+VILLAGE WEST` (scratch script, histogram of the field per world).
+
+The engine: `art.SPRITE_PALETTE_SLOT` hard-codes 0 for the sprite paths
 (`engine.render_tiles`'s sprite blits, `anim_clip.pose_rgba_frames`, the
-`anim-clip` CLI), while tiles stay on `art.DEFAULT_PALETTE_SLOT` (1). The
-mechanism — a fixed `MAIN.WLD`-bank slot, a level-load global, or a swap through
-the `Cset` NMY record (`CSET`/`PINK`/`BLUE`/`GREE`/`RED`) — is not yet traced to
-a VA, so this is graded `[H]` "user-confirmed against retail" rather than `[V]`.
-Sampling the other `MAIN.WLD` sprite records (`Items` type 35, `Trapdoor` 40,
-`Explosions` 101, `Cset` 143) shows the same split — slot 0 yields red/orange/
-blue/white art where slot 1 yields the green/grey ramp — so the slot is a
-**global sprite setting**, not per-record; `Cset` is the candidate for the
-player's colour *swap* (pink/blue/green/red), not the default selection.
+`anim-clip` CLI), while tiles stay on `art.DEFAULT_PALETTE_SLOT` (1). That is
+right for the hero's chunks but not for the 53 other `MAIN` chunks or for level
+sprites; adopting the header field is engine follow-up work, not part of this
+pass. Which HEAD's palette set colours the `MAIN`-bank sprites is Q53. `Cset`
+(`CSET`/`PINK`/`BLUE`/`GREE`/`RED`) is the candidate for the player's colour
+*swap*, not the default selection [H].
 
 `lomax-modern anim-clip <install> --world MAIN --name WALK --out DIR` renders
 the clip's **10 composited poses** as PNGs plus a strip and a GIF, each a whole
@@ -878,7 +887,18 @@ virtual address + file offset:
 | arena allocator (bump allocator for placement/entity nodes) | `0x4165D0` | `0x159D0` |
 | placement-list resolver (extra word → Nth node, 0-based) | `0x4165F0` | `0x159F0` |
 | player-spawn plane scan (finds the type-0 `Start` placement) | `0x40ED7C` | `0xE17C` |
-| player build (uses the spawn plane index) | `0x40F856` | `0xEC56` |
+| player build (uses the spawn plane index; points `0x498F1C` at the spawn plane's record) | `0x40F856` | `0xEC56` |
+| `ScrollMap` handler (§2.11.b) | `0x42B670` | `0x2AA70` |
+| `Parallax` handler (§2.11.c) | `0x42D460` | `0x2C860` |
+| `Birds` handler (§2.11.d) | `0x431110` | `0x30510` |
+| `ForceScrolling` handler (§2.11.f) | `0x41C270` | `0x1B670` |
+| camera update (in the hero tick; §2.11.f) | `0x4120B2` | `0x114B2` |
+| plane depth assignment (§2.11.a) | `0x40F420` | `0xE820` |
+| plane blit queue (§2.11.a) | `0x40CE80` | `0xC280` |
+| sprite depth (§2.11.a) | `0x416920` | `0x15D20` |
+| plane-depth table — **data** | `0x464B28` | — |
+| sprite-depth table — **data** | `0x464B48` | — |
+| BITMAPINFO palette set — **data** | `0x471B28` | — |
 | `Exit` handler (last 50 px of the plane at the Exit's height → exit flag `0x49C4B0`; §2.10.b) | `0x427670` | `0x26A70` |
 | `Mone` handler (collectable pickup) | `0x428190` | `0x27590` |
 | ledge test (one caller, `0x411D85`; §2.9.b) | `0x413940` | `0x12D40` |
@@ -902,7 +922,8 @@ place the loader checks a magic (`"PS-X"` + `1234`).
 **Tile-pipeline dispatch.** The same loader dispatches `HEAD` → `0x414E18`,
 `CELL` → `0x414BFC`, `MAP` → `0x4150B5`, `TTAB` → `0x415107` (tags compared as
 the big-endian `u32`s `0x48454144`, `0x43454C4C`, `0x4D415020`, `0x54544142`).
-`PAGE`/`PARA`/`MACR` are read and discarded, and in `MAIN.WLD` (the "MAIN" bank
+`PAGE`/`PARA`/`MACR` are read and discarded (the `PARA` *chunk*; the `PARA`
+*clip* of a `Parallax` record is unrelated, §2.11.c), and in `MAIN.WLD` (the "MAIN" bank
 flag) `CELL`/`TTAB`/`MAP` are skipped entirely. The `MAP` reader calls the
 preprocessor `0x415430`, which byte-swaps the `2·N` tile-word bytes in place —
 leaving the `N` collision bytes at `map + 2·N` untouched — and then the `size/2`
@@ -944,8 +965,9 @@ the placement fields into it, and calls the type handler at
 `0x4647B8[record+0x16]` (index `−1` → `0x434060`, the unknown-name fallback).
 The player is *not* spawned from this list: a separate level-load scan
 (`0x40ED7C`) walks each plane's list for the `record+0x16 == 0` node (the
-`Start` placement), records its plane in `0x52C540`, and `0x40F856` builds the
-player struct (`0x498F1C`) from that plane — so the player start is the `Start`
+`Start` placement), records its plane in `0x52C540`, and `0x40F856` points
+`0x498F1C` at that plane's *record* (`0x40F875`–`0x40F87C`), which is the camera
+(§2.11.f); the hero entity is `0x59F200` — so the player start is the `Start`
 placement's *plane*. `Start` (placement flag `0x4000`) is the hero's entry
 point, `Exit` the sub-level exit, `Finish` (flag `0x4000` clear) a section-ending
 lift, `Revive` a checkpoint and `Moneybag` a collectable (§2.5, §2.10).
@@ -1528,6 +1550,341 @@ handler 42 → `0x424500`.
   at x ≥ 160 leaves `0x52C59C` set with lives −1 → the selector resets the game
   → `TITLE`. Which lift reads "yes" and which "no" is [H] (clips set at
   `0x42A90C`–`0x42A922`). **The only credit decrement is `0x42B0CE`** [V].
+
+### 2.11 Backdrop, palette and camera (2026-11-25, FL3)
+
+Recovered by a read-only objdump pass over `LOMAX.EXE` for the first-level plan
+([`../roadmap/47-first-level-plan.md`](../roadmap/47-first-level-plan.md), FL3;
+Q44, Q45; risk R2). Grades and the reproduce convention are those of §2.10:
+**[V]** an instruction in `LOMAX.EXE` carries it, **[M]** measured by running a
+command on the user's install, **[H]** guess / interpretation, **[derived]**
+arithmetic on graded numbers. The rules below come from the code, so the console
+video/screenshot (plan 47 D4) is not needed for them.
+
+**Reproduce.** The scripts are scratch files outside the repository and are not
+committed; run them against the user's install (`$LOMAX_GAME_DIR` = install dir,
+`$EXE` = its `LOMAX.EXE`):
+
+```
+objdump -d -M intel --no-show-raw-insn "$EXE" > /tmp/fl3/lomax.asm
+python3 -I tables.py "$EXE"                                   # 89 names -> handler VAs (0x464650 / 0x4647B8)
+python3 -I bytes.py "$EXE" 464b28 8 u16                       # plane depth table -> 144 64 32 16 0 0 0 0
+python3 -I bytes.py "$EXE" 464b48 8 i16                       # sprite depth offsets -> 3 4 8 10 12 14 6 2
+python3 -I bytes.py "$EXE" 4643c0 13 u32                      # default key table (DirectInput codes)
+python3 -I bytes.py "$EXE" 466458 4 u8                        # section 0 bytes +0x08..+0x0B -> 1 0 0 0
+env PYTHONPATH=src python3 parallax_entries.py "$LOMAX_GAME_DIR" MEDIEVAL   # ScrollMap/Parallax/Birds/ForceScrolling placements
+env PYTHONPATH=src python3 para_probe.py "$LOMAX_GAME_DIR" MEDIEVAL 0 11 12 13  # record index, W_A, clips, sprite sizes
+env PYTHONPATH=src python3 chunks.py "$LOMAX_GAME_DIR" MEDIEVAL               # chunk order (CELL after all 17 HEADs)
+env PYTHONPATH=src python3 pal_probe.py "$LOMAX_GAME_DIR" MEDIEVAL 0 11 12 13  # tile palette nibble per plane
+env PYTHONPATH=src python3 colour_probe.py "$LOMAX_GAME_DIR" MEDIEVAL 12 0     # mean colour, engine rule vs original rule
+env PYTHONPATH=src python3 sprite_pal.py "$LOMAX_GAME_DIR" MEDIEVAL 0 16 20 21 # ANIM palette field + mean colour
+env PYTHONPATH=src python3 anim_fields.py "$LOMAX_GAME_DIR" MAIN MEDIEVAL BONUS ED HAUNTED MAP TITLE VILLAGE WEST  # ANIM palette field per world
+env PYTHONPATH=src python3 sky_cover.py "$LOMAX_GAME_DIR" MEDIEVAL 16 160 128 0 -128  # tiled sky coverage of 320x240
+env PYTHONPATH=src python3 head_cmp.py "$LOMAX_GAME_DIR" MAIN 0 MEDIEVAL 0    # slot-by-slot HEAD difference
+```
+
+Names table (from `tables.py`) [M]: `Forc` index 8 → `0x41C270`; `Bird` 83 →
+`0x431110`; `Scro` 87 → `0x42B670`; `Para` 88 → `0x42D460`. (`Brid` 77 is a
+different type.)
+
+#### §2.11.a Plane records and draw order
+
+- Plane records are `0x9C` bytes from `0x49B880`, **one per loaded `HEAD`, in
+  file order** [V]: the loader discards `HEAD`/`TTAB`/`MAP`/`GNMY` of a plane
+  whose bit is not in the sub-level's plane mask (second loader argument,
+  `0x41496B`–`0x414997`; the file plane counter `[ebp-0x38]` still counts every
+  `HEAD`, `0x41492D`), and the `HEAD` reader advances the record pointer by
+  `0x9C` (`0x414E18`–`0x414E27`). So in L1 (section 0, sub-level 0, planes
+  `[0, 11, 12, 13]`, plan 47 §1.2) record 0 = plane 0, 1 = plane 11, 2 = plane
+  12, 3 = plane 13 [V rule; plane list M].
+- Record fields used by this pass [V]: `+0x0` placement-list head (`0x42B696`);
+  `+0x4`/`+0x8` scroll x/y in integer pixels (read `0x42B80A`, `0x42B839`; the
+  camera writes the hero's plane, §2.11.f); `+0x10`/`+0x14` width/height in
+  16-px cells (`0x414E4B`, `0x414E64`); `+0x30`/`+0x32` maximum scroll x/y
+  (`0x40ECC2`, `0x40ECD4`); `+0x38` depth (`0x40F49D`); `+0x3C` zoom flag
+  (`0x414ECF`/`0x414ED8`).
+- **Depth** [V]: `0x40F420` gives every plane whose `+0x3C` is 0 the next value
+  of the `u16` table at `0x464B28` (`0x40F494`–`0x40F49D`) = **144, 64, 32,
+  16**, 0, 0, 0, 0 [M, initialised data], in load order. The zoom flag is set
+  only when the section entry's byte `+0x0B` is non-zero
+  (`0x414EA3`–`0x414EB4`); section 0's is 0 [M] → **no zoom in L1**, so L1's
+  depths are plane 0 = 144, plane 11 = 64, plane 12 = 32, plane 13 = 16
+  [derived].
+- **Draw** [V]: `0x40CE80` queues a plane's blits in the bucket list
+  `0x471B24[z+1]` (`0x40CE97`–`0x40CE9B`); the frame loop walks the 256 buckets
+  from 0 upward (`0x404DA9`–`0x404EB3`, `add edi,4 / cmp edi,0x400`), so a lower
+  depth is drawn first = further back.
+- **Sprite depth** [V]: `0x416920`–`0x416982` returns plane depth + `i16` table
+  `0x464B48[v]` for `v = entity+0x60` in 0..7, where `+0x60 = (placement flags
+  >> 10) & 7` (§2.5). Table = **3, 4, 8, 10, 12, 14, 6, 2** [M]. (For v ≥ 8 it
+  returns plane depth − v, for v < 0 it returns 248 − v [V].)
+- **L1 back-to-front order** [V rule, derived values]: plane 13 tiles (16; they
+  have no visible pixel) → plane 13's `Parallax` = the sky (16+3 = 19) → plane
+  12 tiles (32) → the two `Birds` (35) → plane 11 tiles (64) → plane 0 tiles
+  (144) with its sprites (144 + 2…14) → plane 0's own `Parallax` (flags
+  `0x4C00` → v = 3 → 144+10 = 154), drawn **in front of** the playfield.
+- **Backdrop planes wrap** [V]: the non-zoom plane blit takes column = (scroll
+  x / 16) mod width and row = (scroll y / 16) mod height, with a fix-up for
+  negatives (`0x40D2D8`–`0x40D337`), and fills until x < 320 (`0x40D3DD`) and
+  y < 240 (`0x40D344`). This is needed: plane 11 is 592 px wide but scrolls to
+  x = 1,424 [derived: 2,848 · 50 / 100].
+- **No screen clear in L1**: a fill blit is issued only when bit 2 of the
+  section byte `+0x08` is set or `0x4699FC` is non-zero
+  (`0x404D1C`–`0x404D33`) [V]; section 0's byte is 1 [M]; that `0x4699FC` is 0
+  in L1 is [H]. The tiled sky covers the whole 320 × 240 view (0 uncovered
+  pixels, `sky_cover.py`) [M], so nothing shows through.
+
+#### §2.11.b `ScrollMap` — per-plane scroll ratio (`0x42B670`; tick `0x42B790`; draw `0x42B7E0`)
+
+- **Variant selection** [V] (`0x42B686`–`0x42B6F7`): key = sub-level
+  (`0x4645BC`) + 10 · section (`0x4645C0`) + 11. A placement with flags bit 0
+  (and its record's `W_A & 0xF` ≥ 1) is kept only if its 7th parameter p6
+  equals the key; a placement without bit 0 is the default, and is removed
+  (`0x412B80`, the entity release, which refuses the hero `0x59F200`) when the
+  same plane holds a bit-0 placement of the same record whose p6 equals the key.
+- MEDIEVAL's p6 values are 41, 42, 61 [M] = section 3 sub-level 0, section 3
+  sub-level 1, section 5 sub-level 0 [derived] — exactly the sections that
+  reuse planes 11–13 (plan 47 §1.2). L1 (section 0, keys 11–13 for its three
+  sub-levels) therefore uses the defaults [derived]: plane 11 placement
+  (53, 147) params `(0, 50, 0, 16, 0, 0, 0)`; plane 12 placement (33, 75)
+  params `(0, 25, 0, 5, 0, 24, 0)` [M].
+- Parameter → entity field [V]: p0 → `+0x84` = p0 · 655 (X drift in 16.16,
+  ≈ p0/100 px/tick; `0x42B727`–`0x42B738`); p1 → `+0x88` X ratio in %
+  (`0x42B742`); p2 → `+0x90` = p2 · 655 Y drift (`0x42B755`–`0x42B768`); p3 →
+  `+0x94` Y ratio in % (`0x42B773`); p4 → `+0x80` = p4 << 16 X offset
+  (`0x42B71A`–`0x42B721`); p5 → `+0x8C` = p5 << 16 Y offset
+  (`0x42B748`–`0x42B74F`); p6 = the key above.
+- Tick `0x42B790` [V]: `+0x80 -= +0x84`, `+0x8C -= +0x90`
+  (`0x42B797`–`0x42B7B9`), and appends the entity to the list
+  `0x52C4CC[++0x52C55C]` (`0x42B7C0`–`0x42B7CD`; the list's purpose is [H]).
+- Draw `0x42B7E0` [V]: unless the entity's plane is the hero's plane
+  (`0x42B802`), **plane.x = cam.x · p1 / 100 + offset_x**
+  (`0x42B80A`–`0x42B82A`) and **plane.y = cam.y · p3 / 100 + offset_y**
+  (`0x42B82D`–`0x42B849`), integer `imul`/`idiv` (truncating), where cam is the
+  hero's plane record (`[0x498F1C]` +0x4/+0x8, §2.11.f) and offset is the
+  integer part of `+0x80`/`+0x8C`. The zoom branch after it
+  (`0x42B84C`–`0x42B8FD`) only runs when plane `+0x3C` ≠ 0.
+- **L1 result**: plane 11 x = cam.x · 50/100, y = cam.y · 16/100; plane 12 x =
+  cam.x · 25/100, y = cam.y · 5/100 + 24 [V formula, M params]. The hypothesis
+  "the second `ScrollMap` parameter is a scroll ratio" is confirmed [V]: it is
+  the X ratio in percent. With cam.x ∈ [0, 2,848] and cam.y ∈ [16, 400]
+  (§2.11.f): plane 11 x 0…1,424, y 2…64; plane 12 x 0…712, y 24…44 [derived].
+  Plane 11 is 320 px tall and plane 12 304 px, so y + 240 stays inside both: no
+  vertical wrap is needed [derived].
+
+#### §2.11.c `Parallax` — tiled sprite layers, and the sky (`0x42D460`; tick `0x42D600`; draw `0x42D6B0`)
+
+- The handler sets the entity's clip to `PARA` (`push 0x50415241` + `0x416140`,
+  `0x42D48B`–`0x42D497`) [V]. This is the `NMY` record's animation named
+  `PARA`, not the `PARA` *chunk*, which the loader discards (§2.8).
+- Parameter → field [V]: p0 → `+0x88` X period (0 = no repeat;
+  `0x42D51E`–`0x42D522`); p1 → `+0x98` Y period (`0x42D552`–`0x42D556`); p2 →
+  `+0x90` = p2 · 655, added to `+0x8C` every tick (`0x42D531`–`0x42D542`,
+  `0x42D679`–`0x42D693`); p3 → `+0x94` X ratio % (`0x42D548`–`0x42D54C`); p4 →
+  `+0xA0` = p4 · 655 Y drift (`0x42D565`–`0x42D57B`); p5 → `+0xA4` Y ratio %
+  (`0x42D581`–`0x42D586`); p6 → `+0x80`, passed to the sprite draw `0x40C270`
+  as its 4th argument (`0x42D514`–`0x42D518`, `0x42D887`–`0x42D89B`; its
+  meaning is [H]); p7, only when the record's K ≥ 8, is added to y
+  (`0x42D4A3`–`0x42D4B7`).
+- Placement flags [V]: bit 0 (with the record's `W_A & 0xF` ≥ 1) adds a random
+  horizontal sway (`0x42D4BB`–`0x42D4FA`, tick `0x42D60F`–`0x42D673`); bit 1
+  (with `W_A & 0xF` ≥ 2) while `0x46441C` is 0 draws it 16 px higher
+  (`0x42D5C0`–`0x42D5D9`, `0x42D77D`–`0x42D790`).
+- Draw [V]: screen x = x (integer part of `+0x8C`) − plane.x · p3 / 100
+  (`0x42D721`–`0x42D733`), reduced mod the X period (`0x42D735`–`0x42D742`); y
+  the same with `+0x9C`, p5 and the Y period (`0x42D744`–`0x42D7A5`). The
+  drift accumulator is reset to 0 whenever its integer part is a multiple of
+  the period (`0x42D70D`–`0x42D718`, `0x42D753`–`0x42D75E`). It then draws the
+  clip on a grid starting one period left and up and stepping by the periods
+  across the view (`0x42D7F7`–`0x42D8B3`), skipping copies whose box falls
+  outside x ∈ [−10, 330], y ∈ [−10, 250] (`0x42D7D6`–`0x42D7F2`; `0x464424` =
+  240).
+- **The sky (R2 resolved)**: plane 13's only placement is a `Parallax` at
+  (0, 128), record 0, flags `0x4000`, params `(160, 128, −17, 0, 0, 0, 0)` [M].
+  Record 0's `PARA` clip is one keyframe: sprite byte 17 = `ANIM` type_index 16,
+  164 × 129 px, keyframe dy −128 [M]. So the sky is that sprite **tiled every
+  160 × 128 px, fixed to the screen (both ratios 0), drifting left by 17/100 px
+  per tick** (≈ 10 px/s at 60 Hz) [V rule, M params, derived speed]; flags bits
+  0 and 1 are clear, so no sway and no lift [M]. The copies overlap by 4 px
+  horizontally and 1 px vertically [derived] and cover the whole 320 × 240 view
+  (0 uncovered px) [M]. Plane 13's tiles stay empty, as measured (plan 47
+  §1.3). Plane 16 (section 1's backdrop) has three such `Parallax` placements
+  (params `(384, 0, −17, 0, 0, 0, 0)`) [M], not part of L1.
+- **Plane 0's own `Parallax`** (L1 playfield): placement (1252, 568), record 7
+  (its `PARA` clip has three keyframes on sprite byte 18 = ANIM 17, palette
+  field 5), flags `0x4C00` → depth 154, params `(1280, 80, 0, 150, 0, 150, 0)`
+  [M]: copies every 1,280 × 80 px moving at 150 % of the camera, in front of
+  plane 0 [V rule]. What it shows on screen was not looked at [H].
+
+#### §2.11.d `Birds` (`0x431110`; tick `0x431140`)
+
+- Spawn sets x = −1000 (`0x43111D`–`0x431132`) so the first tick re-seeds it;
+  the placement's x/y are never used [V].
+- Tick [V]: when x − plane.x > 420 or < −100, or y − plane.y < −20
+  (`0x431163`–`0x431183`), it re-seeds: clip `EINS` or `ZWEI` at random
+  (`0x431189`–`0x43119F`); vx = `0xA000` + (rand & 15) · `0x800` = 0.625…1.094
+  px/tick (`0x4311AE`–`0x4311BE`) [V, derived range]; entering from the left at
+  x = plane.x − (20 + rand & 31), or (when rand & 4) from the right at x =
+  plane.x + 320 + (20 + rand & 31) with vx negated and flag `0x8` set (mirrored
+  is the reading [H]) (`0x4311C1`–`0x431227`); y = plane.y + 70 + (rand & 63)
+  (`0x43122A`–`0x43124F`); vy = −(rand & 31) · 256 = 0…−0.121 px/tick
+  (`0x431251`–`0x43126B`) [derived range]; then it integrates x/y
+  (`0x431277`–`0x431298`). `0x43AAD0` is the random source (that it is the C
+  runtime `rand` is [H]).
+- L1: two `Birds` placements in plane 12 [M] → two birds at depth 35 in
+  plane-12 coordinates, so they scroll with plane 12 [derived]; clips
+  `EINS`/`ZWEI` = sprite bytes 21/22 (ANIM 20/21, 8 frames each, palette field
+  7) [M].
+
+#### §2.11.e Palettes: why the islands came out teal
+
+- **Which HEADs load palettes** [V]: the `HEAD` reader writes the palettes into
+  one global set of ten BITMAPINFOs at `0x471B28` + n · `0x528` (biSize `0x28`
+  stored at `0x414FA4`; 8 bpp at `0x414FCF`; loop `0x414F12`–`0x4150AA` up to
+  `0x474EE0`) **only when the `HEAD`'s file plane bit is in the section's third
+  loader argument `A`** (`[ebp+0x10]`, `0x414EE9`–`0x414EF6`); `MAIN` HEADs
+  always load (`0x414EE2`–`0x414EE7`). Every qualifying `HEAD` overwrites all
+  ten slots. This settles the meaning of plan 47's field `A` (section `+0x04`):
+  it is the palette-source plane mask [V]. Section 0 has A = `0x7` and
+  sub-level 0 does not load planes 1 and 2, so **L1's palette set is HEAD 0's
+  ten slots** [V rule, M A].
+- **Colour conversion** [V]: red and blue fields are swapped in place
+  (`0x414F24`–`0x414F51`), then each entry is stored as an RGBQUAD whose
+  rgbBlue is bits 0–4, rgbGreen bits 5–9 and rgbRed bits 10–14 of the file word
+  (`0x41500A`–`0x415060`), each 5-bit field expanded as (c << 3) | 7
+  (`0x415030`–`0x415054`). Entry 0 is forced to `0x7FFF`
+  (`0x41500D`–`0x415011`) and a real `0x7FFF` becomes `0x7FFE`
+  (`0x415017`–`0x415026`). (The engine expands with bit replication,
+  (c << 3) | (c >> 2): at most 7 apart per channel [derived].)
+- **Which slot a tile uses** [V]: `CELL` follows all 17 `HEAD`s in `MEDIEVAL`
+  [M], and the `CELL` reader builds every plane's tile cache through `0x4154B0`
+  (called at `0x414C0E`) only then. Each 16×16 tile is converted through
+  BITMAPINFO[n], n = the palette nibble (flag bits 8–11) of the record's last
+  non-empty cell (`0x41561D`–`0x415629`, used at `0x415AD9`–`0x415B5F`; the
+  conversion is a plain copy, `0xCC0020` at `0x415B39`). So **a tile's colours
+  = the global set's slot n, n = its own nibble** — this answers Q8's open
+  nibble→slot mapping.
+- L1 nibbles [M] (`pal_probe.py`): plane 0: 1 on all 2,668 non-empty cells;
+  plane 11: 2 on all 323; plane 12: 3 on all 212; plane 13: none (all 300
+  empty).
+- **Why teal** [M] (`colour_probe.py`, mean of the drawn pixels): plane 12
+  (37,748 px) under the engine's rule (its own HEAD 12, slot 1) is RGB
+  (37, 79, 71), hue 169°, lightness 0.23 — dark teal; under the original's rule
+  (HEAD 0, slot 3) it is RGB (125, 141, 163), hue 215°, lightness 0.56,
+  saturation 0.17 — a pale blue-grey, which matches the reference's pale
+  islands. Plane 11 (60,116 px): (24, 37, 16) hue 97° vs (55, 71, 74) hue 189°.
+  Plane 0 (466,757 px): (39, 54, 30) under both — the playfield is unaffected.
+  So the teal is a **palette-selection difference (wrong HEAD and fixed slot
+  1), not a blend, a fog or a different palette slot in the data** [V
+  mechanism, M colours]; the measured colours need no blend to explain the
+  reference.
+- **Sprites carry their slot in the ANIM header** [V]: the `ANIM` reader stores
+  `flags & 0x7FFF` at the chunk record `+6` (bit 15 → the packed flag at `+8`)
+  (`0x414B1D`–`0x414B32`); `0x415DD0` passes `+6` as the decompressor's 4th
+  argument (`0x415DFD`–`0x415E0C`), and `0x415E30` converts the frame through
+  BITMAPINFO `0x471B28` + that · `0x528` (`0x415FD5`–`0x415FEF`). The
+  conversion runs at load (`0x415DD0` is called from the `ANIM` reader at
+  `0x414BDD`/`0x414BEF`), with the palette set current at that moment [V].
+- Measured fields [M] (`sprite_pal.py`): the sky sprite (MEDIEVAL ANIM 16) →
+  slot 4; under HEAD 0 slot 4 its mean colour is RGB (160, 192, 237), hue 215°,
+  lightness 0.78 — light sky blue, 20,480 of 21,156 px opaque. Birds (ANIM 20,
+  21) → slot 7. The hero (`MAIN.WLD` ANIM 26 and 32) → slot 0; across all 566
+  `ANIM` chunks the field is 0–9 and varies per chunk (`MAIN`: 95 of 148 carry
+  0), so the slot is per chunk (§2.6), so the engine's fixed
+  `SPRITE_PALETTE_SLOT = 0` is right for the hero's chunks only. Which HEAD colours
+  `MAIN`-bank sprites — `MAIN`'s own (loaded by `0x40836A`, with `MAIN`
+  palettes always loading) or the level's — is new **Q53**; `MAIN` HEAD 0 slot
+  0 and `MEDIEVAL` HEAD 0 slot 0 differ in 9 of 256 entries [M].
+
+#### §2.11.f The camera (`0x4120B2`–`0x4122B7`, in the hero tick) and `ForceScrolling`
+
+- The camera is the hero's plane record [V]: `0x40F856`–`0x40F87C` points
+  `0x498F1C` at `0x49B880` + `0x9C` · (spawn plane), and the camera writes its
+  `+0x4` (x) and `+0x8` (y), integer px.
+- Level start [V]: cam.y = hero_y − 160 (`0x40FA67`–`0x40FA8C`, `0x464420` =
+  160 [M]); vertical speed `0x59E78C` = 0 (`0x40FA8F`); forced-y word
+  `0x52C588` = sentinel `0xFF439EB2` (`0x40FAE1`). The level build `0x40F856` runs
+  straight-line to `0x40FAEB`. It first places the hero provisionally at x = 160
+  (`0x40F8B9`) and y = the floor probe `0x413B90` from (160, 32)
+  (`0x40F8C3`–`0x40F8DB`); `0x40FA85`–`0x40FA8C` then sets cam.y = that
+  provisional y − 160. Only after that does `0x40FB45` call `0x4123A0`, which
+  runs the spawn pass `0x4126A0` (call at `0x412423`), where the `Start` handler
+  moves the hero (§2.10.c). So in the first ticks cam.y eases from the
+  provisional value toward the `Start` position, while cam.x snaps on the first
+  tick (no smoothing). The provisional y in L1 was not measured [H].
+- Per tick, in this order [V]:
+  1. If `0x52C588` ≠ `0xFF439EB2`, cam.y = `0x52C588`
+     (`0x4120B7`–`0x4120DD`; it undoes the shake below).
+  2. Hero state bit `0x80` skips the whole update (`0x4120E0`–`0x4120E7`).
+  3. **Horizontal**, unless hero bit `0x20` (`0x4120ED`): **cam.x = hero_x −
+     160** (`0x4120F1`–`0x412102`), then < 0 → 0 (`0x412111`–`0x412115`), >
+     plane `+0x30` → plane `+0x30` (`0x41211D`–`0x41212A`). **No dead zone, no
+     lead, no smoothing.**
+  4. **Vertical target speed** t = (cam.y − bias − hero_y + 160) · 65536 / 16
+     (`0x41212C`–`0x41215E`): the error divided by 16, as 16.16 px/tick; bias =
+     `0x52C590`.
+  5. The speed v (`0x59E78C`) moves toward t by `0x4000` (0.25 px/tick per
+     tick), or by `0xC000` (0.75) while v has the opposite sign, and never
+     passes t (`0x412161`–`0x4121C1`).
+  6. Unless hero bit `0x40` (`0x4121C6`–`0x4121CD`): cam.y −= v, kept in 16.16
+     at `0x52C5BC` with the integer in `0x52C5BE` (`0x4121CF`–`0x4121EA`).
+  7. **Shake** while `0x59E93C` ≠ 0: on even frames a random offset of
+     ((rand & 15) + 15) · counter / 64 (negated, and the counter decremented,
+     on frames where frame-counter bit 1 is set; `0x4121EC`–`0x412237`) is
+     added to cam.y after saving cam.y to `0x52C588` (`0x412252`–`0x412269`);
+     at 0 the sentinel is restored (`0x412246`). Who sets `0x59E93C` was not
+     traced.
+  8. **Clamp y**: < 16 → 16 (`0x41226B`–`0x41227B`; 32 when zoomed,
+     `0x412281`–`0x412298`), > plane `+0x32` → plane `+0x32`
+     (`0x41229E`–`0x4122B7`).
+- **Bias** (`0x40FCF7`–`0x40FD37`) [V]: −40 while hero bit `0x2000000`;
+  otherwise +40 while pad bit `0x0001`; otherwise −40 while pad bit `0x0004`;
+  otherwise 0. The pad word `0x464434` is built in `0x416660`–`0x416803` from
+  the key table at `0x4643C0`, whose initialised DirectInput codes are [M]: 203
+  → `0x8000`, 205 → `0x2000`, 200 → `0x1000`, 208 → `0x4000`, 17 → `0x0040`,
+  18 → `0x0020`, 16 → `0x0080`, 57 → `0x0100`, 157 → `0x0008`, 31 → `0x0010`,
+  **209 (Page Down) → `0x0001`**, **201 (Page Up) → `0x0004`**, 25 →
+  `0x0800`. So Page Down lowers the view by 40 px (look down) and Page Up
+  raises it (look up) [V for the bits, M for the default codes; whether the
+  player can remap them was not traced, H]. The bit layout is the PlayStation
+  pad's (up `0x1000`, right `0x2000`, down `0x4000`, left `0x8000` from the
+  arrow keys' codes 200/205/208/203) [M].
+- **Clamps** (`0x40ECB7`–`0x40ECD4`) [V]: plane `+0x30` = (width_cells − 20) ·
+  16 = width − 320, plane `+0x32` = height_cells · 16 − 240. L1 plane 0
+  (198 × 40 cells): **cam.x ∈ [0, 2,848], cam.y ∈ [16, 400]** [derived].
+- **The rule in words**: horizontally the view is locked to the hero, feet
+  origin at screen x 160, except within 160 px of the plane's ends; vertically
+  it eases toward keeping the feet at screen y 160 − bias (two thirds of the way
+  down a 240-line view), closing 1/16 of the error per tick with the speed
+  change capped at 0.25 px/tick per tick (0.75 when reversing); y never goes
+  above 16 [V].
+- **Compared with the engine (plan 47 G9)** [derived]: horizontally the
+  engine's "centre and clamp" is the same rule, if it centres on the feet origin
+  x; vertically it differs (centred instead of 160 px from the top, immediate
+  instead of eased, top clamp 0 instead of 16, no look-up/look-down).
+- **`ForceScrolling`** (`0x41C270`; tick `0x41C2E0`) [V]: spawn stores the
+  target speed p0 · 655 (p0/100 px/tick) at `+0x80` (`0x41C28B`–`0x41C29C`), the
+  hero's vx as the current speed `+0x84` (`0x41C2A2`–`0x41C2A7`) and cam.x in
+  16.16 at `+0x88` (`0x41C2AD`–`0x41C2B9`), and sets hero bits `0x28000020`
+  (`0x41C2BF`–`0x41C2CB`), whose `0x20` turns off the horizontal follow and its
+  clamp. Each tick the speed approaches the target through
+  `0x413A80(speed, target, 0x1000)` (`0x41C2E1`–`0x41C300`; the step size is
+  [H]); unless the death timer `0x59C708`, `0x59F174` or `0x59E75C` is set,
+  cam.x advances by exactly 1 px when the speed equals the target, otherwise by
+  the speed (`0x41C306`–`0x41C35A`); the hero is pushed to stay within screen x
+  16…304 and its vx clamped to the scroll speed at those edges
+  (`0x41C35D`–`0x41C3BA`); hero x − cam.x < 20 while `0x59E950` = 2 kills the
+  hero (death timer 300, vy −5.0; `0x41C3BF`–`0x41C428`) — crushed by the scroll
+  is the reading [H]. In `MEDIEVAL` it is placed only in plane 10, with p0 = 100
+  (1 px/tick) [M]; **L1 has no `ForceScrolling`, so no autoscroll** [M].
+
+**What stays open.** [H]: `Parallax` p6 (the 4th argument of `0x40C270`); what
+plane 0's `Parallax` shows; the purpose of the `ScrollMap` list `0x52C4CC`;
+whether the backdrop draw (which reads the camera) runs before or after the
+camera update within a frame (a one-frame lag); who sets hero bits
+`0x20`/`0x40`/`0x80`/`0x2000000` besides `ForceScrolling`, and the shake
+counter `0x59E93C`; Q53. Builders (FL9, FL12) take the ratios, order, sky
+source, palette rule and camera rule from here.
 
 ## 3. `SFX/*.WAV` **[V]**
 
