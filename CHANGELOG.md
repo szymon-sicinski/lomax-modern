@@ -8,6 +8,12 @@ Versioning: [Semantic Versioning](https://semver.org/).
 
 ### Added
 
+- **`slice` prints an `objects:` block (FL6).** `placement_role` now names the
+  15 level-1 object names (critter, enemy, rope, generator, jumppad, pots,
+  moneybag, exit, npc, music, parallax, revive, start, thief, ufos); the block
+  lists placements per name with role and grade (`docs/file-formats.md`
+  §2.12.b), and unknown names show as `other` / `[H] unmapped`. Rendering and
+  the `GNMY markers:` line are unchanged.
 - **`slice`/`play --section N [--sublevel M]` (FL5b).** The CLI reads the
   section table from the user's own `LOMAX.EXE`, resolves the world and planes,
   prints a `level:` line (also for `--world`, best effort), and `Level` now

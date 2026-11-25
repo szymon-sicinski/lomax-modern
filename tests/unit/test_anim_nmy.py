@@ -3,13 +3,17 @@
 from __future__ import annotations
 
 import struct
+from types import SimpleNamespace
 
 from lomax_modern.anim_nmy import (
+    PLACEMENT_ROLES,
+    ROLE_DESCRIPTIONS,
     anim_tag_name,
     decode_anim,
     decode_anim_pixels,
     decode_gnmy,
     decode_nmy,
+    object_roles_report,
     placement_role,
     probe_anim_nmy,
     probe_gnmy,
@@ -163,20 +167,66 @@ def test_nmy_records_carry_their_names() -> None:
     assert [r.name for r in records] == ["Start", "Moneybag", "Zoom Colors"]
 
 
-def test_placement_role_maps_only_the_evidenced_prefixes() -> None:
-    """Only Start/Exit/Moneybag (four-byte prefixes) are named; the rest is other.
+_L1_ROLES = {
+    "Beestjes": "critter",
+    "Henchlemming": "enemy",
+    "Rope": "rope",
+    "Generator": "generator",
+    "Jumppad": "jumppad",
+    "Pots": "pots",
+    "Moneybag": "moneybag",
+    "Exit": "exit",
+    "Lorock": "npc",
+    "Music": "music",
+    "Parallax": "parallax",
+    "Revive": "revive",
+    "Start": "start",
+    "Thief": "thief",
+    "Ufos": "ufos",
+}
 
-    Q32 maps the identity through the four-byte name-table prefix, so the
-    classifier matches ``name[:4]`` and never invents a role for the other
-    names (the remaining handlers are unmapped).
-    """
-    assert placement_role("Start") == "start"
+
+def test_placement_role_maps_the_fifteen_level_one_names() -> None:
+    for name, role in _L1_ROLES.items():
+        assert placement_role(name) == role
     assert placement_role("Start2") == "start"  # matched on the table prefix
-    assert placement_role("Exit") == "exit"
-    assert placement_role("Moneybag") == "moneybag"
     assert placement_role("Star") == "start"  # the table's own spelling
-    for name in ("Finish", "Revive", "Spikes", "Parallax", "T0", "", None):
+    for name in ("Finish", "Spikes", "T0", "", None):
         assert placement_role(name) == "other"
+
+
+def test_role_prefixes_are_unique_and_described() -> None:
+    assert len(PLACEMENT_ROLES) == 15
+    assert len({name[:4] for name in _L1_ROLES}) == 15
+    assert set(PLACEMENT_ROLES) == {name[:4] for name in _L1_ROLES}
+    assert set(ROLE_DESCRIPTIONS) == set(PLACEMENT_ROLES)
+
+
+def _entries(counts: dict[str, int]) -> list[SimpleNamespace]:
+    return [SimpleNamespace(name=n) for n, c in counts.items() for _ in range(c)]
+
+
+def test_object_roles_report_on_synthetic_level_one_counts() -> None:
+    counts = dict.fromkeys(_L1_ROLES, 1)
+    counts.update(
+        Beestjes=19, Henchlemming=8, Rope=5, Generator=4, Jumppad=3, Pots=3, Moneybag=2
+    )
+    report = object_roles_report(_entries(counts))
+    text = report.format()
+    assert (report.placements, len(report.rows), report.unresolved) == (52, 15, 0)
+    lines = text.splitlines()
+    assert lines[0] == "objects: 52 placements, 15 names, 0 unresolved"
+    assert lines[1] == "name -> role -> grade"
+    assert "Henchlemming (8) -> enemy — behaviour: AC16–AC18 -> [V]" in lines
+    assert "Beestjes (19) -> critter (ambient critter) -> [V] (a bug is [H])" in lines
+    assert "Moneybag (2) -> moneybag (hanging coin bag) -> [V]; burst count [H]" in lines
+    assert [r.name for r in report.rows] == sorted(_L1_ROLES)
+
+
+def test_object_roles_report_counts_unknown_names_as_unresolved() -> None:
+    report = object_roles_report(_entries({"Start": 1, "Spikes": 2}))
+    assert (report.placements, report.unresolved) == (3, 1)
+    assert "Spikes (2) -> other (unmapped) -> [H] unmapped" in report.format()
 
 
 def test_nmy_multiple_records() -> None:

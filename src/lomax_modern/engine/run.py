@@ -13,7 +13,7 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Callable
 
-from ..anim_nmy import placement_role
+from ..anim_nmy import object_roles_report, placement_role
 from ..art import DEFAULT_PALETTE_SLOT, SPRITE_PALETTE_SLOT
 from .entities import WALK_SPEED, Input
 from .level import (
@@ -87,6 +87,8 @@ class SliceReport:
     #: the marker, and nothing is named).
     clip_ticks: tuple[tuple[str, int], ...] = ()
     next_level: str | None = None
+    #: The ``objects:`` block (:func:`lomax_modern.anim_nmy.object_roles_report`).
+    objects: str = ""
 
     def format(self) -> str:
         if self.spawn_name is not None:
@@ -136,6 +138,8 @@ class SliceReport:
             f"other {self.gnmy_roles.get('other', 0)} "
             "(Start/Exit/Moneybag [V]; the other names' handlers are unmapped)",
         ]
+        if self.objects:
+            lines.append(self.objects)
         if self.player_anim:
             lines.append(self.player_anim)
         drawn = [f"{tag} {count}" for tag, count in self.clip_ticks if count]
@@ -206,7 +210,10 @@ def run_slice(
 
     final_frame = captured if captured is not None else render_tiles(level, state)
     next_level = worlds[1] if state.complete and len(worlds) > 1 else None
-    gnmy_roles = collections.Counter(placement_role(e.name) for e in level.gnmy)
+    gnmy_roles = collections.Counter(
+        role if (role := placement_role(e.name)) in ("start", "exit", "moneybag") else "other"
+        for e in level.gnmy
+    )
     walk_poses = level.clips.get(PLAYER_WALK_ANIM, ())
     if walk_poses:
         rate = pose_rate_px256(WALK_SPEED)
@@ -254,6 +261,7 @@ def run_slice(
         clean_exit=True,
         gnmy_entries=len(level.gnmy),
         gnmy_roles=dict(gnmy_roles),
+        objects=object_roles_report(level.gnmy).format(),
         exits=level.exits,
         player_anim=player_anim,
         clip_ticks=tuple(clip_ticks.items()),
