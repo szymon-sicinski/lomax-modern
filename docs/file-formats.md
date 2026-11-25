@@ -1896,7 +1896,7 @@ Recovered by a read-only objdump pass over `LOMAX.EXE` for the first-level plan
 ([`../roadmap/47-first-level-plan.md`](../roadmap/47-first-level-plan.md), FL4;
 Q46, Q47; AC5, AC6, AC11). Grades and the reproduce convention are those of
 §2.10. L1 = `MEDIEVAL` section 0 sub-level 0, playfield plane 0. The
-`Henchlemming`'s behaviour is FL4b's (Q50); here it is only classified.
+`Henchlemming`'s behaviour is §2.13 (FL4b); here it is only classified.
 
 **Reproduce.** Scratch files outside the repository, not committed:
 
@@ -1955,7 +1955,7 @@ python3 -I cstr.py "$EXE" 466920 4669d0 466974 466904 4669b4 4669c0 466984   # D
   `+0x6A` by `+0x68` and returns 1 when it wraps; `0x412B50` moves an entity to
   another slot bank (copies it, removes the original) — what the bank changes
   is [H].
-- **Shared enemy-defeat routine `0x42CD00`** (pointer for FL4b, [V] writes):
+- **Shared enemy-defeat routine `0x42CD00`** ([V] writes; the `Henchlemming`'s use: §2.13.g):
   spawns a `Classic` lemming (`MAIN` record, clip `CLA1`;
   `0x42CD06`–`0x42CD54`), adds 1 to the freed-lemming counter `0x52C5A8` — at
   50 it sets the bonus flag `0x59C718` and resets the counter to 0
@@ -1971,7 +1971,7 @@ python3 -I cstr.py "$EXE" 466920 4669d0 466974 466904 4669b4 4669c0 466984   # D
 | Name (count) | Index → handler | Role | Idle clip | At contact | Drawn? | Grade |
 |---|---|---|---|---|---|---|
 | `Beestjes` (19) | 52 → `0x4270A0` | ambient critter (a bug is the reading [H]) | `EINS` or `DREI`, by bit 0 of `0x43AAD0` (`0x4270B2`–`0x4270C8`) | walks at ±0.125 px/tick (`0x2000`, `0x4270D5`–`0x4270E0`) and turns on random timers (`0x42724F`–`0x42726D`); when the hero touches it (`0x414390`, `0x4271D5`) it switches to `ZWEI` (from `EINS`) or `VIER` (from `DREI`) and flies off at vy −1.0…0 px/tick (`0x42728B`–`0x4272F6`; flight `0x427176`–`0x4271AC`). No `0x20`/`0x10000`: harmless | yes, default draw | [V] |
-| `Henchlemming` (8) | 84 → `0x42DD70` | **enemy** | `STAY` (`0x42DD82`); mirrored when x & `0x10` (`0x42DDA8`–`0x42DDAF`) | `+0x58` gets `0x20` (hurts the hero, §2.10.d) and `0x10000` (can be hit; stomp per §2.10.d) (`0x42DD7F`–`0x42DD90`); calls the defeat routine `0x42CD00` at `0x42DDF4`; the rest is FL4b's (Q50). The placement at (1018, 320) has flag `0x2000` and is spawned only by the `Generator` at (1231, 336) [M] | yes | role [V]; behaviour → FL4b |
+| `Henchlemming` (8) | 84 → `0x42DD70` | **enemy** | `STAY` (`0x42DD82`); mirrored when x & `0x10` (`0x42DDA8`–`0x42DDAF`) | `+0x58` gets `0x20` (hurts the hero, §2.10.d) and `0x10000` (can be hit; stomp per §2.10.d) (`0x42DD7F`–`0x42DD90`); behaviour, contact and defeat: §2.13. The placement at (1018, 320) has flag `0x2000` and is spawned only by the `Generator` at (1231, 336) [M] | yes | role [V]; behaviour §2.13 |
 | `Rope` (5) | 67 → `0x429F60` | **climbable rope** | `ROPE`; draw `0x42A280` paints keyframe 0 p1 times stepping y by 32, then keyframe 1 (`0x42A292`–`0x42A2D9`) | length = p1 · 32 px (`0x429F9A`–`0x429FA1`). Grab `0x413D60`: hero airborne, \|hero x − rope x\| ≤ 2 and rope y + 20 ≤ hero y ≤ rope y + length + 20 → hero x := rope x, vx = vy = 0, state \|= `0x1010` (`0x413DAC`–`0x413E05`). Then (update `0x42A000`) input `0x1000` (Up) climbs and `0x4000` (Down) descends 1 px/tick within that span, leaving the bottom releases (`0x42A0D3`–`0x42A161`); the jump input releases with vx ±2.0 (`0x42A06E`–`0x42A0C9`), being hurt releases (`0x42A019`–`0x42A04F`); 10-tick re-grab delay (`+0x80` := 10). L1 p1 = 5, 3, 4, 5, 3 → 160, 96, 128, 160, 96 px [derived]; placement flags `0x100`/`0x200` reach `+0x58`, meaning [H] | yes | [V] |
 | `Generator` (4) | 86 → `0x42D0D0` | **invisible spawn trigger** | none (no clips) | `+0x58` \|= `0x4` (`0x42D0E0`); target = the placement's resolved extra word (`0x42D0DA`–`0x42D0E3`), none → removed (`0x42D0F7`); height = p1, or 64 when p1 = 0 (`0x42D10A`–`0x42D11E`); repeat = placement flag bit 0 (`0x42D128`–`0x42D145`). When the hero (same plane) has the generator's x inside its box's x-span and its box's y-span overlaps [y − height, y] (`0x42D18F`–`0x42D1DA`), it spawns the target and then each placement the target's own extra word names, skipping those already spawned (`0x42D228`–`0x42D25E`); a one-shot generator then removes itself (`0x42D287`–`0x42D292`). L1: all four flags `0x8000`, p1 0 → 64 px, one-shot [M/derived]; chains: (424, 560) → `Pots` (521, 560); (1231, 336) → `Henchlemming` (1018, 320); (1129, 544) → `Pots` (1238, 464); (1934, 272) → `Pots` (2032, 240) [M, `gen_chain.py`] | **hidden by design** | [V] |
 | `Jumppad` (3) | 68 → `0x433ED0` | **springboard platform** | `PAD` pose 0, held: the animation advances only while `+0x80` = 1 (`0x433F48`–`0x433F59`) | the hero stands on it (`0x413510` with a per-pose surface-height function `0x433F20`, table `0x466870`; `0x433F5B`–`0x433F69`) → sound `0x3F` once, the pad animates; when its pose (`+0x6A >> 8`) equals the launch pose — poses − 2, or 4 when poses > 5 (`0x433EFC`–`0x433F18`; `PAD` has 9 poses [M] → 4) — the hero gets state \|= `0x403`, **vy := −6.0** (`0xFFFA0000`) and the hold counter `0x59E94C` := `0xA000`, sound `0x35` (`0x433FA0`–`0x433FDE`); at the wrap it re-forces `PAD` and stops (`0x433FF2`–`0x434001`). The normal jump is −4.0 (§2.9) | yes | [V] |
@@ -2102,6 +2102,345 @@ Q56 (bursts per `Moneybag`); [H]: entity `+0x70`, `+0x74`, `0x80000`, placement
 flags `0x100`/`0x200`, the `Thief`'s pursuit, what `0x42B2D0(4)` shows.
 Builders: FL6 takes the role column, FL10 the idle clips and the hidden list,
 FL11 the coin/lives rules, FL13 the HUD table.
+
+### 2.13 The Henchlemming (2026-11-25, FL4b)
+
+Plan 47 calls this section §2.11; the number moved because FL3/FL4 took §2.11
+and §2.12 (the plan file is not edited by this pass). Recovered by a read-only
+objdump pass over `LOMAX.EXE` for the first-level plan (FL4b; Q50; AC16–AC18).
+Grades and the reproduce convention are those of §2.10; L1 = `MEDIEVAL`
+section 0 sub-level 0, plane 0. Entity fields as §2.5/§2.12.a: `+0x3C`/`+0x40`
+integer x/y, `+0x44`/`+0x48` 16.16 x/y (the spawn `0x4126A0` sets both 16.16
+words with zero fraction and the integer high words from x/y,
+`0x4127A1`–`0x4127B1` [V]), `+0x4C` vx, `+0x50` vy (16.16, y grows downward),
+`+0x58` flags (`0x8` = mirrored = facing left), `+0x6A` 8.8 pose position,
+`+0x68` rate.
+
+**Reproduce.** Scratch files outside the repository, not committed:
+
+```
+objdump -d -M intel --no-show-raw-insn "$EXE" > /var/tmp/fl4b/lomax.asm
+python3 -I r.py 42dd70 42dfdf                                  # the whole handler (init + update), by address range
+python3 -I r.py 414450 41450c; python3 -I r.py 414510 4145cf; python3 -I r.py 4146a0 41474d   # its three probes
+python3 -I r.py 42cd00 42ce25; python3 -I r.py 430320 4304c7   # the defeat and the death pop
+python3 -I r.py 412450 41269c; python3 -I r.py 40f1c8 40f35d; python3 -I r.py 40f3f3 40f403  # spawn / despawn windows
+python3 -I r.py 40ffb6 4100a2; python3 -I r.py 412d90 412e2f; python3 -I r.py 413e40 413f61  # stomp, bounce, hit test
+python3 -I owners.py "$EXE" /var/tmp/fl4b/lomax.asm 4146a0 414510 414450 42cd00 430320   # callers -> owning handler
+python3 -I bytes.py "$EXE" 464540 8 s16                        # -> 80 80 160 110 340 140 340 140
+python3 -I bytes.py "$EXE" 464b70 1 cstr                       # -> Lemming
+env PYTHONPATH=src python3 clips.py "$LOMAX_GAME_DIR" MEDIEVAL Henc    # STAY/JUMP keyframes, poses, rate, box
+env PYTHONPATH=src python3 clips.py "$LOMAX_GAME_DIR" MAIN Hero Lemming # OUCH/OHNO/TUMB/SPIN, Lemming PLOP
+env PYTHONPATH=src python3 henchlemming.py "$LOMAX_GAME_DIR"           # plan 47 §6 script M
+python3 -I arith.py                                            # hop arc, cycle lengths, per-placement values [derived]
+```
+
+#### §2.13.a Code map, and what is shared (R10)
+
+- **Own code [V]:** init `0x42DD70`–`0x42DDD1`, update `0x42DDE0`–`0x42DFDF` =
+  0x270 = 624 bytes; the next handler (`Barr`, index 75) starts at `0x42DFE0`.
+  No draw pointer (default draw, §2.12.a).
+- **What it calls** (callers counted in the whole executable, owners by address
+  range [V]):
+  - animation helpers `0x416140` (set clip, 279 callers), `0x416110` (set if
+    different, 109), `0x4161B0` (advance, 69), `0x416210` (pose → keyframe,
+    29) — the generic clip machinery of §2.6.2;
+  - the hit test `0x413E40` (21 callers; §2.12.a);
+  - the landing probe `0x414450` (25 callers, 17 handlers), the ledge/step
+    probe `0x414510` (8 callers: `Slim` 22, `Cowb` 25 ×2, `Pira` 29, `Thie`
+    44, `Henc` 84, `Barr` 75, `Muta` 74), the same-kind-ahead probe `0x4146A0`
+    (2 callers: `Pira` 29 at `0x4217E0`, `Henc` at `0x42DEDB`);
+  - the sound call `0x40D5F0(entity, id)` (93 callers);
+  - on defeat only: `0x42CD00` and `0x430320` (8 callers each, the same 8
+    enemy handlers: `Slim` 22, `Cowb` 25, `Drac` 26, `Were` 30, `Henc` 84,
+    `Barr` 75, `Muta` 74, `Zomb` 70);
+  - the floor probe `0x413B90` is reached only through `0x414450`/`0x414510`
+    (§2.9.a).
+- **Verdict for R10 [V]: separable.** There is no enemy base routine with
+  per-enemy behaviour: every shared routine is a parameterised utility (entity
+  in, a yes/no or a position out) that reads only the calling entity, the floor
+  probe, the hero globals, and — for `0x4146A0` — other entities whose update
+  pointer equals the caller's. No call reaches another enemy's update. The only
+  path of a shared utility that depends on other objects is `0x414510`'s
+  entity-wall branch `0x4145D0` (entities with flag `0x800000`), taken only
+  while `0x4777D0` ≠ 0; its setters are `0x41F8E0` (`Pile`, 23) and `0x4210D3`
+  (`Wall`, 28), cleared at `0x40EED5` and `0x4210F9`, written at `0x40FA73`
+  [V]; neither name is placed in L1 (§2.12.b's 15 names) [derived], so in L1
+  the branch is dead. FL14 ports: the handler, `0x414450`, `0x414510` without
+  `0x4145D0`, `0x4146A0`, and the floor probe (already specified, §2.9.a). The
+  death path (`0x42CD00`, `0x430320`) is shared by 8 enemies but is a single
+  fixed effect, not behaviour (§2.13.g).
+
+#### §2.13.b States and transitions [V]
+
+The update uses three counters: `+0x80` (rest timer; −1 = "just landed"),
+`+0x84` (ground countdown; 0 = airborne), `+0x88` (turn on the next take-off).
+Init (`0x42DD70`–`0x42DDD1`): update `0x42DDE0`; `+0x58` \|= `0x20` \|
+`0x10000` (`0x42DD7F`, `0x42DD8B`); `+0x60` := 1 and `+0x62` := 1
+(`0x42DD93`–`0x42DD9C`; `+0x60` = sprite depth index → plane depth + 4,
+§2.11.a; `+0x62` = despawn class, §2.13.f); force `STAY` (`0x42DD82`,
+`0x42DDA0`); mirrored (faces left) when x & `0x10` (`0x42DDA8`–`0x42DDAF`);
+`+0x84` := 10, `+0x88` := 0, `+0x80` := x & `0x1F` (`0x42DDB3`–`0x42DDCA`).
+
+Per tick, in order:
+
+| State | Entered when | Each tick | Leaves when | VA |
+|---|---|---|---|---|
+| 1. **Hit** | every tick, tested first | `0x413E40(self)` true → defeat (§2.13.g) and return | — (the entity becomes a `Lemming`) | `0x42DDE7`–`0x42DE10` |
+| 2. **Rest (`STAY`, animated)** | `+0x80` > 0 | `+0x80` − 1; if still > 0: set `STAY` if different and advance the pose at the clip's rate; return | the decrement reaches 0: the same tick falls through to 3 (a rest of R ticks shows `STAY` for R − 1 ticks) | `0x42DE11`–`0x42DE3F` (`0x42DE2C`, `0x42DE35`) |
+| 3. **On the ground in `JUMP`** | `+0x80` ≤ 0 and `+0x84` ≠ 0 | set `JUMP` if different (`0x42DE46`), `+0x68` := 0 (poses are chosen by hand, `0x42DE54`); `+0x84` − 1 (`0x42DE62`); pose 0 (`+0x6A` := 0, `0x42DF25`) | `+0x84` reaches 0 with `+0x80` < 0 (**after a landing**): choose the next rest — if (x XOR hero x `0x59F23C`) & 7 ≠ 0, `+0x80` := 20 (`0x42DE89`); else `+0x88` := 1 and `+0x80` := 60 + (x & `0x7F`) (`0x42DE95`–`0x42DEA5`); then `+0x84` := 10, pose 0 (`0x42DEAB`–`0x42DEB5`). `+0x84` reaches 0 with `+0x80` = 0 (**after a rest**): **take-off** (§2.13.c/d), pose 0 | `0x42DEC0`–`0x42DF22` |
+| 4. **Airborne** | `+0x84` = 0 (`0x42DE5C`) | integrate and test for landing (§2.13.c) | landing: sound `0x0D`, vy := 0, `+0x84` := 10, `+0x80` := −1 → state 3 | `0x42DF30`, `0x42DF69`–`0x42DF82` |
+
+Every path except the hit and the `STAY` path ends in `0x416210` (pose →
+keyframe, `0x42DFD5`).
+
+The cycle on flat ground [derived, `arith.py`]: take-off → 31 airborne ticks →
+10 ticks pose 0 of `JUMP` (landing squash) → `STAY` for R − 1 ticks → 10 ticks
+pose 0 of `JUMP` (crouch; the 10th is the take-off) — **R + 50 ticks per hop**:
+70 ticks for R = 20; 110–237 for the long rest R = 60…187. First action after a
+spawn: `STAY` for (x & 31) − 1 ticks (0 when x & 31 ≤ 1), then the 10-tick
+crouch and a hop [derived]. **Clips [M, `clips.py`]:** `STAY` 5 keyframes = 5
+poses, rate 40 (one loop per 32 ticks [derived]); `JUMP` 6 keyframes = 6
+poses, rate 57 in the file but forced to 0 by the handler.
+
+#### §2.13.c Movement: the hop [V]
+
+- **Only hops; no walking.** x and y change only in the airborne branch
+  (`0x42DF30`–`0x42DF5A`); on the ground the update never writes the position
+  (gravity is not applied while `+0x84` ≠ 0) [V].
+- **Take-off** (`0x42DEFE`–`0x42DF22`): vx := −1.0 (`0xFFFF0000`) when facing
+  left (`+0x58` & `0x8`), else +1.0 (`0x10000`); vy := −4.0 (`0xFFFC0000`);
+  sound `0x19` (`0x40D5F0`, `0x42DF1D`).
+- **Per airborne tick** (`0x42DF30`–`0x42DF5D`): vy += 0.25 (`0x4000`); y16 +=
+  vy; x16 += vx; integer x/y := the high words; then `0x414450(self)`. No
+  horizontal collision test in the air: the hop is committed at take-off.
+- **`0x414450` (landing probe) [V]:** if vy < 0 it sets bit 0 of vy (vy \|= 1,
+  a 1/65536 drift) and returns 0 (`0x414455`–`0x414465`). That bit matters: on
+  a flat hop vy would be exactly 0 on the 16th airborne tick, and with vy = 0
+  the depth test below is skipped, so the hop would snap to any floor the probe
+  finds; with the bit set vy is 1/65536 there [derived, `arith.py`]. Else floor
+  := `0x413B90(plane, x, y, 4)`; none (`0x4E20`) → 0; if vy ≠ 0 and (floor > y
+  or y − floor ≥ 8) → 0 (`0x41449E`–`0x4144AE`); otherwise it lands: y := floor
+  (integer and 16.16 high word), vy := 0 (`0x4144B2`–`0x4144B9`). On a steep
+  slope (`0x52C4C8` = 2) it then **reverses** vx and toggles `0x8` when moving
+  uphill — vx > 0 on a rising-right slope (`0x52C5A4` = 1) or vx < 0 on a
+  descending-right one — and returns 2, else 1 (`0x4144C0`–`0x414506`). The
+  handler only tests non-zero.
+- **The arc [derived, `arith.py`]:** on flat ground it lands on the 31st
+  airborne tick, 31 px forward, apex 30 px above the take-off y, vy 3.75 at
+  landing. Airborne poses by vy (`0x42DF91`–`0x42DFCE`): vy < −3.0 → pose 1;
+  < −1.0 → 2; < 0.5 → 3; < 2.0 → 4; else 5 (per tick: 3 × 1, 8 × 2, 6 × 3, 6 ×
+  4, 7 × 5 on a flat hop); the landing tick keeps the previous pose. Mean speed
+  0.443 px/tick for R = 20, 0.131–0.282 for long rests. vy has no cap: a fall
+  longer than ~8 px/tick can pass a floor (`y − floor ≥ 8`) [derived from
+  `0x4144A9`].
+
+#### §2.13.d Turning [V]
+
+At take-off, before vx is set, three toggles of `0x8`, each applied once, in
+this order, none re-checked (`0x42DEC0`–`0x42DEFA`):
+
+1. `+0x88` set (the long-rest case) → clear it and turn (`0x42DECA`–`0x42DED4`);
+2. `0x4146A0(self, 80)` → turn: another entity in the slot banks (`0x52C5A0`,
+   then `0x59E768`) with the **same update pointer** (another living
+   `Henchlemming`) on the same plane, with \|other y − self y + 16\| < 40, and
+   ahead within 80 px (facing left: self x − 80 < other x < self x; facing
+   right: self x < other x < self x + 80) (`0x4146C3`–`0x414721`);
+3. `0x414510(self, 3)` → turn (§2.13.e).
+
+Then vx takes its sign from the final facing. Because nothing is re-checked, a
+`Henchlemming` blocked on both sides hops toward the side it turned to
+[derived]. The landing probe's steep-slope reversal (§2.13.c) is a fourth turn,
+in the air.
+
+#### §2.13.e Collision with the level; ledges and walls [V]
+
+- **Only the floor probe.** The handler and its probes call `0x413B90` and
+  nothing else of the level; the wall and ceiling probes `0x412F50`/`0x413130`
+  are never reached, so only floor-class cells (`0xC0`–`0xFF`, §2.9.a) matter.
+  L1 has no wall/ceiling cell (§2.9.d) [M].
+- **`0x414510(self, n)`, the look-ahead (`0x414510`–`0x4145C5`):** probes n + 1
+  columns — x, x ± 16, …, x ± 16n, stepping in the facing direction — with
+  `0x413B90(plane, xi, y, 4)`; it returns 1 (turn) at the first column with
+  **no floor** (`0x4E20`), a **steep slope** (`0x52C4C8` = 2), or a floor **16
+  px or more above or below** y; else 0 (or the `0x4145D0` result, §2.13.a).
+  The `Henchlemming` passes n = 3: columns x, x ± 16, x ± 32, x ± 48 — so it
+  turns at a ledge or step of ≥ 16 px or a 45° slope within 48 px ahead, before
+  a 31 px hop [derived].
+- **Box:** the probes use the origin column only; the entity's box is its
+  current clip's box (the four words at animation node `+0x10`, as for the
+  hero, §2.10.c): `STAY` −9, −24, 9, −3; `JUMP` −10, −31, 10, −7 (left, top,
+  right, bottom relative to the feet origin) [M, `clips.py`]. It is used for
+  contact (§2.13.g), not for terrain.
+
+#### §2.13.f Wake rule: spawn and despawn windows [V]
+
+- **No wake test of its own:** the handler never reads the camera; the only
+  hero read in its live behaviour is hero x in the rest choice (§2.13.b). It
+  acts from the tick it is spawned [V].
+- **Tick order [V]:** per logic tick `0x412450` (spawn) → `0x40EE50` (entity
+  updates, the handler) → `0x40FB70` (hero; its contact loop, §2.10.d) →
+  `0x40F530` → … ; `0x40F040` (despawn) runs once per tick (inside the
+  catch-up loop and once after it) (`0x404C5B`–`0x404CA6`).
+- **Spawn (`0x412450`):** each call handles the placements whose 2-bit field
+  (`node+0x12`, flags bits 8–9, §2.5) equals a phase `0x498F30` that cycles
+  0–3 (`0x412682`–`0x412697`), skipping `0x2000` and already-spawned nodes
+  (§2.12.a). For a plane with zoom flag `+0x3C` = 0 (L1, §2.11.a) a node spawns
+  when x ∈ [cam x − mx, cam x + 320 + mx] and y ∈ [cam y − my, cam y + 240 +
+  my] with (mx, my) = `0x464540[field]` = (80, 80), (160, 110), (340, 140),
+  (340, 140) [M, `bytes.py`] (`0x412520`–`0x4125E0`); while `0x59F1DC` ≠ 0 it
+  is **not** spawned inside [cam x − 40, cam x + 360] × [cam y − 30, cam y +
+  270] (`0x41262B`–`0x41264C`). `0x59F1DC` := 1 when the countdown `0x52C5F4`
+  passes 60 (`0x40F5C6`), := 0 at `0x403C36` [V]; "not after the level's
+  opening" is the reading [H]. L1's `Henchlemming` placements have field 0
+  (flags `0x0`/`0x2000`) → margin 80 × 80 [derived].
+- **Despawn (`0x40F040`):** each call handles entities whose `+0x62` equals a
+  phase `0x49B878` that cycles 0–2 (`0x40F3F3`–`0x40F403`) — so `+0x62` = 3 is
+  never despawned. With `+0x3C` = 0 an entity outside [cam x − mx, cam x + 320
+  + mx] × [cam y − my, cam y + 240 + my], (mx, my) = `0x464540[+0x62]`, is
+  released by `0x412B80` (`0x40F320`–`0x40F34F`), which clears the placement's
+  spawned bit (`0x412C2E`) so it can spawn again. The `Henchlemming`'s init
+  sets `+0x62` := 1 → it is released outside cam x − 160 … cam x + 480, cam y −
+  110 … cam y + 350 [derived].
+- **Consequence [derived]:** a `Henchlemming` exists only while the camera is
+  near; leaving the window resets it, and re-entering re-runs the init at its
+  placement (x, y, facing, first rest). The `Generator`-spawned one at (1018,
+  320) (flag `0x2000`) is never spawned by the window, so once released it is
+  gone unless its one-shot `Generator` fires again (§2.12.b).
+
+#### §2.13.g Contact with the hero, and death [V]
+
+- **Contact is the hero's code, not the handler's.** Flags `0x20` + `0x10000`
+  put it in the hero's contact loop (§2.10.d, `0x40FF07`–`0x4100A2`): boxes
+  overlap (§2.13.e boxes), same plane, hero clip not `SPIN`/`TUMB`, loop
+  skipped while `0x59E938` ≠ 0 or `0x52C568` ≠ 0 or a death is in progress.
+- **Stomp [V]:** `0x10000` set, hero airborne (state `0x49C4C4` bit `0x1`), vy
+  `0x59F250` > 0, and the hero's previous-tick feet ((y16 − vy) >> 16) + its
+  box bottom ≤ the entity's y + box top (`0x40FFB6`–`0x410007`; mirrored branch
+  `0x410051`–`0x410090`) → `0x412D90` (`0x410092`): hero vy := −4.0, hero y :=
+  previous y − 8 px, \|vx\| < 2.0 → vx := ±2.0 by facing, `0x59E94C` := 0,
+  `0x59E764` := 0, sound 2, and a 7-tick `PLO2` effect of the `Hero` record at
+  the hero (`0x4286D0`; string `0x464B5C`) (`0x412D90`–`0x412E2F`). **Neither
+  routine writes the entity: a stomp does not kill a `Henchlemming`**; it is a
+  harmless bounce.
+- **Otherwise the hero is hurt:** `0x412E30(entity x)` (`0x41009A`), §2.10.d:
+  without the helmet (`0x52C570` = 0 and `0x59E944` = 0) a **death** — death
+  timer 300, `0x59E938` := 1000, vy −4.0, sound `0x20`, lives − 1 at timer 250
+  (`0x4102FB`, 50 ticks after the hit), respawn 214 ticks after the hit; with
+  the helmet: helmet lost, sound `0x22`, `0x59E938` := 180 (input cleared and
+  the contact loop skipped for 180 ticks = 3.0 s [derived]), vy −5.0. Both:
+  knockback vx := −2.5 (`0xFFFD8000`) when entity x > hero x, else +2.5
+  (`0x28000`), unless state `0x200` (`0x412F1E`–`0x412F3C`). The `Henchlemming`
+  itself is unchanged by the contact (no write in its code). **In L1 within
+  this milestone the helmet comes only from `Pots`, which need a hit (Q54), so
+  a contact is a death** [derived].
+- **Hero clips for it (D6) [V rows of §2.6.2 a, M data]:** death → airborne,
+  row 9 `OHNO` while `0x59C708` ≠ 0 (`OHNO` 6 poses, rate 76); helmet hurt →
+  row 10 `OUCH` while `0x59E938` > 0 (`OUCH` 3 poses, rate 34); at timer 250
+  `0x42FFB0` (the death clip is [H], §2.10.d).
+- **What kills it [V]:** only `0x413E40` true (`0x42DDE7`): flag `0x20000` (a
+  projectile, `0x414130`) or `0x10000` with the hero's clip `SPIN` or `TUMB`,
+  same plane, `0x52C568` = 0, boxes overlap (`0x413E74`–`0x413F57`). `SPIN` is
+  selected while `0x59F164` ≠ 0, set at `0x41074D` when an input bit
+  (`0x4777CC` & `0x464438`) is held while airborne and `0x59E94C` < `0x9000` —
+  an attack input, deferred by plan 47 §2.3. **`TUMB`** is state `0x8`, set at
+  `0x4107A3` when the Down input (`0x464435` & `0x40` = `0x4000`) is pressed
+  **on the ground on a steep slope** (`0x52C574` = 2, the hero's floor kind,
+  §2.9.b), with `0x46AB4C` := 180, `0x4770B0` := 3 and sound `0x33`
+  (`0x410757`–`0x4107A6`); cleared at `0x4107C9`. That is a movement-only way
+  to kill — whether it is in scope is Q57; TUMB's motion is not read [H].
+- **Defeat (`0x42DDF4`–`0x42DE10`) [V]:** `0x42CD00(self)` (§2.12.a: a `Classic`
+  lemming `CLA1` is spawned, vy −4.0, vx = hero vx / 2, `+0x88` := 40 + random
+  & 63, sounds `0x43` and `0x39`; freed counter + 1, flash 60; a coin when x is
+  odd; and **`+0x4` := 0** at `0x42CD18`, detaching the entity from its
+  placement, so the release cannot clear the node's spawned bit and **a
+  defeated `Henchlemming` never respawns** [V]); then `0x430320(self)`: the
+  entity becomes `MAIN`'s `Lemming` record (string `0x464B70`) in clip `PLOP`,
+  update `0x42FD20` (advance; release `0x412B80` when it wraps), flags &
+  `0xFFD6FFC7` (no longer harmful, hittable or mirrored), `+0x62` := 3, `+0x60`
+  := 1, plus a particle burst (`0x412800`, 2 × 16 particles with random
+  velocities) (`0x430320`–`0x4304C7`); then y − 10 (`0x42DE05`). `Lemming`
+  `PLOP` = 5 poses at rate 92 → removed after 14 ticks [M + derived].
+
+#### §2.13.h Randomness [V]
+
+The living behaviour draws **no** random number: no call to `0x43AAD0` in
+`0x42DD70`–`0x42DFDF` or in `0x414450`, `0x414510`, `0x4146A0`. Its only
+variation is deterministic: x & 31 (first rest), x & 16 (facing), x & 127 (long
+rest), and (x XOR hero x) & 7 (rest choice). The death path uses the shared
+source `0x43AAD0` (`0x42CDBD` and the particle loops of `0x430320`), so a kill
+would advance the shared random state; FL14's `Snapshot` needs no random state
+for the living enemy [derived].
+
+#### §2.13.i L1's eight [M + derived, `henchlemming.py`, `arith.py`]
+
+| Placement (x, y) | Flags | First `STAY` ticks | Initial facing | Long rest | Coin on defeat |
+|---|---|---|---|---|---|
+| (701, 542) | `0x0` | 28 | left | 121 | yes |
+| (1018, 320) | `0x2000` (by `Generator`) | 25 | left | 182 | no |
+| (1068, 544) | `0x0` | 11 | right | 104 | no |
+| (1454, 208) | `0x0` | 13 | right | 106 | no |
+| (1597, 246) | `0x0` | 28 | left | 121 | yes |
+| (2115, 265) | `0x0` | 2 | right | 127 | yes |
+| (2441, 387) | `0x0` | 8 | right | 69 | yes |
+| (2997, 448) | `0x0` | 20 | left | 113 | yes |
+
+No parameters. The x-dependent values change as it hops (they read the current
+x). Whether each placement's y lies on a floor, and where each first hop lands,
+is FL14's measurement [H].
+
+#### §2.13.j Constants for FL14/FL15 (D5)
+
+| Name | Value | VA | Grade |
+|---|---|---|---|
+| `HENCH_TAKEOFF_VX` | ±1.0 | `0x42DEFE`/`0x42DF0C` | [V] |
+| `HENCH_TAKEOFF_VY` | −4.0 | `0x42DF13` | [V] |
+| `HENCH_GRAVITY` | 0.25 | `0x42DF36` | [V] |
+| `HENCH_GROUND_TICKS` | 10 | `0x42DDB3`/`0x42DEAB`/`0x42DF78` | [V] |
+| `HENCH_SHORT_REST` | 20 | `0x42DE89` | [V] |
+| `HENCH_LONG_REST_BASE` | 60 + (x & 127) | `0x42DE9F`–`0x42DEA2` | [V] |
+| `HENCH_REST_MATCH_MASK` | 7 | `0x42DE84` | [V] |
+| `HENCH_FIRST_REST_MASK` | 31 | `0x42DDC7` | [V] |
+| `HENCH_FACING_BIT` | x & 16 | `0x42DDAB` | [V] |
+| `HENCH_AHEAD_SAME_KIND` | 80 px, y window \|dy + 16\| < 40 | `0x42DED8`, `0x4146EB`–`0x4146F3` | [V] |
+| `HENCH_LOOKAHEAD_COLUMNS` | 3 (→ 4 columns, 16 px apart) | `0x42DEEB` | [V] |
+| `LOOKAHEAD_STEP_LIMIT` | 16 px | `0x41457D` | [V] |
+| `LANDING_DEPTH_LIMIT` | 8 px | `0x4144A9` | [V] |
+| `PROBE_ROWS` | 4 | `0x414466`/`0x41453D` | [V] |
+| pose thresholds | −3.0 / −1.0 / 0.5 / 2.0 | `0x42DF94`/`0x42DFA3`/`0x42DFB2`/`0x42DFC7` | [V] |
+| `STAY` rate 40, boxes `STAY`/`JUMP` | read from the user's data at run time — not constants | — | [M] |
+| despawn class 1 → margins 160 × 110 | `+0x62` := 1, table `0x464540` | `0x42DD98` | [V+M] |
+| spawn margins | 80 × 80 | — | [M] |
+| sounds | `0x19` take-off, `0x0D` landing | — | [V ids; meaning H] |
+| stomp bounce | −4.0, −8 px, \|vx\| ≥ 2.0 | `0x412DAB`/`0x412DC3`/`0x412DE8` | [V] |
+| knockback | ±2.5 | `0x412F31`/`0x412F3C` | [V] |
+| helmet window | 180 | §2.10.d | [V] |
+
+#### §2.13.k Builder list (FL14, FL15) with `[H]` fallbacks
+
+- **FL14 (movement):** (1) an entity with the three counters and the init of
+  §2.13.b; (2) the state order of §2.13.b including "`STAY` shows R − 1 ticks";
+  (3) the hop of §2.13.c with 16.16 arithmetic, vy \|= 1 while rising, and the
+  landing probe on the FL7 floor probe (one-way floor class only); (4) the turn
+  order of §2.13.d; (5) the look-ahead of §2.13.e without the entity-wall
+  branch (dead in L1); (6) spawn/despawn windows of §2.13.f, or — simpler,
+  labelled `[H]` in code and `slice` output — spawn all 7 window-spawned at
+  level start and the eighth when its `Generator` fires, never despawn (differs
+  from the original only while the camera is far); (7) poses by vy and the
+  `JUMP` rate 0; (8) mirror = facing left. A static fallback `[H]` (stays at its
+  placement in `STAY`) is needed only for what FL14 cannot measure; nothing in
+  the movement is `[H]` in the code itself.
+- **FL15 (contact):** (1) the hero's contact test with the clip boxes; (2)
+  stomp = the bounce of §2.13.g, enemy unharmed; (3) side contact =
+  `0x412E30`: death (no helmet in L1) with `OHNO`, life − 1 at 50 ticks, or
+  with a helmet `OUCH` + 180-tick window; knockback ±2.5; (4) **no kill**: the
+  only movement-only kill is `TUMB` (Q57); until the maintainer decides, the
+  enemy is unkillable `[H]` and `slice` says so; (5) R9: the enemy update is
+  deterministic and needs no random state.
+
+#### §2.13.l What stays open
+
+Q57 (`TUMB` kill in scope?). `[H]`: `0x59F1DC`'s meaning, sound meanings,
+`TUMB`'s motion, `0x52C568`, the `0x42FFB0` death clip. Q50 is answered.
 
 ## 3. `SFX/*.WAV` **[V]**
 
