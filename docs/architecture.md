@@ -223,8 +223,9 @@ tick (input, gravity, axis-separated collision, collect, exit) to a 16-bit
   fade rule ship in `renderer.py` (oracle) + `native/` (C99); scaling and
   filters stay in `scaler.py`. The tile cell order is the 2x2 **column-major**
   assembly (`[V]`, G1 — verified against a retail render) and the flip-axis
-  pairing is this decoder's convention (`[H]`, Q33) — the first is measured,
-  the second is flagged, neither is invented.
+  pairing is read from the original's copy loops (`[V]`, Q33 answered,
+  `file-formats.md` §2.8: `0x2000` horizontal, `0x4000` vertical, `0x6000` both)
+  — both are measured, neither is invented.
 - **GNMY markers by NMY name.** `engine.render_tiles` also overlays the
   playfield's `GNMY` placements as markers at their pixel `(x, y)`
   (`engine.overlay_gnmy`), styled by the placement's `NMY` name: `Start`

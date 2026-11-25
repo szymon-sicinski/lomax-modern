@@ -60,7 +60,7 @@ data layer and headless engine — not yet a playable game.
 - **C** is M5 (input) plus a window presenter plus finishing M3's
   "first world playable end to end". Two of the three blockers are now closed:
   `Q20`/`Q21`/`Q22` (map cell → tile) are resolved — with `Q21` split as
-  bit roles `[V]` and axis pairing `[H]` (`Q33`) — and the window presenter
+  bit roles `[V]` and axis pairing `[H]` (`Q33`; *superseded: answered `[V]`, `file-formats.md` §2.8*) — and the window presenter
   is scoped and measured (ctypes+SDL2, V), so the *animated* slice is costed at
   ≈$0.99–$1.49 (§6.1). The one remaining blocker is `GNMY` entry *semantics*
   (which entry is the spawn/collectable/exit) — the layout is recovered (V) but
@@ -218,7 +218,7 @@ only one is a demo we can price today.
 
 | old blocker | research card | outcome | grade |
 |---|---|---|---|
-| map cell → tile (`Q20`/`Q21`/`Q22`) | `t_830f4d0d` | resolved — `MAP` = N big-endian `u16` `TTAB` indices + N collision bytes; `TTAB` = 16 B records of four `[index, flag]` cells; **0 / 523,229 out-of-bank**; `Q21` bit roles `[V]`, axis pairing `[H]` (`Q33`) | **V** (roles) / **H** (axis) |
+| map cell → tile (`Q20`/`Q21`/`Q22`) | `t_830f4d0d` | resolved — `MAP` = N big-endian `u16` `TTAB` indices + N collision bytes; `TTAB` = 16 B records of four `[index, flag]` cells; **0 / 523,229 out-of-bank**; `Q21` bit roles `[V]`, axis pairing `[H]` (`Q33`; *superseded: answered `[V]`, `file-formats.md` §2.8*) | **V** (roles) / **H** (axis, then) |
 | window presenter (unscoped) | `t_5bc2f4cf` | scoped + measured — ctypes+SDL2 blits at 847 fps (~14× headroom) | **V** |
 | `GNMY` entry meaning | `t_050db875` | layout recovered (`x`/`y` are pixel coords, V); *spawn/collectable/exit* semantics not a unique type (0/74 once-per-world) | **V layout / H meaning** |
 

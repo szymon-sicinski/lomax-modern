@@ -164,7 +164,7 @@ final position: (314.0, 190.2) px
 next level: none (end of sequence or exit not reached)
 exit: Exit (4747, 246) px
 run exit: clean
-tile art: composed -- map cell -> tile record resolved (Q20), each record blitted as four CELLs in 2x2 column-major order (V, G1) with the HEAD palette (slot 1) and index-0 transparency; flip pairing [H] (Q33); the geometric collision grid stays on render() as a debug path
+tile art: composed -- map cell -> tile record resolved (Q20), each record blitted as four CELLs in 2x2 column-major order (V, G1) with the HEAD palette (slot 1) and index-0 transparency; flip pairing: Q33 answered [V] (file-formats.md 2.8; the CLI string still printed [H] when this was captured); the geometric collision grid stays on render() as a debug path
 GNMY markers: 32 placements drawn by NMY name -- start 1, exit 1, moneybag 0, other 30 (Start/Exit/Moneybag [V]; the other names' handlers are unmapped)
 frames: 120 PNGs in demo-out/frames (frame_0000.png .. frame_0119.png)
 ```
@@ -254,8 +254,9 @@ sprite frames: not exported (sprite-frame export is not implemented; the ANIM re
 
 **What you are looking at:** 31 PNGs written from one 851,192-byte world file —
 a cell sheet, a tile sheet and a collision map per plane — with every field that
-is still not certain named as one (`Q8` palette slot; `Q21`'s flip *pairing*,
-which is `Q33`) instead of being guessed into the picture. `Q20` (map cell →
+is still not certain named as one (`Q8` palette slot; at the time of writing
+`Q21`'s flip *pairing*, which was `Q33` and is since answered `[V]`, see
+`file-formats.md` §2.8) instead of being guessed into the picture. `Q20` (map cell →
 tile record) and `Q24` (sprite frames) are **answered** — the exporter reports
 0 of 60,509 map words outside their plane's `TTAB` range, and says plainly that
 sprite export is unimplemented rather than that the layout is unknown.

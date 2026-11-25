@@ -117,8 +117,9 @@ Four facts follow, each with its grade:
 4. **What is not established — Q41:** the reset also sets the title and map
    flags (`0x52C6C4` at `0x40EE2F`, `0x59E958` at `0x40EE35`), and the selector
    at `0x417C2C`–`0x417CDF` loads `TITLE` (23), `BONUS` (21) or `MAP` (22) when
-   they are set; the map-node table at VA `0x466410` (8 entries) has no node
-   for section 0. So the original reaches section 0 through a title/map flow
+   they are set; the table at VA `0x466410` (8 entries) is the attract-mode demo
+   playlist, not a map-node table (`file-formats.md` §2.10.a, FL1), and has no
+   entry for section 0. So the original reaches section 0 through a title/map flow
    this pass did not trace. Index 0 being first is [V]; *that a new game lands
    in it without a map choice* is [H] (FL1).
 
@@ -305,10 +306,10 @@ Run on the retail install at `main` = `290cb61`, command in §6 for every row.
 |---|---|---|---|
 | G1 | **Level selection** | `slice --world MEDIEVAL` loads plane 0 of the world file because the default playfield is 0; the engine never reads the section table, so it cannot say which section a plane belongs to (`VILLAGE` plane 0 and `ED` plane 0 are sections 2 and 18) | **works by coincidence** for L1; **missing** as a concept |
 | G2 | **Backdrop** | none. The frame behind plane 0 is the placeholder navy: pixel (0, 0) and (319, 0) of the first frame equal `COLOUR_SKY`. Planes 11–13 are never decoded into the level, and the `ScrollMap`/`Birds`/`Parallax` placements are carried but not interpreted | **missing** |
-| G3 | **Tile art, plane 0** | composed correctly in the sense of §1.3 — the same ferns, orange earth, vine trunk as the reference; flip pairing is the decoder's convention (Q33) | **works**, one [H] |
+| G3 | **Tile art, plane 0** | composed correctly in the sense of §1.3 — the same ferns, orange earth, vine trunk as the reference; flip pairing was the decoder's convention when this row was written; Q33 is now answered [V] from the copy loops (`file-formats.md` §2.8: `0x2000` horizontal, `0x4000` vertical, `0x6000` both) and the decoder's pairing is right | **works** (was: one [H]) |
 | G4 | **Collision** | plane 0 has **8 distinct collision values**: `0x00` 7,624, `0xC0` 76, `0xC8` 114, `0xD0` 26, `0xD8` 18, `0xE0` 26, `0xE8` 18, `0xF0` 18 (sum 7,920 = 198 × 40; 296 non-zero = 3.7 %). The engine treats every non-zero as solid from all sides. The high nibbles `C`/`D`/`E`/`F` map onto the terrain bits (`0x30`, §2.9) as 0/1/2/3 [derived, no routine read] — so up to four classes may be folded into one | **wrong in an unknown amount** (Q31, Q43) |
 | G5 | **Placed objects** | 52 placements, 15 names, 0 unmatched in the 89-name table; the engine resolves 3 names (`Start`, `Exit`, `Moneybag` = 4 placements), draws **48 grey 3 × 3 markers** for the rest and nothing for the sprites. The 8 `Henchlemming`s (D2) are among the 48: they are markers — no sprite, no movement (G13) | **mostly missing** |
-| G6 | **Spawn** | `Start (89, 407)`; the first solid row below that column is y = 480, so the hero falls 73 px from where the engine puts its 12 × 14 box's top-left. Whether `Start` is the box's top-left or the actor's feet origin is untraced (Q48) | **works**, origin [H] |
+| G6 | **Spawn** | `Start (89, 407)`; the first solid row below that column is y = 480 in the engine (the original's surface rule gives 496, `file-formats.md` §2.9.d item 7 [M], Q52), so the hero falls 73 px from where the engine puts its 12 × 14 box's top-left. Whether `Start` is the box's top-left or the actor's feet origin is untraced (Q48) | **works**, origin [H] |
 | G7 | **Goal and fail** | `Exit (3079, 444)`, 2 `Moneybag`s. A held-right script with a jump every *p* ticks (*p* = 15…120 step 5, 22 runs, 3,600 ticks each) reaches x = 3,156 in **all 22 runs** and ends at y = 625 or 626 with `complete = False` in all 22: the hero walks along the **bottom border** — the off-map sentinel is solid, so there is no pit. It first touches that border at tick 382 (*p* = 15) to 879 (*p* = 105), i.e. 6.4–14.7 s. The bottom map row has 0 non-zero collision cells. There is no life, no death, no respawn, no `Revive` | **wrong** (no fail state) and **missing** (rules) |
 | G8 | **Physics** | `entities.py` carries the four measured constants; `file-formats.md` §2.9 records that the original **skips gravity for 5/10 ticks after a jump** and **raises with reduced gravity while jump is held**, neither implemented — the engine's jump is shorter than the original's. Whether the platforms of L1 need the longer jump is unknown | **partly wrong** (known) |
 | G9 | **Camera** | centred on the hero's box and clamped to the plane; measured on the `play` HUD line at spawn: `camera=(0,353)`. The original's rule is untraced (Q45) | **works as a placeholder**, [H] |
@@ -331,7 +332,7 @@ as Q41–Q50 in this PR (Q49 already answered by the maintainer, D4).
 
 | # | Question | Needs | Slice |
 |---|---|---|---|
-| **Q41** | How does a new game reach section 0 — title → map → which node? The reset `0x40EDC0` sets the title and map flags and the 8-node map table (`0x466410`) has no section-0 node | **disassembly (specialist)** | FL1 |
+| **Q41** | How does a new game reach section 0 — title → map → which node? The reset `0x40EDC0` sets the title and map flags and the `0x466410` table is the attract-demo playlist, not a map-node table (`file-formats.md` §2.10.a), so it has no section-0 entry | **disassembly (specialist)** | FL1 |
 | **Q42** | Level flow and the fail rule: what the `Exit` handler (`0x427670`) does to the section/sub-level counters; what the `Finish` and `Revive` handlers do; what takes a life (pit, enemy, drowning?) and where the hero respawns; what a spent `Credit` does | **specialist** | FL1 |
 | **Q43** | The eight collision values of L1 (`0xC0 … 0xF0`): solid / one-way / slope / terrain, and the use of the low bits (narrows Q31) | **specialist** | FL2 |
 | **Q44** | The backdrop: draw order and scroll ratios of the three planes (the second `ScrollMap` parameter is 50 on plane 11 and 25 on plane 12 — a ratio is the guess [H]); what draws the sky (planes 13 and 16 are empty); why the engine's palette makes the islands teal where the reference is pale (blend, a different palette slot, or a fog) | **specialist** | FL3 |
@@ -515,7 +516,7 @@ elsewhere. `INSTALL` is `$LOMAX_GAME_DIR` (`/game-files/LOMAX (1)/LOMAX` here);
 | `Start`/`Exit`/`Finish`/`Revive`/`Moneybag` per plane (planes 0–2 each have a `Start`; `Exit` in 0, 1; `Finish` in 2) | `python3 roles.py "$INSTALL" MEDIEVAL` (D) |
 | Planes 13 and 16 have 0 cells with a visible pixel; planes 11 and 12 have 323 and 212 (§1.3) | `python3 opaque_census.py "$INSTALL" MEDIEVAL 0 11 12 13 14 15 16` (E) |
 | `ScrollMap` second parameter 50 on plane 11 and 25 on plane 12 (Q44) | `python3 parallax_entries.py "$INSTALL" MEDIEVAL 0 11 12 13` (F) |
-| Spawn (89, 407), first solid row 30 (y = 480), bottom map row 0 non-zero, sky pixel (G2, G6, G7) | `python3 spawn_probe.py "$INSTALL"` (G) |
+| Spawn (89, 407), first solid row 30 (y = 480 in the engine; 496 under the original's rule, `file-formats.md` §2.9.d), bottom map row 0 non-zero, sky pixel (G2, G6, G7) | `python3 spawn_probe.py "$INSTALL"` (G) |
 | 22 held-right + periodic-jump runs: max x 3,156, final y 625–626, 0 complete, first tick on the bottom border 382 (*p* = 15) … 879 (*p* = 105), 397 for *p* = 30 (G7, AC9) | `python3 reach.py "$INSTALL" MEDIEVAL 0` (H) |
 | Plane-0 collision histogram, spawn, 2 `Moneybag`s, `Exit (3079, 444)`, `GNMY markers: 52 placements … start 1, exit 1, moneybag 2, other 48`, `clips: WALK 34, JMP2 62, FLO2 24` (G4, G5, G11) | `python3 -m lomax_modern slice "$INSTALL" --world MEDIEVAL --frames 120 --out /tmp/med` |
 | `play`: 120 frames in 2.00 s, mean 59.9 fps; the one-line HUD (G10) | `SDL_VIDEODRIVER=dummy python3 -m lomax_modern play "$INSTALL" --world MEDIEVAL --seconds 2` |

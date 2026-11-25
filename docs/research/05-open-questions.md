@@ -121,7 +121,7 @@ these can be answered from public documentation alone.
 > **Revision v15** (FL2 disassembly pass, 2026-11-24). Q33 answered (the copy
 > loops in `0x4154B0` fix `0x2000` = horizontal, `0x4000` = vertical); Q31
 > answered for the classes, Q43 answered with named `[H]` residues; Q51 and Q52
-> added (`../file-formats.md` §2.8, §2.9.a–d).
+> added (both open `[H]`) (`../file-formats.md` §2.8, §2.9.a–d).
 
 | # | Question | Why it matters | How to resolve |
 |---|---|---|---|
