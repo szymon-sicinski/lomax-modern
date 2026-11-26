@@ -880,7 +880,7 @@ def _cmd_window(args: argparse.Namespace) -> int:
             state = state_cell[0]
             if state is not None:
                 cam_x, cam_y = camera(
-                    state.level, state.player, frame.width, frame.height
+                    state.level, state.player, frame.width, frame.height, state.camera
                 )
                 tiles = (
                     state.level.plane.width_cells
@@ -1033,7 +1033,7 @@ def _cmd_play(args: argparse.Namespace) -> int:
             state = state_cell[0]
             if state is not None:
                 cam_x, cam_y = camera(
-                    state.level, state.player, frame.width, frame.height
+                    state.level, state.player, frame.width, frame.height, state.camera
                 )
                 tiles = (
                     state.level.plane.width_cells

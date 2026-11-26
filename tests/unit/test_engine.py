@@ -415,7 +415,7 @@ def test_camera_centres_and_clamps(tmp_path) -> None:
     level = _load(tmp_path, 40, 20, _floor(40, 20))
     player = Player(x=0.0, y=0.0, width=12, height=14)
     x, y = camera(level, player, 320, 240)
-    assert (x, y) == (0, 0)  # clamped to the top-left
+    assert (x, y) == (0, 16)  # clamped to the top-left (y floor is 16, §2.11.f)
     player.x = level.width_px - player.width
     x, y = camera(level, player, 320, 240)
     assert x == level.width_px - 320  # clamped to the right edge
