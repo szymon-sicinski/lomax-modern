@@ -253,7 +253,7 @@ def test_exit_completes_level(tmp_path) -> None:
     state = new_game_state(level, spawn_x=0.0, spawn_y=16.0, exits=[Exit(1, 2)])
     for _ in range(120):
         state.tick(Input())
-    for _ in range(10):
+    for _ in range(60):  # walk to the last 50 px of the 128 px plane
         state.tick(Input(right=True))
         if state.complete:
             break
@@ -270,7 +270,7 @@ def test_exit_transitions_to_next_level(tmp_path) -> None:
     state = new_game_state(level, spawn_x=0.0, spawn_y=16.0, exits=[Exit(1, 2)])
     for _ in range(120):
         state.tick(Input())
-    for _ in range(20):
+    for _ in range(60):
         state.tick(Input(right=True))
         if state.complete:
             break

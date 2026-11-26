@@ -48,7 +48,11 @@ from lomax_modern.engine.state import (
 from tests.fixtures.synth import (
     anim_frames_payload,
     anim_payload,
+    build_container,
+    gnmy_payload,
+    head_payload,
     main_world_with_clips,
+    map_payload,
     synthetic_world,
 )
 
@@ -305,6 +309,30 @@ def test_select_clip_is_pure_and_reads_only_the_player() -> None:
 # ---------------------------------------------------------------------------
 
 
+def _floored_world() -> bytes:
+    """A 4x2-cell plane whose bottom row is solid, so the hero lands on a real floor.
+
+    (The plane's bottom edge itself is the engine's fail line, so a floor on the
+    off-map border would cost a life.)
+    """
+    cells = [(0, 0)] * 4 + [(0, 1)] * 4
+    chunks = [
+        ("WRLD", b"PS-X" + b"\0" * 4),
+        ("NMY", b"\0" * 16),
+        ("PARA", b"\0" * 8),
+        ("HEAD", head_payload(8, 4, endian=">")),
+        ("TTAB", b"\0" * 16),
+        ("MAP", map_payload(8, 4, cells=cells)),
+        ("GNMY", gnmy_payload((0,))),
+        ("MACR", b"\0" * 8),
+        ("PAGE", b"\0" * 8),
+        ("CELL", b"\0" * 64),
+        ("ANIM", b"\0" * 20),
+        ("END", b""),
+    ]
+    return build_container(chunks, endian=">")
+
+
 def test_slice_report_names_the_clips_it_drew_and_counts_every_tick(
     tmp_path: Path,
 ) -> None:
@@ -333,9 +361,7 @@ def test_slice_report_names_the_clips_it_drew_and_counts_every_tick(
         + tuple((tag, ((7, 1, 0, 0, 0x01),)) for tag in extra_tags)
     )
     (tmp_path / "MAIN.WLD").write_bytes(main_world_with_clips(clips, _hero_sprites()))
-    (tmp_path / "VILLAGE.WLD").write_bytes(
-        synthetic_world(endian=">", planes=((8, 2),))
-    )
+    (tmp_path / "VILLAGE.WLD").write_bytes(_floored_world())
 
     def script(tick: int, state) -> Input:
         return Input(right=True) if tick < 4 else Input()

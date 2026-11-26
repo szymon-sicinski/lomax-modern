@@ -95,6 +95,11 @@ class SliceReport:
     #: The ``sprites:`` block (:meth:`PlacementSpriteReport.format`); empty when
     #: the level's placements were not resolved.
     sprites: str = ""
+    #: Rule events (lives lost, game over) in tick order.
+    events: tuple[str, ...] = ()
+    lives: int = 3
+    game_over: bool = False
+    coins: int = 0
 
     def format(self) -> str:
         if self.spawn_name is not None:
@@ -124,6 +129,12 @@ class SliceReport:
             )
         else:
             start_line = "start: no Start placement; fallback cell, jump kind straight [H]"
+        if self.complete:
+            result_line = f"result: level complete at tick {self.ticks}"
+        elif self.game_over:
+            result_line = f"result: game over at tick {self.ticks}"
+        else:
+            result_line = f"result: did not reach exit after {self.ticks} ticks"
         lines = [
             f"world: {self.world} ({self.planes} planes, playfield plane {self.playfield})",
             f"playfield: {self.playfield_size[0]}x{self.playfield_size[1]} cells "
@@ -136,8 +147,14 @@ class SliceReport:
             spawn_line,
             start_line,
             f"collect: {self.collected_total} Moneybag(s)",
-            f"result: {'reached exit' if self.complete else 'did not reach exit'} "
-            f"after {self.ticks} ticks",
+            *self.events,
+            (
+                "rules: lives 3 start [V]; fail rule = box bottom reaches plane bottom [H]; "
+                "Exit = last 50 px of the plane at the Exit's height, grounded [V]; "
+                "Moneybag = 3 coins [V]; 100 coins = +1 life [V]"
+            ),
+            f"lives: {self.lives}, coins: {self.coins}",
+            result_line,
             f"frames: {self.frames} (fixed 60 Hz: one frame per tick)",
             f"final position: ({self.final_position[0]:.1f}, {self.final_position[1]:.1f}) px",
             f"next level: {self.next_level or 'none (end of sequence or exit not reached)'}",
@@ -230,7 +247,7 @@ def run_slice(
         if on_frame is not None:
             captured = render_tiles(level, state)
             on_frame(ticks - 1, captured)
-        if state.complete:
+        if state.complete or state.game_over:
             break
 
     final_frame = captured if captured is not None else render_tiles(level, state)
@@ -294,5 +311,9 @@ def run_slice(
         player_anim=player_anim,
         clip_ticks=tuple(clip_ticks.items()),
         next_level=next_level,
+        events=tuple(state.events),
+        lives=state.lives,
+        game_over=state.game_over,
+        coins=state.coins,
     )
     return report, final_frame

@@ -169,7 +169,7 @@ def test_new_game_state_builds_entities_from_placements(tmp_path: Path) -> None:
     )
     state = new_game_state(level)
     assert state.entities.collectibles == [Collectible(1, 2), Collectible(3, 3)]
-    assert state.entities.exits == [Exit(4, 5)]
+    assert state.entities.exits == [Exit(4, 5, px_y=80)]
 
 
 def test_new_game_state_falls_back_without_start(tmp_path: Path) -> None:
@@ -235,7 +235,7 @@ def test_state_collects_a_moneybag_placement(tmp_path: Path) -> None:
 
 
 def test_state_completes_at_an_exit_placement(tmp_path: Path) -> None:
-    """The unchanged ``_collect_and_exit`` completes on a wired ``Exit``."""
+    """The Exit trigger fires for a grounded hero in the last 50 px, near its y."""
     level = _load(
         tmp_path,
         _world(
@@ -243,13 +243,19 @@ def test_state_completes_at_an_exit_placement(tmp_path: Path) -> None:
             4,
             [
                 (0, 6, 54, 0x0000, (1,), None),  # Start: box top-left (0, 0)
-                (1, 0, 0, 0x0000, (1,), None),  # Exit at cell (0, 0)
+                (1, 0, 14, 0x0000, (1,), None),  # Exit: only its y (14) is read
             ],
             nmy_names=("Start", "Exit", "Moneybag"),
         ),
     )
     state = new_game_state(level)
-    state.tick(Input(right=True))
+    # Put the hero grounded at the plane's right end near the Exit's y; the
+    # all-passable fixture has no floor, so ground it by hand.
+    state.player.x = level.width_px - 10.0
+    state.player.y = 0.0
+    state.player.on_ground = True
+    state.player.vy = 0.0
+    state.tick(Input())
     assert state.complete
 
 

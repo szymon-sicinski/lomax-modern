@@ -8,6 +8,11 @@ Versioning: [Semantic Versioning](https://semver.org/).
 
 ### Added
 
+- **Rules (FL11).** Lives start at 3; leaving through the plane's bottom [H] costs a life and
+  respawns at Start or the last-touched Revive; 0 lives is `game over`. A Moneybag is 3 coins,
+  100 coins = +1 life (cap 30). The Exit fires on the last 50 px of the plane, grounded, within
+  48 px of its y. `slice` prints `life lost at tick N: ...` and `result: level complete at tick N`.
+
 - **Placed-object sprites (FL10).** `render_tiles` draws each playfield placement
   with its idle clip from the world's own `ANIM` bank instead of a grey marker;
   names hidden by design (spawn triggers, music cue, Generator-spawned objects)
