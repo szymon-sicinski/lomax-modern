@@ -132,6 +132,28 @@ STA2_RATE = 68  # [M] row 31
 STA1_POSES = 7  # [M] Appendix A / §2.6.2 d
 STA2_POSES = 10  # [M]
 
+#: Lives and coins (docs/file-formats.md §2.12.c, §2.10.b/d).
+STARTING_LIVES = 3  # [V] 0x40EE06
+MAX_LIVES = 30  # [V] 0x42CA37, the cap on lives
+COIN_VALUE = 1  # [V] one coin is worth 1
+COINS_PER_LIFE = 100  # [V] 0x42C81D area: 100 coins = +1 life
+MONEYBAG_BURST_COINS = 3  # [V] 0x428323-0x428373: a Moneybag bursts into 3 coins
+#: Exit trigger: the hero's x must be past the last 50 px of the plane and the feet
+#: within 48 px of the Exit's y; the Exit's own x is not read [V] 0x427701-0x42772B.
+EXIT_ZONE_PX = 50  # [V] 0x427701-0x42772B
+EXIT_Y_TOLERANCE_PX = 48  # [V] 0x427701-0x42772B
+#: A Revive is touched when its point is inside the hero box extended this far
+#: below [V] 0x4277F0-0x427831.
+REVIVE_SLACK_BELOW_PX = 20  # [V] 0x4277F0-0x427831
+#: Ticks between a hit and the respawn in the original; documented, NOT modelled
+#: (the engine respawns immediately) [derived].
+DEATH_TICKS_HIT_TO_RESPAWN = 214  # [derived] §2.10.d
+#: The engine's fail rule: the hero's box bottom (y + height) reaches
+#: ``level.height_px`` [H].  The original's pit is 60 px below the view bottom
+#: (0x4101B4-0x41025A) but the camera is FL12 and the off-map border is solid, so
+#: the hero never gets further than the plane's bottom edge.
+FAIL_AT_PLANE_BOTTOM = True  # [H]
+
 
 @dataclass(frozen=True)
 class Input:
@@ -218,6 +240,21 @@ class Exit:
     cell_y: int
     width_cells: int = 1
     height_cells: int = 1
+    #: The placement's pixel y; ``None`` falls back to ``cell_y * 16``.  Only y is
+    #: read by the Exit trigger [V].
+    px_y: int | None = None
+
+    @property
+    def y_px(self) -> int:
+        return self.px_y if self.px_y is not None else self.cell_y * 16
+
+
+@dataclass(frozen=True)
+class Revive:
+    """A Revive placement's pixel point (also the respawn feet origin [H])."""
+
+    x: int
+    y: int
 
 
 @dataclass
@@ -227,3 +264,6 @@ class Entities:
     collectibles: list[Collectible] = field(default_factory=list)
     exits: list[Exit] = field(default_factory=list)
     collected: set[int] = field(default_factory=set)
+    revives: list[Revive] = field(default_factory=list)
+    #: Index into ``revives`` of the last-touched Revive, or ``None``.
+    touched_revive: int | None = None

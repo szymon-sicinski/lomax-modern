@@ -658,6 +658,15 @@ class Level:
             if placement_role(entry.name) == "exit"
         )
 
+    @property
+    def revives(self) -> tuple[tuple[int, int], ...]:
+        """Pixel ``(x, y)`` of every ``Revive`` placement, in file order."""
+        return tuple(
+            (entry.x, entry.y)
+            for entry in self.gnmy
+            if placement_role(entry.name) == "revive"
+        )
+
 
 def _decode_gnmy_per_plane(world: wld.World) -> tuple[tuple[GnmyEntry, ...], ...]:
     """Decode each plane's ``GNMY`` placements, one tuple per plane, in order.

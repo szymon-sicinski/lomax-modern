@@ -18,8 +18,11 @@ from .entities import (
     AIR_POSE4_MIN_VY,
     AIR_POSE5_MIN_VY,
     AIR_POSE6_MIN_VY,
+    COINS_PER_LIFE,
     DUCK_POSES,
     DUCK_RATE,
+    EXIT_Y_TOLERANCE_PX,
+    EXIT_ZONE_PX,
     FASTFALL_MIN_VY,
     FLO1_RATE,
     FLO2_RATE,
@@ -40,17 +43,22 @@ from .entities import (
     JUMP_STRAIGHT_AT_LEVEL_START,
     LANDING_TICKS,
     MAX_FALL,
+    MAX_LIVES,
+    MONEYBAG_BURST_COINS,
+    REVIVE_SLACK_BELOW_PX,
     STA1_POSES,
     STA1_RATE,
     STA2_POSES,
     STA2_RATE,
     START_FEET_OFFSET_Y,
+    STARTING_LIVES,
     WALK_SPEED,
     Collectible,
     Entities,
     Exit,
     Input,
     Player,
+    Revive,
 )
 from .level import (
     CELL_PX,
@@ -578,14 +586,26 @@ class GameState:
     entities: Entities = field(default_factory=Entities)
     tick_count: int = 0
     complete: bool = False
+    lives: int = STARTING_LIVES
+    coins: int = 0
+    game_over: bool = False
+    #: Human-readable rule events (lives lost, game over), in tick order.
+    events: list[str] = field(default_factory=list)
+    #: Box top-left, and jump kind, the state was created with; the respawn for a
+    #: level without a ``Start`` placement.
+    initial_spawn: tuple[float, float] | None = None
+    initial_jump_straight: bool = False
     #: The idle cycle's random source, bit 0 of ``0x43AAD0()`` in the original
     #: (that it is a random-number routine is [H]).
     rand: RandomBits = field(default_factory=default_random_bits)
 
     def tick(self, inp: Input) -> None:
         """Advance exactly one 60 Hz logic tick."""
-        step_player(self.level, self.player, inp, rand=self.rand)
-        self._collect_and_exit()
+        if not self.game_over:
+            step_player(self.level, self.player, inp, rand=self.rand)
+            self._collect_and_exit()
+            self._touch_revives()
+            self._check_fail()
         self.tick_count += 1
 
     def _collect_and_exit(self) -> None:
@@ -594,12 +614,74 @@ class GameState:
                 self.player, item.cell_x, item.cell_y
             ):
                 self.entities.collected.add(i)
+                self._add_coins(MONEYBAG_BURST_COINS)
+        if self.complete:
+            return
+        # Exit [V] 0x427701-0x42772B: grounded, in the last EXIT_ZONE_PX of the
+        # plane, feet within EXIT_Y_TOLERANCE_PX of the Exit's y; its x is unread.
+        player = self.player
+        if not player.on_ground or player.centre_x <= self.level.width_px - EXIT_ZONE_PX:
+            return
+        feet_y = player.y + player.height
         for exit_ in self.entities.exits:
-            for dy in range(exit_.height_cells):
-                for dx in range(exit_.width_cells):
-                    if _overlaps_cell(self.player, exit_.cell_x + dx, exit_.cell_y + dy):
-                        self.complete = True
-                        return
+            if abs(feet_y - exit_.y_px) < EXIT_Y_TOLERANCE_PX:
+                self.complete = True
+                return
+
+    def _add_coins(self, amount: int) -> None:
+        self.coins += amount
+        if self.coins >= COINS_PER_LIFE:
+            self.coins -= COINS_PER_LIFE
+            self.lives = min(self.lives + 1, MAX_LIVES)
+
+    def _touch_revives(self) -> None:
+        player = self.player
+        for i, revive in enumerate(self.entities.revives):
+            if i == self.entities.touched_revive:
+                continue
+            if (
+                player.x <= revive.x < player.x + player.width
+                and player.y <= revive.y < player.y + player.height + REVIVE_SLACK_BELOW_PX
+            ):
+                self.entities.touched_revive = i
+
+    def _respawn_player(self) -> tuple[Player, tuple[int, int]]:
+        """A fresh player at the respawn point, and its integer feet origin."""
+        idx = self.entities.touched_revive
+        if idx is not None:
+            revive = self.entities.revives[idx]
+            player = Player(x=revive.x - Player.width / 2, y=float(revive.y - Player.height))
+            # jump_straight stays False: state 0 [V] 0x42AAB9-0x42AB51
+            return player, (int(revive.x), int(revive.y))
+        spawn = self.level.spawn
+        if spawn is not None:
+            sx, sy = spawn
+            player = Player(
+                x=sx - Player.width / 2, y=sy - START_FEET_OFFSET_Y - Player.height
+            )
+            player.jump_straight = JUMP_STRAIGHT_AT_LEVEL_START
+            return player, (int(sx), int(sy - START_FEET_OFFSET_Y))
+        ix, iy = self.initial_spawn if self.initial_spawn is not None else (0.0, 0.0)
+        player = Player(x=ix, y=iy)
+        player.jump_straight = self.initial_jump_straight
+        return player, (int(ix + Player.width / 2), int(iy + Player.height))
+
+    def _check_fail(self) -> None:
+        """Fail rule [H]: the box bottom reaches the plane's bottom edge."""
+        if self.complete or self.player.y + self.player.height < self.level.height_px:
+            return
+        before = self.lives
+        self.lives -= 1
+        player, (fx, fy) = self._respawn_player()
+        self.events.append(
+            f"life lost at tick {self.tick_count}: lives {before} -> {self.lives}, "
+            f"respawn ({fx}, {fy})"
+        )
+        if self.lives <= 0:
+            self.game_over = True
+            self.events.append(f"game over at tick {self.tick_count}")
+        else:
+            self.player = player
 
 
 def new_game_state(
@@ -609,6 +691,7 @@ def new_game_state(
     spawn_y: float | None = None,
     collectibles: list[Collectible] | None = None,
     exits: list[Exit] | None = None,
+    revives: list[Revive] | None = None,
     seed: int = IDLE_DEFAULT_SEED,
 ) -> GameState:
     """Build a fresh state from the level's ``GNMY`` placements (Q32 **[V]**).
@@ -650,14 +733,22 @@ def new_game_state(
             for px_x, px_y in level.collectables
         ]
     if exits is None:
-        exits = [Exit(px_x // CELL_PX, px_y // CELL_PX) for px_x, px_y in level.exits]
+        exits = [
+            Exit(px_x // CELL_PX, px_y // CELL_PX, px_y=px_y)
+            for px_x, px_y in level.exits
+        ]
+    if revives is None:
+        revives = [Revive(px_x, px_y) for px_x, px_y in level.revives]
     return GameState(
         level=level,
         player=player,
         entities=Entities(
             collectibles=list(collectibles),
             exits=list(exits),
+            revives=list(revives),
         ),
+        initial_spawn=(player.x, player.y),
+        initial_jump_straight=player.jump_straight,
         rand=default_random_bits(seed),
     )
 
@@ -699,6 +790,10 @@ class Snapshot:
     idle_frame: int = 0
     idle_phase: int = 0
     jump_hold: int = JUMP_HOLD_RELEASED
+    lives: int = STARTING_LIVES
+    coins: int = 0
+    game_over: bool = False
+    touched_revive: int | None = None
 
     def to_dict(self) -> dict:
         return {
@@ -718,6 +813,10 @@ class Snapshot:
             "idle_frame": self.idle_frame,
             "idle_phase": self.idle_phase,
             "jump_hold": self.jump_hold,
+            "lives": self.lives,
+            "coins": self.coins,
+            "game_over": self.game_over,
+            "touched_revive": self.touched_revive,
         }
 
     @classmethod
@@ -740,6 +839,10 @@ class Snapshot:
             idle_frame=data.get("idle_frame", 0),
             idle_phase=data.get("idle_phase", 0),
             jump_hold=data.get("jump_hold", JUMP_HOLD_RELEASED),
+            lives=data.get("lives", STARTING_LIVES),
+            coins=data.get("coins", 0),
+            game_over=data.get("game_over", False),
+            touched_revive=data.get("touched_revive"),
         )
 
 
@@ -762,6 +865,10 @@ def capture(state: GameState) -> Snapshot:
         idle_frame=state.player.idle_frame,
         idle_phase=state.player.idle_phase,
         jump_hold=state.player.jump_hold,
+        lives=state.lives,
+        coins=state.coins,
+        game_over=state.game_over,
+        touched_revive=state.entities.touched_revive,
     )
 
 
@@ -793,3 +900,7 @@ def restore(state: GameState, snapshot: Snapshot) -> None:
     state.player.idle_frame = snapshot.idle_frame
     state.player.idle_phase = snapshot.idle_phase
     state.player.jump_hold = snapshot.jump_hold
+    state.lives = snapshot.lives
+    state.coins = snapshot.coins
+    state.game_over = snapshot.game_over
+    state.entities.touched_revive = snapshot.touched_revive
