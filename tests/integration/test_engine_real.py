@@ -175,7 +175,8 @@ def test_render_tiles_overlays_gnmy_markers() -> None:
     py = int(state.player.y) - cam_y
     in_view = 0
     painted = 0
-    for entry in level.gnmy:
+    # (FL10: placements resolved to sprites are drawn as sprites, not markers.)
+    for entry in level.marker_entries():
         sx, sy = entry.x - cam_x, entry.y - cam_y
         if not (0 <= sx < frame.width and 0 <= sy < frame.height):
             continue
@@ -189,8 +190,8 @@ def test_render_tiles_overlays_gnmy_markers() -> None:
         f"GNMY: {len(level.gnmy)} placements, {in_view} in view at spawn, "
         f"{painted} markers painted"
     )
-    assert in_view > 0
     assert painted == in_view
+    assert level.placed_sprites or in_view > 0
 
 
 def test_sta2_idle_clip_resolves_from_the_retail_clip_table() -> None:

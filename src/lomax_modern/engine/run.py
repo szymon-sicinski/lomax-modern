@@ -92,6 +92,9 @@ class SliceReport:
     #: The ``backdrop:`` block (:func:`lomax_modern.engine.render.backdrop_report`);
     #: empty when the level has no backdrop planes.
     backdrop: str = ""
+    #: The ``sprites:`` block (:meth:`PlacementSpriteReport.format`); empty when
+    #: the level's placements were not resolved.
+    sprites: str = ""
 
     def format(self) -> str:
         if self.spawn_name is not None:
@@ -156,6 +159,8 @@ class SliceReport:
             lines.append(self.objects)
         if self.backdrop:
             lines.append(self.backdrop)
+        if self.sprites:
+            lines.append(self.sprites)
         if self.player_anim:
             lines.append(self.player_anim)
         drawn = [f"{tag} {count}" for tag, count in self.clip_ticks if count]
@@ -284,6 +289,7 @@ def run_slice(
         gnmy_roles=dict(gnmy_roles),
         objects=object_roles_report(level.gnmy).format(),
         backdrop=backdrop_report(level),
+        sprites=level.placement_report.format() if level.placement_report else "",
         exits=level.exits,
         player_anim=player_anim,
         clip_ticks=tuple(clip_ticks.items()),

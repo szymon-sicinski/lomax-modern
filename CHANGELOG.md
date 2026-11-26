@@ -8,6 +8,11 @@ Versioning: [Semantic Versioning](https://semver.org/).
 
 ### Added
 
+- **Placed-object sprites (FL10).** `render_tiles` draws each playfield placement
+  with its idle clip from the world's own `ANIM` bank instead of a grey marker;
+  names hidden by design (spawn triggers, music cue, Generator-spawned objects)
+  are listed with the reason. `slice` prints
+  `sprites: N/52 drawn, M hidden by design, K missing`.
 - **Backdrop planes and sky (FL9).** `render_tiles` draws `Level.backdrops` behind
   the playfield, back to front (reverse of the tuple, each plane's `Parallax` sky
   right after its tiles; `docs/file-formats.md` §2.11): `ScrollMap` ratio/offset/
