@@ -29,6 +29,7 @@ from lomax_modern.engine.render import (
     backdrop_plane_origin,
     trunc_div,
 )
+from lomax_modern.engine.state import CameraRig
 from lomax_modern.renderer import rgb15_to_rgb565
 from tests.fixtures.synth import (
     anim_payload,
@@ -62,12 +63,12 @@ def make_level(tmp_path: Path, planes, backdrops, **kw):
 def playfield(w: int = 40, h: int = 20) -> dict:
     return {"w": w, "h": h}
 
-
 def state_at(level, cx: float, cy: float, ticks: int = 0):
     state = new_game_state(level)
     state.player.x = cx - state.player.width / 2
     state.player.y = cy - state.player.height / 2
     state.tick_count = ticks
+    state.camera = CameraRig.snap(level, state.player)
     return state
 
 
@@ -140,8 +141,9 @@ def ratio_level(tmp_path: Path):
 
 def test_scroll_ratio_pins_the_backdrop_shift(ratio_level) -> None:
     level = ratio_level
-    a = state_at(level, 160, 120)
-    b = state_at(level, 320, 160)
+    # Hero centres chosen so cam_y = 16 (the rule's floor) and 56, unclamped below.
+    a = state_at(level, 160, 169)
+    b = state_at(level, 320, 209)
     cam_a = camera(level, a.player, 320, 240)
     cam_b = camera(level, b.player, 320, 240)
     assert (cam_b[0] - cam_a[0], cam_b[1] - cam_a[1]) == (160, 40)
@@ -149,10 +151,10 @@ def test_scroll_ratio_pins_the_backdrop_shift(ratio_level) -> None:
 
     near, far = colour(1, 1), colour(1, 2)
     na, nb = find(fa, near), find(fb, near)
-    assert na == (192, 64)  # cell (12, 4) at plane origin (0, 0)
+    assert na == (192, 64 - 16 * 16 // 100)  # cell (12, 4); plane y shift 16% of cam_y 16
     assert (na[0] - nb[0], na[1] - nb[1]) == (160 * 50 // 100, 40 * 16 // 100)
     ra, rb = find(fa, far), find(fb, far)
-    assert ra == (48, 128 - 24)  # cell (3, 8), plane y offset +24
+    assert ra == (48, 128 - 24 - 16 * 5 // 100)  # cell (3, 8), plane y offset +24
     assert (ra[0] - rb[0], ra[1] - rb[1]) == (160 * 25 // 100, 40 * 5 // 100)
 
 
@@ -283,7 +285,7 @@ def test_sky_drifts_by_p2_per_tick(tmp_path: Path) -> None:
     f0 = render_tiles(level, state_at(level, 160, 120, ticks=0))
     f1 = render_tiles(level, state_at(level, 160, 120, ticks=1))
     # (-100 * 655) >> 16 == -1: the whole pattern moves one pixel left
-    for y in range(100):  # above the player marker, which does not shift
+    for y in range(80):  # above the player marker, which does not shift
         assert row(f1, y, 0, 300) == row(f0, y, 1, 301)
     assert row(f1, 0, 0, 20) != row(f0, 0, 0, 20)
 

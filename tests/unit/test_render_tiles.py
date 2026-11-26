@@ -243,10 +243,11 @@ def test_render_tiles_scrolls_the_tile_art_with_the_camera(tmp_path: Path) -> No
 
     moved = new_game_state(level, spawn_x=0.0, spawn_y=0.0)
     moved.player.x = 400.0
-    cam_x, _ = camera(level, moved.player, 320, 240)
+    moved.camera.update(level, moved.player)
+    cam_x, cam_y = camera(level, moved.player, 320, 240, moved.camera)
     frame_b = render_tiles(level, moved)
     assert cam_x > 0
-    assert frame_b.pixel(30 * CELL_PX - cam_x, 5 * CELL_PX) == BLUE565
+    assert frame_b.pixel(30 * CELL_PX - cam_x, 5 * CELL_PX - cam_y) == BLUE565
     assert frame_a.pixels != frame_b.pixels
 
 

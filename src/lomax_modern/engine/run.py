@@ -149,6 +149,12 @@ class SliceReport:
             f"collect: {self.collected_total} Moneybag(s)",
             *self.events,
             (
+                "camera: x = feet-160 clamped [0,W-320]; y eased 1/16 toward "
+                "feet-160, cap 0.25 px/tick^2 (0.75 reversing), clamp [16,H-240]; "
+                "bias, shake, ForceScrolling not applied [V rule, H: provisional "
+                "start y, pad bias unbound]"
+            ),
+            (
                 "rules: lives 3 start [V]; fail rule = box bottom reaches plane bottom [H]; "
                 "Exit = last 50 px of the plane at the Exit's height, grounded [V]; "
                 "Moneybag = 3 coins [V]; 100 coins = +1 life [V]"

@@ -573,6 +573,76 @@ def step_player(
     _update_idle(player, rand if rand is not None else default_random_bits())
 
 
+#: Camera rule (§2.11.f [V]): easing step per tick, and the step while reversing,
+#: in 1/65536 px/tick; 1/16 of the error is the target speed; y floor is 16.
+CAM_ACCEL_FP = 0x4000
+CAM_REVERSE_ACCEL_FP = 0xC000
+CAM_EASE_DIVISOR = 16
+CAM_MIN_Y = 16
+
+
+@dataclass
+class CameraRig:
+    """The camera's mutable state: x in px, y and the vertical speed in 16.16.
+
+    Implements the original's per-tick rule (``docs/file-formats.md`` §2.11.f,
+    ``0x4120B2``-``0x4122B7`` [V]): x = feet - vw/2 clamped, no smoothing; y
+    eased toward keeping the feet at 2/3 of the view height.  Not implemented:
+    the Page Up/Down look bias (pad bits unbound in :class:`Input`; bias is 0)
+    [H], the shake (``0x59E93C``, no source in L1) and ``ForceScrolling`` (L1
+    has none).
+    """
+
+    cam_y_fp: int = 0
+    speed_fp: int = 0
+    cam_x: int = 0
+
+    @property
+    def cam_y(self) -> int:
+        return self.cam_y_fp >> 16
+
+    @classmethod
+    def snap(
+        cls, level: Level, player: Player, vw: int = 320, vh: int = 240
+    ) -> CameraRig:
+        """x by the rule, y = feet - anchor (the original's start, §2.11.f; its
+        provisional start value is unmeasured [H]); speed 0."""
+        feet_x, feet_y = _feet(player)
+        anchor_y = (2 * vh) // 3
+        rig = cls(cam_y_fp=(feet_y - anchor_y) << 16, speed_fp=0)
+        rig.cam_x = _clamp_cam_x(level, feet_x, vw)
+        rig._clamp_y(level, vh)  # the tick's clamp, so a pre-tick frame is in bounds
+        return rig
+
+    def _clamp_y(self, level: Level, vh: int) -> None:
+        # Step 8: floor 16, then the plane's max; a short level clamps at 0.
+        y = min(max(self.cam_y, CAM_MIN_Y), max(0, level.height_px - vh))
+        if y != self.cam_y:
+            self.cam_y_fp = y << 16
+
+    def update(self, level: Level, player: Player, vw: int = 320, vh: int = 240) -> None:
+        feet_x, feet_y = _feet(player)
+        self.cam_x = _clamp_cam_x(level, feet_x, vw)
+        anchor_y = (2 * vh) // 3
+        # Step 4: target speed (positive = cam_y decreases), bias = 0.
+        target = ((self.cam_y - feet_y + anchor_y) << 16) // CAM_EASE_DIVISOR
+        # Step 5: approach the target, faster when reversing, never passing it.
+        speed = self.speed_fp
+        if speed < target:
+            step = CAM_REVERSE_ACCEL_FP if speed < 0 else CAM_ACCEL_FP
+            speed = min(speed + step, target)
+        elif speed > target:
+            step = CAM_REVERSE_ACCEL_FP if speed > 0 else CAM_ACCEL_FP
+            speed = max(speed - step, target)
+        self.speed_fp = speed
+        self.cam_y_fp -= speed  # step 6
+        self._clamp_y(level, vh)
+
+
+def _clamp_cam_x(level: Level, feet_x: int, vw: int) -> int:
+    return max(0, min(feet_x - vw // 2, max(0, level.width_px - vw)))
+
+
 @dataclass
 class GameState:
     """Everything mutable in one play session, advanced by :meth:`tick`.
@@ -598,6 +668,12 @@ class GameState:
     #: The idle cycle's random source, bit 0 of ``0x43AAD0()`` in the original
     #: (that it is a random-number routine is [H]).
     rand: RandomBits = field(default_factory=default_random_bits)
+    #: The scrolling camera; ``None`` until first needed (snapped then).
+    camera: CameraRig | None = None
+
+    def __post_init__(self) -> None:
+        if self.camera is None:
+            self.camera = CameraRig.snap(self.level, self.player)
 
     def tick(self, inp: Input) -> None:
         """Advance exactly one 60 Hz logic tick."""
@@ -606,6 +682,8 @@ class GameState:
             self._collect_and_exit()
             self._touch_revives()
             self._check_fail()
+            if not self.game_over:
+                self.camera.update(self.level, self.player)
         self.tick_count += 1
 
     def _collect_and_exit(self) -> None:
@@ -682,6 +760,7 @@ class GameState:
             self.events.append(f"game over at tick {self.tick_count}")
         else:
             self.player = player
+            self.camera = CameraRig.snap(self.level, player)
 
 
 def new_game_state(
@@ -794,6 +873,9 @@ class Snapshot:
     coins: int = 0
     game_over: bool = False
     touched_revive: int | None = None
+    #: Camera 16.16 y and speed; ``None`` (old saves) snaps on restore.
+    cam_y_fp: int | None = None
+    cam_speed_fp: int = 0
 
     def to_dict(self) -> dict:
         return {
@@ -817,6 +899,8 @@ class Snapshot:
             "coins": self.coins,
             "game_over": self.game_over,
             "touched_revive": self.touched_revive,
+            "cam_y_fp": self.cam_y_fp,
+            "cam_speed_fp": self.cam_speed_fp,
         }
 
     @classmethod
@@ -843,6 +927,8 @@ class Snapshot:
             coins=data.get("coins", 0),
             game_over=data.get("game_over", False),
             touched_revive=data.get("touched_revive"),
+            cam_y_fp=data.get("cam_y_fp"),
+            cam_speed_fp=data.get("cam_speed_fp", 0),
         )
 
 
@@ -869,6 +955,8 @@ def capture(state: GameState) -> Snapshot:
         coins=state.coins,
         game_over=state.game_over,
         touched_revive=state.entities.touched_revive,
+        cam_y_fp=state.camera.cam_y_fp,
+        cam_speed_fp=state.camera.speed_fp,
     )
 
 
@@ -904,3 +992,7 @@ def restore(state: GameState, snapshot: Snapshot) -> None:
     state.coins = snapshot.coins
     state.game_over = snapshot.game_over
     state.entities.touched_revive = snapshot.touched_revive
+    state.camera = CameraRig.snap(state.level, state.player)
+    if snapshot.cam_y_fp is not None:
+        state.camera.cam_y_fp = snapshot.cam_y_fp
+        state.camera.speed_fp = snapshot.cam_speed_fp

@@ -1870,10 +1870,15 @@ different type.)
   down a 240-line view), closing 1/16 of the error per tick with the speed
   change capped at 0.25 px/tick per tick (0.75 when reversing); y never goes
   above 16 [V].
-- **Compared with the engine (plan 47 G9)** [derived]: horizontally the
-  engine's "centre and clamp" is the same rule, if it centres on the feet origin
-  x; vertically it differs (centred instead of 160 px from the top, immediate
-  instead of eased, top clamp 0 instead of 16, no look-up/look-down).
+- **In the engine (plan 47 G9, FL12)** [V rule]: `CameraRig` in `engine/state.py`
+  implements steps 3–6 and 8 in 16.16 (feet origin `int(x + w/2)`, anchors `vw//2`
+  and `(2·vh)//3`, so other viewports work; a level shorter than the view clamps
+  y at 0), ticked after the player step and snapped at state creation and respawn.
+  Residual `[H]`: the original's provisional start y (the engine snaps to
+  feet − 160 at the real spawn); the pad bias (Page Up/Down are not bound in
+  `Input`, so bias = 0); shake (no known source, L1 has none) and
+  `ForceScrolling` (L1 has none) are not implemented; the frame order of camera
+  vs backdrop draw (the engine draws against the post-tick camera).
 - **`ForceScrolling`** (`0x41C270`; tick `0x41C2E0`) [V]: spawn stores the
   target speed p0 · 655 (p0/100 px/tick) at `+0x80` (`0x41C28B`–`0x41C29C`), the
   hero's vx as the current speed `+0x84` (`0x41C2A2`–`0x41C2A7`) and cam.x in

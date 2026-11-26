@@ -8,6 +8,11 @@ Versioning: [Semantic Versioning](https://semver.org/).
 
 ### Added
 
+- **Camera (FL12).** The viewport follows the original's rule (`docs/file-formats.md` §2.11.f [V]):
+  x = feet − 160 clamped, no dead zone; y eased 1/16 of the error per tick toward feet − 160 with
+  a 0.25 px/tick² cap (0.75 reversing), clamped to [16, H − 240]. New `CameraRig` in
+  `engine/state.py` (`GameState.camera`, saved in snapshots; old saves snap). Look-up/down bias,
+  shake and `ForceScrolling` are not applied. `slice` prints a `camera:` line.
 - **Rules (FL11).** Lives start at 3; leaving through the plane's bottom [H] costs a life and
   respawns at Start or the last-touched Revive; 0 lives is `game over`. A Moneybag is 3 coins,
   100 coins = +1 life (cap 30). The Exit fires on the last 50 px of the plane, grounded, within

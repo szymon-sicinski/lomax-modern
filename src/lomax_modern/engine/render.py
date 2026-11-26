@@ -38,7 +38,7 @@ from ..art import DEFAULT_PALETTE_SLOT, PALETTE_SLOT_COUNT, SPRITE_PALETTE_SLOT
 from ..renderer import Framebuffer, head_palette565
 from .entities import Player
 from .level import CELL_PX, Level
-from .state import GameState, select_clip
+from .state import CameraRig, GameState, select_clip
 
 #: The original internal resolution (``docs/roadmap/15-strategy-report.md`` §3).
 VIEWPORT_WIDTH = 320
@@ -157,18 +157,21 @@ def frame_to_rgba(frame: Frame) -> bytes:
     return bytes(out)
 
 
-def camera(level: Level, player: Player, vw: int, vh: int) -> tuple[int, int]:
-    """Viewport top-left in pixels, centred on the player and clamped to bounds.
+def camera(
+    level: Level,
+    player: Player,
+    vw: int,
+    vh: int,
+    rig: CameraRig | None = None,
+) -> tuple[int, int]:
+    """Viewport top-left in pixels, by the original's camera rule (§2.11.f [V]).
 
-    When the level is smaller than the viewport the camera clamps at zero and
-    the content is drawn from the top-left; levels are ordinarily at least as
-    large as the 320x240 viewport.
+    With ``rig`` the eased state is returned; without it the rule's snapped
+    (stateless) value: x = feet - vw/2, y = feet - 2*vh/3, clamped.
     """
-    x = int(player.centre_x - vw / 2)
-    y = int(player.centre_y - vh / 2)
-    x = max(0, min(x, max(0, level.width_px - vw)))
-    y = max(0, min(y, max(0, level.height_px - vh)))
-    return x, y
+    if rig is None:
+        rig = CameraRig.snap(level, player, vw, vh)
+    return rig.cam_x, rig.cam_y
 
 
 def render(
@@ -179,7 +182,7 @@ def render(
 ) -> Frame:
     """Compose the visible geometric frame: collision grid + entities."""
     vw, vh = viewport
-    cam_x, cam_y = camera(level, state.player, vw, vh)
+    cam_x, cam_y = camera(level, state.player, vw, vh, state.camera)
     frame = Frame(vw, vh)
 
     cx0 = cam_x // CELL_PX
@@ -684,7 +687,7 @@ def render_tiles(
     (a synthetic world) falls back to the marker.
     """
     vw, vh = viewport
-    cam_x, cam_y = camera(level, state.player, vw, vh)
+    cam_x, cam_y = camera(level, state.player, vw, vh, state.camera)
     section = level.sections[level.playfield]
     plane = section.plane
     tiles = section.tiles
