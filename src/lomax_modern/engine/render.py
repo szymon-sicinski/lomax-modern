@@ -762,6 +762,10 @@ def render_tiles(
         sy = int(state.player.y) - cam_y
         fb.fill_rect(sx, sy, state.player.width, state.player.height, COLOUR_PLAYER)
 
+    # The HUD goes last, in screen coordinates (not camera-relative).
+    if level.hud is not None:
+        level.hud.draw(fb, state, sprite_palette)
+
     frame = Frame(vw, vh)
     frame.pixels = fb.pixels
     return frame

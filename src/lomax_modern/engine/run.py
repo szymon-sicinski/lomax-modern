@@ -16,6 +16,7 @@ from typing import Callable
 from ..anim_nmy import object_roles_report, placement_role
 from ..art import DEFAULT_PALETTE_SLOT, SPRITE_PALETTE_SLOT
 from .entities import START_FEET_OFFSET_Y, WALK_SPEED, Input
+from .hud import hud_report
 from .level import (
     PLAYER_IDLE_ANIM,
     PLAYER_RUN_ANIM,
@@ -100,6 +101,8 @@ class SliceReport:
     lives: int = 3
     game_over: bool = False
     coins: int = 0
+    #: The ``hud:`` block (:func:`lomax_modern.engine.hud.hud_report`).
+    hud: str = ""
 
     def format(self) -> str:
         if self.spawn_name is not None:
@@ -184,6 +187,8 @@ class SliceReport:
             lines.append(self.backdrop)
         if self.sprites:
             lines.append(self.sprites)
+        if self.hud:
+            lines.append(self.hud)
         if self.player_anim:
             lines.append(self.player_anim)
         drawn = [f"{tag} {count}" for tag, count in self.clip_ticks if count]
@@ -321,5 +326,6 @@ def run_slice(
         lives=state.lives,
         game_over=state.game_over,
         coins=state.coins,
+        hud=hud_report(level.hud, state),
     )
     return report, final_frame
