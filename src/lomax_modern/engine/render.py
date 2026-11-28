@@ -241,11 +241,17 @@ def overlay_gnmy(
         frame.fill_rect(sx - d // 2, sy - d // 2, d, d, style.colour)
 
 
-def draw_placed_sprites(fb: Framebuffer, sprites, palette, cam_x: int, cam_y: int) -> None:
+def draw_placed_sprites(
+    fb: Framebuffer, sprites, palette, cam_x: int, cam_y: int, skip_henc: bool = False
+) -> None:
     """Blit the load-time resolved placement sprites that overlap the viewport.
 
     Off-screen sprites are culled before any pixel work; index 0 is transparent.
+    ``skip_henc`` leaves out ``Henc*`` placements (drawn live by
+    :func:`draw_enemies`).
     """
+    if skip_henc:
+        sprites = [sp for sp in sprites if (sp.entry.name or "")[:4] != "Henc"]
     if not sprites:
         return
     vw, vh = fb.width, fb.height
@@ -265,6 +271,32 @@ def draw_placed_sprites(fb: Framebuffer, sprites, palette, cam_x: int, cam_y: in
                 index = sp.indices[src + x]
                 if index:
                     pix[dst + x] = words[index]
+
+
+def draw_enemies(
+    fb: Framebuffer, level, enemies, palette, cam_x: int, cam_y: int
+) -> None:
+    """Blit each spawned moving Henchlemming from its clip pose (§2.13.b).
+
+    Top-left = ``(x + dx, y + dy)``; facing left mirrors about the origin column,
+    ``dx' = 1 - w - dx``, the rule :func:`level.resolve_placed_sprites` uses.
+    """
+    for e in enemies:
+        clip = level.enemy_clips.get(e.clip)
+        if not e.spawned or e.static_fallback or clip is None:
+            continue
+        i = e.pose % len(clip.poses)
+        pose = clip.poses[i]
+        pixels = clip.mirrored[i] if e.facing_left else pose.pixels
+        dx = 1 - pixels.width - pose.dx if e.facing_left else pose.dx
+        fb.blit_sprite(
+            pixels.indices,
+            pixels.width,
+            pixels.height,
+            palette,
+            e.x + dx - cam_x,
+            e.y + pose.dy - cam_y,
+        )
 
 
 def pose_origin(player: Player) -> tuple[int, int]:
@@ -720,7 +752,15 @@ def render_tiles(
                 )
 
     overlay_gnmy(fb, level.marker_entries(), cam_x, cam_y)
-    draw_placed_sprites(fb, level.placed_sprites, sprite_palette, cam_x, cam_y)
+    draw_placed_sprites(
+        fb,
+        level.placed_sprites,
+        sprite_palette,
+        cam_x,
+        cam_y,
+        skip_henc=bool(level.enemy_clips),
+    )
+    draw_enemies(fb, level, state.entities.enemies, sprite_palette, cam_x, cam_y)
 
     # Clip choice is data: the pure selector names a (tag, pose index) pair, the
     # level's clip table resolves it to a whole-body pose.  No branch per clip

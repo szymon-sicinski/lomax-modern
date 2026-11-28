@@ -518,6 +518,24 @@ def resolve_placed_sprites(
 
 
 @dataclass(frozen=True)
+class EnemyClip:
+    """One Henchlemming clip, resolved once at load (§2.13.b).
+
+    ``rate`` is the clip's 8.8 pose rate read from the data (STAY 40 [M]);
+    ``poses`` are whole-body poses in step order, facing +x as stored;
+    ``mirrored`` are the same poses' pixels flipped for facing left.
+    """
+
+    rate: int
+    poses: tuple[anim_clip.BodyPose, ...]
+    mirrored: tuple[AnimPixels, ...]
+
+
+#: The Henchlemming clips loaded for rendering (§2.13.b).
+ENEMY_CLIP_TAGS = ("STAY", "JUMP")
+
+
+@dataclass(frozen=True)
 class Level:
     """One world file loaded for play.
 
@@ -562,6 +580,9 @@ class Level:
     #: The HUD sprites decoded from ``MAIN.WLD`` (:mod:`lomax_modern.engine.hud`);
     #: ``None`` when ``Display``/``Icons`` do not resolve (nothing is drawn).
     hud: Hud | None = None
+    #: ``STAY``/``JUMP`` clips of the playfield's ``Henc*`` record (§2.13.b);
+    #: empty when the record or its clips do not resolve.
+    enemy_clips: dict[str, EnemyClip] = field(default_factory=dict)
 
     def marker_entries(self) -> tuple[GnmyEntry, ...]:
         """Placements still drawn as grey markers (all of them if unresolved)."""
@@ -607,11 +628,15 @@ class Level:
             return True
         return self.collision.is_solid(self.collision_at(cell_x, cell_y))
 
-    def floor_at(self, feet_x: int, feet_y: int, rows: int = 4) -> tuple[int, int] | None:
-        """Floor probe (original ``0x413B90``): ``(surface_y, kind)`` or ``None``.
+    def floor_probe(
+        self, feet_x: int, feet_y: int, rows: int = 4
+    ) -> tuple[int, int, bool] | None:
+        """Floor probe (original ``0x413B90``): ``(surface_y, kind, rising_right)``.
 
         Column ``feet_x >> 4``; scans down at most ``rows`` rows from
         ``max(0, (feet_y - 16) // 16)``; the first floor-class cell wins.
+        ``rising_right`` stands for the original's slope flag ``0x52C5A4``: it is
+        the cell's mirror bit (surface rises toward +x), shape 0 never [H].
         """
         if feet_y < CELL_PX or not (0 <= feet_x < self.width_px):
             return None
@@ -621,8 +646,17 @@ class Level:
             byte = self.collision_at(cell_x, row)
             if self.collision.one_way(byte):
                 offset = self.collision.floor_offset(byte, feet_x & 15)
-                return row * CELL_PX + offset, self.collision.floor_kind(byte)
+                return (
+                    row * CELL_PX + offset,
+                    self.collision.floor_kind(byte),
+                    self.collision.floor_mirror(byte),
+                )
         return None
+
+    def floor_at(self, feet_x: int, feet_y: int, rows: int = 4) -> tuple[int, int] | None:
+        """Floor probe (original ``0x413B90``): ``(surface_y, kind)`` or ``None``."""
+        found = self.floor_probe(feet_x, feet_y, rows)
+        return None if found is None else found[:2]
 
     def solid_px(self, px_x: int, px_y: int) -> bool:
         return self.solid_at(px_x // CELL_PX, px_y // CELL_PX)
@@ -670,6 +704,36 @@ class Level:
             for entry in self.gnmy
             if placement_role(entry.name) == "revive"
         )
+
+
+def resolve_enemy_clips(
+    world: wld.World, entries: Sequence[GnmyEntry]
+) -> dict[str, EnemyClip]:
+    """``STAY``/``JUMP`` of the first ``Henc*`` placement's record, or ``{}``.
+
+    Poses come from :func:`anim_clip.resolve_body_poses`; the rate from the
+    record's ``NmyAnim.rate``.  Both clips must resolve or nothing is returned.
+    """
+    name = next((e.name for e in entries if (e.name or "")[:4] == "Henc"), None)
+    nmy = next((c for c in world.chunks if c.tag == "NMY"), None)
+    decoded = decode_nmy(nmy.payload) if nmy is not None else None
+    record = None
+    if decoded and name:
+        record = next((r for r in decoded[0] if r.name == name), None)
+    if record is None:
+        return {}
+    clips: dict[str, EnemyClip] = {}
+    for tag in ENEMY_CLIP_TAGS:
+        anim = next(
+            (a for a in record.anims if anim_tag_name(a.tag).strip() == tag), None
+        )
+        poses = anim_clip.resolve_body_poses(world, record_name=name, clip_tag=tag)
+        if anim is None or not poses:
+            return {}
+        clips[tag] = EnemyClip(
+            anim.rate, poses, tuple(anim_clip.mirrored(p.pixels) for p in poses)
+        )
+    return clips
 
 
 def _decode_gnmy_per_plane(world: wld.World) -> tuple[tuple[GnmyEntry, ...], ...]:
@@ -825,4 +889,5 @@ def load_level(
         placed_sprites=placed,
         placement_report=placement_report,
         hud=load_hud(source.parent / "MAIN.WLD"),
+        enemy_clips=resolve_enemy_clips(world, gnmy),
     )

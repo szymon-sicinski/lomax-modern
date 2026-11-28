@@ -15,6 +15,7 @@ from typing import Callable
 
 from ..anim_nmy import object_roles_report, placement_role
 from ..art import DEFAULT_PALETTE_SLOT, SPRITE_PALETTE_SLOT
+from .enemies import enemies_report
 from .entities import START_FEET_OFFSET_Y, WALK_SPEED, Input
 from .hud import hud_report
 from .level import (
@@ -103,6 +104,8 @@ class SliceReport:
     coins: int = 0
     #: The ``hud:`` block (:func:`lomax_modern.engine.hud.hud_report`).
     hud: str = ""
+    #: The ``enemies:`` block (:func:`lomax_modern.engine.enemies.enemies_report`).
+    enemies: str = ""
 
     def format(self) -> str:
         if self.spawn_name is not None:
@@ -189,6 +192,8 @@ class SliceReport:
             lines.append(self.sprites)
         if self.hud:
             lines.append(self.hud)
+        if self.enemies:
+            lines.append(self.enemies)
         if self.player_anim:
             lines.append(self.player_anim)
         drawn = [f"{tag} {count}" for tag, count in self.clip_ticks if count]
@@ -327,5 +332,6 @@ def run_slice(
         game_over=state.game_over,
         coins=state.coins,
         hud=hud_report(level.hud, state),
+        enemies=enemies_report(state),
     )
     return report, final_frame

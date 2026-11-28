@@ -8,6 +8,15 @@ Versioning: [Semantic Versioning](https://semver.org/).
 
 ### Added
 
+- **Henchlemming movement (FL14).** The L1 `Henchlemming` hops: init, the 4-state update, the
+  16.16 hop with `vy |= 1`, the three turn toggles, the 4-column look-ahead, the landing probe and
+  the spawn (80x80) / release (160x110) camera windows follow `docs/file-formats.md` §2.13 [V]
+  (`engine/enemies.py`, `Entities.enemies`, `Level.floor_probe`, `Level.enemy_clips` with the
+  `STAY` rate read from `NmyAnim.rate`). Enemies are drawn from their `STAY`/`JUMP` poses
+  (mirrored when facing left), saved in `Snapshot.enemies`, and listed in `slice` as `enemies:`.
+  `[H]`: the Generator-spawned one stays static and hidden, spawn/release phase alignment with
+  tick 0, the `0x59F1DC` exclusion window is not modelled. No contact, stomp or kill (FL15):
+  they are harmless and unkillable here.
 - **HUD (FL13).** `render_tiles` draws the original's four HUD elements last, in screen
   coordinates, from `Display`/`Icons` sprites decoded at runtime from the user's `MAIN.WLD`
   (`engine/hud.py`, a data-driven ordered element list): dimmed weapon icon + count, freed-lemming

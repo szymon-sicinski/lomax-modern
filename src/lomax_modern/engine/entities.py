@@ -154,6 +154,46 @@ DEATH_TICKS_HIT_TO_RESPAWN = 214  # [derived] §2.10.d
 #: the hero never gets further than the plane's bottom edge.
 FAIL_AT_PLANE_BOTTOM = True  # [H]
 
+#: Henchlemming constants (docs/file-formats.md §2.13.j).  16.16 values are raw
+#: fixed-point ints.  Grades: [V] verified in the exe, [M] measured, [H] hypothesis.
+HENCH_TAKEOFF_VX = 0x10000  # [V] ±1.0, 0x42DEFE/0x42DF0C
+HENCH_TAKEOFF_VY = -0x40000  # [V] -4.0, 0x42DF13
+HENCH_GRAVITY = 0x4000  # [V] 0.25 added to vy per airborne tick, 0x42DF36
+HENCH_GROUND_TICKS = 10  # [V] 0x42DDB3 / 0x42DEAB / 0x42DF78
+HENCH_SHORT_REST = 20  # [V] 0x42DE89
+HENCH_LONG_REST_BASE = 60  # [V] 60 + (x & mask), 0x42DE9F-0x42DEA2
+HENCH_LONG_REST_MASK = 0x7F  # [V] 0x42DE9F-0x42DEA2
+HENCH_REST_MATCH_MASK = 7  # [V] (x ^ hero x) & 7, 0x42DE84
+HENCH_FIRST_REST_MASK = 0x1F  # [V] first rest = x & 31, 0x42DDC7
+HENCH_FACING_BIT = 0x10  # [V] faces left when x & 16, 0x42DDAB
+HENCH_AHEAD_SAME_KIND = 80  # [V] px, 0x42DED8
+HENCH_AHEAD_Y_OFFSET = 16  # [V] window is |dy + 16| < 40, 0x4146EB-0x4146F3
+HENCH_AHEAD_Y_WINDOW = 40  # [V] 0x4146EB-0x4146F3
+HENCH_LOOKAHEAD_COLUMNS = 3  # [V] n = 3 -> 4 columns, 0x42DEEB
+LOOKAHEAD_COLUMN_PX = 16  # [V] column step of 0x414510
+LOOKAHEAD_STEP_LIMIT = 16  # [V] px, a floor this far above/below turns, 0x41457D
+LANDING_DEPTH_LIMIT = 8  # [V] px, 0x4144A9
+PROBE_ROWS = 4  # [V] 0x414466 / 0x41453D
+#: Airborne pose thresholds on vy (16.16): < -3.0 pose 1, < -1.0 pose 2,
+#: < 0.5 pose 3, < 2.0 pose 4, else 5 (0x42DF94/0x42DFA3/0x42DFB2/0x42DFC7) [V].
+HENCH_POSE_THRESHOLDS = (-0x30000, -0x10000, 0x8000, 0x20000)
+#: Steep slope kind of the floor probe (0x52C4C8 = 2) [V].
+FLOOR_KIND_STEEP = 2
+#: Spawn / despawn margins (mx, my) per class: table 0x464540 [M]; the
+#: Henchlemming's despawn class is 1 (0x42DD98) [V], its spawn field is 0 [derived].
+HENCH_SPAWN_MARGIN = (80, 80)
+HENCH_DESPAWN_MARGIN = (160, 110)
+VIEW_W = 320
+VIEW_H = 240
+#: Phase alignment of the original's cycling spawn (0-3) and despawn (0-2)
+#: counters with logic tick 0 [H]: the phases cycle 0x412682-0x412697 /
+#: 0x40F3F3-0x40F403 but their start is unmeasured.  L1's Henc spawn field is 0
+#: and its despawn class is 1.
+HENCH_SPAWN_PERIOD = 4  # [V] phase cycles 0-3
+HENCH_SPAWN_PHASE_TICK = 0  # [H] tick_count % 4 == 0 runs field 0
+HENCH_DESPAWN_PERIOD = 3  # [V] phase cycles 0-2
+HENCH_DESPAWN_PHASE_TICK = 1  # [H] tick_count % 3 == 1 runs class 1
+
 
 @dataclass(frozen=True)
 class Input:
@@ -258,6 +298,42 @@ class Revive:
 
 
 @dataclass
+class Henchlemming:
+    """One ``Henc*`` placement and its live state (§2.13.b).
+
+    Positions ``x16``/``y16`` and velocities are 16.16 ints, y grows downward.
+    ``x``/``y`` persist after a release so a report can show where it was.
+    ``rest`` is ``+0x80`` (-1 = just landed), ``ground`` ``+0x84`` (0 = airborne),
+    ``turn_next`` ``+0x88``.  ``pose_phase`` is 8.8 and only advances in ``STAY``.
+    ``hops`` counts take-offs and is not reset on respawn.  A static-fallback
+    enemy (Generator-spawned, flag ``0x2000``) never spawns [H].
+    """
+
+    index: int
+    place_x: int
+    place_y: int
+    flags: int
+    spawned: bool = False
+    #: Set when the despawn window released it (report only).
+    released: bool = False
+    x: int = 0
+    y: int = 0
+    x16: int = 0
+    y16: int = 0
+    vx16: int = 0
+    vy16: int = 0
+    facing_left: bool = False
+    rest: int = 0
+    ground: int = 0
+    turn_next: int = 0
+    clip: str = "STAY"
+    pose: int = 0
+    pose_phase: int = 0
+    hops: int = 0
+    static_fallback: bool = False
+
+
+@dataclass
 class Entities:
     """Mutable entity lists plus the collected set (indices into collectibles)."""
 
@@ -267,3 +343,5 @@ class Entities:
     revives: list[Revive] = field(default_factory=list)
     #: Index into ``revives`` of the last-touched Revive, or ``None``.
     touched_revive: int | None = None
+    #: One per ``Henc*`` placement, in placement order (§2.13).
+    enemies: list[Henchlemming] = field(default_factory=list)

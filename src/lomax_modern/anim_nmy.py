@@ -215,6 +215,9 @@ class NmyAnim:
     size_field: int  # the u32 after the tag; measured to equal 20 + 8*frames
     frame_count: int
     frames: tuple[tuple[int, int, int, int, int], ...] = ()
+    #: The clip's rate: the first of the nine ``u16`` words after the frame
+    #: count (``clip+0x0C``, ``docs/file-formats.md`` §2.6.2 [M]).
+    rate: int = 0
 
 
 def anim_tag_name(tag: int) -> str:
@@ -303,6 +306,7 @@ def decode_nmy(payload: bytes) -> tuple[list[NmyRecord], int] | None:
             pos += 4
             count2 = struct.unpack_from("<H", payload, pos)[0]
             pos += 2
+            rate = struct.unpack_from("<H", payload, pos)[0]  # first of 9 x u16 fields
             pos += 18  # 9 x u16 fields
             if pos + 8 * count2 > len(payload):
                 return None
@@ -311,7 +315,7 @@ def decode_nmy(payload: bytes) -> tuple[list[NmyRecord], int] | None:
                 for i in range(count2)
             )
             pos += 8 * count2
-            anims.append(NmyAnim(tag, size_field, count2, frames))
+            anims.append(NmyAnim(tag, size_field, count2, frames, rate))
         records.append(NmyRecord(name, w_a, w_b, tuple(anims)))
         if pos + 2 > len(payload):
             return None

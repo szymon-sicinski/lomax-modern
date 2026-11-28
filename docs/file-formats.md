@@ -2477,6 +2477,30 @@ is FL14's measurement [H].
 Q57 answered by the maintainer (D7); `TUMB` graded cheap in §2.14.g. `[H]`: `0x59F1DC`'s meaning, sound meanings,
 `TUMB`'s motion, `0x52C568`, the `0x42FFB0` death clip. Q50 is answered.
 
+#### §2.13.m FL14 implementation notes
+
+Implemented (engine `entities.py` constants + `Henchlemming`, `enemies.py`, `level.py`
+`floor_probe`/`EnemyClip`/`Level.enemy_clips`, `render.py` `draw_enemies`, `state.py`
+`step_enemies` first in `GameState.tick`, `Snapshot.enemies`, `run.py` `enemies:`): the init, the
+state order, the hop in 16.16, the turn order, the look-ahead without the entity-wall branch, the
+landing probe and the wake windows of §2.13.b–f. The `STAY` rate is read from the clip data
+(`NmyAnim.rate`, `clip+0x0C`); `JUMP` runs at rate 0 with hand-chosen poses. One enemy per `Henc*`
+placement; no random number is drawn, so `Snapshot.enemies` is a plain int tuple per enemy
+(`enemies.ENEMY_TUPLE_FIELDS`). Contact, stomp, hurt and kill are FL15: enemies are harmless and
+unkillable until then.
+
+`[H]` items:
+
+- the `0x2000` (Generator-spawned) placement is a **static fallback**: it never exists, never
+  moves, and is not drawn (the Generator is not ported);
+- the alignment of the spawn phase (`tick % 4 == 0`, field 0) and the despawn phase
+  (`tick % 3 == 1`, class 1) with logic tick 0 (`HENCH_SPAWN_PHASE_TICK`,
+  `HENCH_DESPAWN_PHASE_TICK`);
+- the `0x59F1DC` exclusion window of the spawn is not modelled;
+- the original's slope flag `0x52C5A4` is mapped to the cell's mirror bit (`rising_right`:
+  the surface rises toward +x);
+- whether each placement's y lies on a floor is measured by running, not asserted.
+
 ### 2.14 The hero's attacks (2026-11-25, FL4c)
 
 Recovered by a read-only objdump pass over `LOMAX.EXE` for the first-level

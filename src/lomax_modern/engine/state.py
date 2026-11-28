@@ -12,6 +12,7 @@ from collections.abc import Callable
 from dataclasses import dataclass, field
 from random import Random
 
+from .enemies import apply_tuple, enemy_to_tuple, new_enemies, step_enemies
 from .entities import (
     AIR_POSE2_MAX_VY_MOVING,
     AIR_POSE2_MAX_VY_STRAIGHT,
@@ -678,6 +679,7 @@ class GameState:
     def tick(self, inp: Input) -> None:
         """Advance exactly one 60 Hz logic tick."""
         if not self.game_over:
+            step_enemies(self)  # original order: spawn -> entity updates -> hero
             step_player(self.level, self.player, inp, rand=self.rand)
             self._collect_and_exit()
             self._touch_revives()
@@ -825,6 +827,7 @@ def new_game_state(
             collectibles=list(collectibles),
             exits=list(exits),
             revives=list(revives),
+            enemies=new_enemies(level),
         ),
         initial_spawn=(player.x, player.y),
         initial_jump_straight=player.jump_straight,
@@ -876,6 +879,10 @@ class Snapshot:
     #: Camera 16.16 y and speed; ``None`` (old saves) snaps on restore.
     cam_y_fp: int | None = None
     cam_speed_fp: int = 0
+    #: One flat int tuple per Henchlemming (``enemies.ENEMY_TUPLE_FIELDS`` order,
+    #: bools as 0/1); ``()`` = the initial, all-unspawned enemies (old saves).  The
+    #: living enemy draws no random number (§2.13.h), so no random state is saved.
+    enemies: tuple[tuple[int, ...], ...] = ()
 
     def to_dict(self) -> dict:
         return {
@@ -901,6 +908,7 @@ class Snapshot:
             "touched_revive": self.touched_revive,
             "cam_y_fp": self.cam_y_fp,
             "cam_speed_fp": self.cam_speed_fp,
+            "enemies": [list(e) for e in self.enemies],
         }
 
     @classmethod
@@ -929,6 +937,7 @@ class Snapshot:
             touched_revive=data.get("touched_revive"),
             cam_y_fp=data.get("cam_y_fp"),
             cam_speed_fp=data.get("cam_speed_fp", 0),
+            enemies=tuple(tuple(e) for e in data.get("enemies", ())),
         )
 
 
@@ -957,6 +966,7 @@ def capture(state: GameState) -> Snapshot:
         touched_revive=state.entities.touched_revive,
         cam_y_fp=state.camera.cam_y_fp,
         cam_speed_fp=state.camera.speed_fp,
+        enemies=tuple(enemy_to_tuple(e) for e in state.entities.enemies),
     )
 
 
@@ -996,3 +1006,8 @@ def restore(state: GameState, snapshot: Snapshot) -> None:
     if snapshot.cam_y_fp is not None:
         state.camera.cam_y_fp = snapshot.cam_y_fp
         state.camera.speed_fp = snapshot.cam_speed_fp
+    fresh = new_enemies(state.level)
+    if len(snapshot.enemies) == len(fresh):
+        for enemy, data in zip(fresh, snapshot.enemies):
+            apply_tuple(enemy, data)
+    state.entities.enemies = fresh
