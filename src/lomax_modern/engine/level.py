@@ -19,6 +19,7 @@ from pathlib import Path
 
 from .. import art, wld
 from .. import anim_clip
+from .hud import Hud, load_hud
 from ..anim_nmy import (
     AnimDecode,
     AnimPixels,
@@ -558,6 +559,9 @@ class Level:
     placed_sprites: tuple[PlacedSprite, ...] = ()
     #: The drawn / hidden / missing split; ``None`` when not resolved.
     placement_report: PlacementSpriteReport | None = None
+    #: The HUD sprites decoded from ``MAIN.WLD`` (:mod:`lomax_modern.engine.hud`);
+    #: ``None`` when ``Display``/``Icons`` do not resolve (nothing is drawn).
+    hud: Hud | None = None
 
     def marker_entries(self) -> tuple[GnmyEntry, ...]:
         """Placements still drawn as grey markers (all of them if unresolved)."""
@@ -820,4 +824,5 @@ def load_level(
         backdrops=tuple(backdrops),
         placed_sprites=placed,
         placement_report=placement_report,
+        hud=load_hud(source.parent / "MAIN.WLD"),
     )

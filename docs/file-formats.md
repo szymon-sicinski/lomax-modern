@@ -2118,6 +2118,26 @@ flags `0x100`/`0x200`, the `Thief`'s pursuit, what `0x42B2D0(4)` shows.
 Builders: FL6 takes the role column, FL10 the idle clips and the hidden list,
 FL11 the coin/lives rules, FL13 the HUD table.
 
+
+#### §2.12.f The HUD as drawn (FL13)
+
+`engine/hud.py` draws the nine calls of §2.12.d in order, last in `render_tiles`,
+at the screen positions above, from `Display` and `Icons` sprites decoded at
+runtime from `MAIN.WLD` (nothing is stored). A pose is one keyframe (the box
+`EINS` draws all three keyframes as layers); a layer's top-left = origin + its
+(dx, dy). Digits: units always, tens only when ≠ 0, value mod 100.
+
+- **Live:** coins (`GameState.coins`, spinning `VIER` pose (tick >> 2) & 7) and
+  lives (`GameState.lives`, face `ZWEI`). **Initial only:** freed lemmings "0",
+  weapon count "0" (selection and counts: FL15e); the spare helmet (draw 5) is
+  not drawn (flag 0 in L1).
+- **[H]:** digit → pose = digit (`KLEI`/`GROS` carry 10 keyframes); the weapon
+  icon is drawn dimmed (each RGB565 channel halved) for the `0xA0` argument;
+  the face, box and "greyed" readings; the flash timer `0x52C700` (figure pose 1)
+  and the 50 Hz branch of `0x46441C` are not modelled.
+- Without a `MAIN.WLD` or without the `Display`/`Icons` clips nothing is drawn;
+  `slice` says `hud: not drawn (no Display/Icons record)`.
+
 ### 2.13 The Henchlemming (2026-11-25, FL4b)
 
 Plan 47 calls this section §2.11; the number moved because FL3/FL4 took §2.11

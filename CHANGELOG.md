@@ -8,6 +8,13 @@ Versioning: [Semantic Versioning](https://semver.org/).
 
 ### Added
 
+- **HUD (FL13).** `render_tiles` draws the original's four HUD elements last, in screen
+  coordinates, from `Display`/`Icons` sprites decoded at runtime from the user's `MAIN.WLD`
+  (`engine/hud.py`, a data-driven ordered element list): dimmed weapon icon + count, freed-lemming
+  figure + count + box (initial values), spinning coin + coin count (live), face + life count
+  (live). Positions and draw order are [V]; digit→pose mapping, the dimming, and the face/box
+  meanings are [H]. `slice` prints `hud: 4 elements, 2 live` (or `hud: not drawn (no
+  Display/Icons record)`). Not live: weapon selection/counts (FL15e), flash timer, 50 Hz mode.
 - **Camera (FL12).** The viewport follows the original's rule (`docs/file-formats.md` §2.11.f [V]):
   x = feet − 160 clamped, no dead zone; y eased 1/16 of the error per tick toward feet − 160 with
   a 0.25 px/tick² cap (0.75 reversing), clamped to [16, H − 240]. New `CameraRig` in
